@@ -7,7 +7,10 @@ export interface HistoryEvent {
   description: string
   causes: string[]
   consequences: string[]
-  related: {
+  related_concepts?: string[]
+  figures?: string[]
+  tags?: string[]
+  related?: {
     causes: { id: string; weight: number }[]
     consequences: { id: string; weight: number }[]
   }

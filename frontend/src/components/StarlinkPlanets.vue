@@ -20,14 +20,14 @@
     <div class="starlink-legend">
       <div class="legend-item">
         <span class="legend-dot legend-dot--cyan"></span>
-        <span>因果链路</span>
+        <span>历史原因</span>
       </div>
       <div class="legend-item">
         <span class="legend-dot legend-dot--pink"></span>
-        <span>影响链路</span>
+        <span>历史影响</span>
       </div>
       <div class="legend-item">
-        <span class="legend-dot legend-dot--gold"></span>
+        <span class="legend-dot legend-dot--center"></span>
         <span>当前事件</span>
       </div>
     </div>
@@ -107,70 +107,30 @@ const tipY = ref(0)
 
 const BG_STARS: { x: number; y: number; r: number; o: number; s: number; p: number; c: string }[] = []
 
-function runLayout(iterations: number) {
-  const k = 0.01
-  const repulsion = 2000
-  const damping = 0.7
-  const centerPull = 0.004
-  const centerIdx = 0
+function runLayout() {
+  const cx = W / 2
+  const cy = H / 2
 
-  const vx = new Float64Array(graphNodes.length)
-  const vy = new Float64Array(graphNodes.length)
+  const center = graphNodes[0]
+  center.x = cx
+  center.y = cy
 
-  for (let iter = 0; iter < iterations; iter++) {
-    const decay = 1 - iter / iterations
+  const causes = graphNodes.filter(n => n.role === 'cause')
+  const conses = graphNodes.filter(n => n.role === 'consequence')
 
-    for (let i = 1; i < graphNodes.length; i++) {
-      const a = graphNodes[i]
-      let fx = 0
-      let fy = 0
+  const causeRadius = Math.min(W, H) * 0.32
+  causes.forEach((n, i) => {
+    const angle = -Math.PI + (i / Math.max(causes.length, 1)) * Math.PI - Math.PI * 0.15
+    n.x = cx + Math.cos(angle) * causeRadius
+    n.y = cy + Math.sin(angle) * causeRadius
+  })
 
-      for (let j = 0; j < graphNodes.length; j++) {
-        if (i === j) continue
-        const b = graphNodes[j]
-        const dx = a.x - b.x
-        const dy = a.y - b.y
-        const dist = Math.sqrt(dx * dx + dy * dy) + 0.1
-        if (dist < 150) {
-          const force = repulsion / (dist * dist)
-          fx += (dx / dist) * force
-          fy += (dy / dist) * force
-        }
-        const minDist = a.radius + b.radius + 25
-        if (dist < minDist) {
-          const pushForce = (minDist - dist) * 0.5
-          fx += (dx / dist) * pushForce
-          fy += (dy / dist) * pushForce
-        }
-      }
-
-      for (const e of graphEdges) {
-        let other: GNode | null = null
-        if (e.source === a.id) other = graphNodeMap.get(e.target) || null
-        else if (e.target === a.id) other = graphNodeMap.get(e.source) || null
-        if (!other) continue
-        const dx = other.x - a.x
-        const dy = other.y - a.y
-        const dist = Math.sqrt(dx * dx + dy * dy) + 0.1
-        const idealDist = 150 + (1 - e.strength) * 60
-        const force = (dist - idealDist) * k * e.strength
-        fx += (dx / dist) * force
-        fy += (dy / dist) * force
-      }
-
-      const center = graphNodes[centerIdx]
-      fx += (center.x - a.x) * centerPull
-      fy += (center.y - a.y) * centerPull
-
-      vx[i] = (vx[i] + fx * decay) * damping
-      vy[i] = (vy[i] + fy * decay) * damping
-      a.x += vx[i]
-      a.y += vy[i]
-
-      a.x = Math.max(a.radius + 10, Math.min(W - a.radius - 10, a.x))
-      a.y = Math.max(a.radius + 10, Math.min(H - a.radius - 10, a.y))
-    }
-  }
+  const consRadius = Math.min(W, H) * 0.32
+  conses.forEach((n, i) => {
+    const angle = (i / Math.max(conses.length, 1)) * Math.PI + Math.PI * 0.15
+    n.x = cx + Math.cos(angle) * consRadius
+    n.y = cy + Math.sin(angle) * consRadius
+  })
 }
 
 function initGraph() {
@@ -253,7 +213,7 @@ function initGraph() {
     graphEdges.push({ source: props.eventId, target: ev.id, type: 'consequence', strength: 0.6 + (w / 10) * 0.4 })
   })
 
-  runLayout(200)
+  runLayout()
 
   const totalEdges = graphEdges.length
   if (totalEdges === 0) return
@@ -493,6 +453,8 @@ function onResize() {
   }
   if (graphNodes.length === 0) {
     initGraph()
+  } else {
+    runLayout()
   }
 }
 
@@ -519,7 +481,7 @@ onBeforeUnmount(() => {
 .starlink-planets {
   position: relative;
   width: 100%;
-  aspect-ratio: 900 / 480;
+  height: 100%;
   min-height: 320px;
   background:
     radial-gradient(ellipse at 35% 48%, rgba(49, 247, 255, 0.05), transparent 50%),
@@ -654,5 +616,10 @@ onBeforeUnmount(() => {
 .legend-dot--gold {
   background: var(--accent-gold);
   box-shadow: 0 0 8px var(--accent-gold);
+}
+
+.legend-dot--center {
+  background: #ffffff;
+  box-shadow: 0 0 8px rgba(255,255,255,0.6), 0 0 16px rgba(49,247,255,0.3);
 }
 </style>

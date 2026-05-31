@@ -1,10 +1,13 @@
 import os
 from pathlib import Path
+import logging
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import MetaData
 
-from .config import settings
+from .config import settings, SQLITE_PATH
+
+logger = logging.getLogger("historical_starlink")
 
 convention = {
     "ix": "ix_%(column_0_label)s",
@@ -21,7 +24,19 @@ class Base(DeclarativeBase):
     metadata = metadata
 
 
-_is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+_db_url = settings.DATABASE_URL
+_is_sqlite = _db_url.startswith("sqlite")
+
+if not _is_sqlite:
+    try:
+        import aiomysql
+        import pymysql
+    except ImportError:
+        logger.warning("aiomysql/pymysql not installed, falling back to SQLite")
+        _db_url = f"sqlite+aiosqlite:///{SQLITE_PATH}"
+        _is_sqlite = True
+        settings._db_config["db.driver"] = "sqlite"
+        settings.DB_DRIVER = "sqlite"
 
 _engine_kwargs = {
     "echo": settings.DEBUG,
@@ -34,7 +49,7 @@ if not _is_sqlite:
         "pool_pre_ping": True,
     })
 
-engine = create_async_engine(settings.DATABASE_URL, **_engine_kwargs)
+engine = create_async_engine(_db_url, **_engine_kwargs)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
@@ -56,8 +71,8 @@ async def get_db():
 
 
 async def init_db():
-    if settings.DATABASE_URL.startswith("sqlite"):
-        db_path = settings.DATABASE_URL.split("///")[-1]
+    if _is_sqlite:
+        db_path = _db_url.split("///")[-1]
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

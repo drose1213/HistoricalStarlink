@@ -1,105 +1,82 @@
+import { reactive } from 'vue'
 import type { HistoryEvent } from '@/types'
+import { eventsApi } from '@/api/events'
 
-export const allEvents: HistoryEvent[] = [
-  {
-    id: 'shangyang_reform',
-    name: '商鞅变法',
-    year: -356,
-    region: 'china',
-    importance: 8,
-    description: '商鞅在秦孝公支持下进行的系统性变法，推行废井田、重农抑商、奖励军功、建立县制等制度，为秦国统一六国奠定坚实基础。',
-    causes: ['战国时期诸侯争霸，秦国相对落后', '秦孝公求贤若渴', '井田制阻碍生产力发展'],
-    consequences: ['秦国国力大增', '建立中央集权制度雏形', '为统一六国奠定基础'],
-    related: {
-      causes: [],
-      consequences: [{ id: 'qin_unification', weight: 9 }]
+const EVENT_RELATIONS: Record<string, { causes: { id: string; weight: number }[]; consequences: { id: string; weight: number }[] }> = {
+  shangyang_reform: { causes: [], consequences: [{ id: 'qin_unification', weight: 9 }] },
+  qin_unification: { causes: [{ id: 'shangyang_reform', weight: 9 }], consequences: [{ id: 'han_empire', weight: 8 }] },
+  han_empire: { causes: [{ id: 'qin_unification', weight: 9 }], consequences: [{ id: 'silk_road', weight: 8 }] },
+  alexander_conquests: { causes: [], consequences: [{ id: 'roman_empire', weight: 7 }] },
+  roman_empire: { causes: [{ id: 'alexander_conquests', weight: 7 }], consequences: [{ id: 'fall_of_rome', weight: 8 }] },
+  fall_of_rome: { causes: [{ id: 'roman_empire', weight: 8 }], consequences: [{ id: 'crusades', weight: 6 }] },
+  crusades: { causes: [{ id: 'fall_of_rome', weight: 6 }], consequences: [{ id: 'renaissance', weight: 7 }] },
+  black_death: { causes: [], consequences: [{ id: 'renaissance', weight: 8 }] },
+  renaissance: { causes: [{ id: 'crusades', weight: 7 }, { id: 'black_death', weight: 8 }], consequences: [{ id: 'scientific_revolution', weight: 8 }, { id: 'reformation', weight: 7 }] },
+  scientific_revolution: { causes: [{ id: 'renaissance', weight: 8 }], consequences: [{ id: 'enlightenment', weight: 8 }, { id: 'industrial_revolution', weight: 9 }] },
+  enlightenment: { causes: [{ id: 'scientific_revolution', weight: 8 }], consequences: [{ id: 'american_independence', weight: 8 }, { id: 'french_revolution', weight: 9 }] },
+  reformation: { causes: [{ id: 'renaissance', weight: 7 }], consequences: [{ id: 'glorious_revolution', weight: 7 }] },
+  glorious_revolution: { causes: [{ id: 'reformation', weight: 7 }], consequences: [{ id: 'industrial_revolution', weight: 7 }] },
+  american_independence: { causes: [{ id: 'enlightenment', weight: 8 }], consequences: [{ id: 'french_revolution', weight: 7 }] },
+  french_revolution: { causes: [{ id: 'enlightenment', weight: 9 }, { id: 'american_independence', weight: 7 }], consequences: [{ id: 'industrial_revolution', weight: 6 }] },
+  industrial_revolution: { causes: [{ id: 'scientific_revolution', weight: 9 }, { id: 'glorious_revolution', weight: 7 }], consequences: [{ id: 'world_war_1', weight: 6 }] },
+  silk_road: { causes: [{ id: 'han_empire', weight: 8 }], consequences: [{ id: 'silk_road_maritime', weight: 7 }] },
+  silk_road_maritime: { causes: [{ id: 'silk_road', weight: 7 }], consequences: [{ id: 'zhenghe_voyages', weight: 7 }] },
+  tang_dynasty_prosperity: { causes: [{ id: 'han_empire', weight: 5 }], consequences: [{ id: 'an_shi_rebellion', weight: 7 }] },
+  an_shi_rebellion: { causes: [{ id: 'tang_dynasty_prosperity', weight: 7 }], consequences: [{ id: 'song_dynasty_commerce', weight: 6 }] },
+  song_innovations: { causes: [], consequences: [{ id: 'mongol_empire', weight: 5 }] },
+  song_dynasty_commerce: { causes: [{ id: 'an_shi_rebellion', weight: 6 }], consequences: [] },
+  mongol_empire: { causes: [{ id: 'song_innovations', weight: 5 }], consequences: [{ id: 'black_death', weight: 7 }] },
+  zhenghe_voyages: { causes: [{ id: 'silk_road_maritime', weight: 7 }], consequences: [] },
+  opium_war: { causes: [], consequences: [{ id: 'taiping_rebellion', weight: 7 }, { id: 'self_strengthening', weight: 7 }] },
+  taiping_rebellion: { causes: [{ id: 'opium_war', weight: 7 }], consequences: [{ id: 'self_strengthening', weight: 6 }] },
+  self_strengthening: { causes: [{ id: 'opium_war', weight: 7 }, { id: 'taiping_rebellion', weight: 6 }], consequences: [{ id: 'hundred_days_reform', weight: 6 }] },
+  hundred_days_reform: { causes: [{ id: 'self_strengthening', weight: 6 }], consequences: [{ id: 'xinhai_revolution', weight: 7 }] },
+  xinhai_revolution: { causes: [{ id: 'hundred_days_reform', weight: 7 }], consequences: [{ id: 'may_fourth_movement', weight: 8 }] },
+  may_fourth_movement: { causes: [{ id: 'xinhai_revolution', weight: 8 }], consequences: [{ id: 'long_march', weight: 7 }] },
+  long_march: { causes: [{ id: 'may_fourth_movement', weight: 7 }], consequences: [{ id: 'founding_prc', weight: 9 }] },
+  founding_prc: { causes: [{ id: 'long_march', weight: 9 }], consequences: [{ id: 'chinese_reform_opening', weight: 9 }] },
+  chinese_reform_opening: { causes: [{ id: 'founding_prc', weight: 9 }], consequences: [] },
+  world_war_1: { causes: [{ id: 'industrial_revolution', weight: 6 }], consequences: [{ id: 'world_war_2', weight: 8 }] },
+  world_war_2: { causes: [{ id: 'world_war_1', weight: 8 }], consequences: [{ id: 'cold_war', weight: 9 }] },
+  cold_war: { causes: [{ id: 'world_war_2', weight: 9 }], consequences: [{ id: 'fall_of_berlin_wall', weight: 8 }, { id: 'internet_birth', weight: 7 }] },
+  fall_of_berlin_wall: { causes: [{ id: 'cold_war', weight: 8 }], consequences: [] },
+  internet_birth: { causes: [{ id: 'cold_war', weight: 7 }], consequences: [] },
+  moon_landing: { causes: [{ id: 'cold_war', weight: 6 }], consequences: [] },
+  abolition_of_slavery: { causes: [{ id: 'enlightenment', weight: 6 }], consequences: [] },
+  meiji_restoration: { causes: [], consequences: [{ id: 'world_war_1', weight: 5 }] },
+  american_civil_war: { causes: [{ id: 'american_independence', weight: 5 }], consequences: [] },
+  great_wall_construction: { causes: [], consequences: [] },
+  invention_of_paper: { causes: [], consequences: [] },
+  invention_of_gunpowder: { causes: [], consequences: [] },
+  invention_of_compass: { causes: [], consequences: [] },
+  invention_of_printing: { causes: [], consequences: [] },
+  bauhaus_founded: { causes: [], consequences: [] },
+  french_colonial_indochina: { causes: [], consequences: [] },
+  abolition_feudalism_japan: { causes: [], consequences: [{ id: 'meiji_restoration', weight: 8 }] },
+}
+
+export const allEvents: HistoryEvent[] = []
+
+let _loaded = false
+
+export async function loadEvents(): Promise<void> {
+  if (_loaded && allEvents.length > 0) return
+  try {
+    const res = await eventsApi.getAll()
+    const list = res.data?.list || []
+    allEvents.length = 0
+    for (const ev of list) {
+      const rel = EVENT_RELATIONS[ev.id] || { causes: [], consequences: [] }
+      allEvents.push({
+        ...ev,
+        related: rel,
+      })
     }
-  },
-  {
-    id: 'qin_unification',
-    name: '秦始皇统一六国',
-    year: -221,
-    region: 'china',
-    importance: 10,
-    description: '秦始皇赢政消灭六国，建立中国历史上第一个大一统王朝，创建皇帝制度，统一文字、度量衡。',
-    causes: ['商鞅变法国力大增', '远交近攻战略成功', '六国实力衰退'],
-    consequences: ['统一文字小篆', '统一度量衡', '修筑万里长城', '建立郡县制'],
-    related: {
-      causes: [{ id: 'shangyang_reform', weight: 9 }],
-      consequences: [{ id: 'han_empire', weight: 8 }]
-    }
-  },
-  {
-    id: 'han_empire',
-    name: '大汉帝国建立',
-    year: -202,
-    region: 'china',
-    importance: 10,
-    description: '刘邦击败项羽建立汉朝，实行休养生息政策，丝绸之路连接东西方。',
-    causes: ['秦始皇暴政导致亡国', '楚汉争霸项羽失败'],
-    consequences: ['开启文景之治', '汉武帝北击匈奴', '丝绸之路开通'],
-    related: {
-      causes: [{ id: 'qin_unification', weight: 9 }],
-      consequences: [{ id: 'roman_empire', weight: 6 }]
-    }
-  },
-  {
-    id: 'alexander_east',
-    name: '亚历山大东征',
-    year: -334,
-    region: 'foreign',
-    importance: 9,
-    description: '马其顿国王亚历山大三世率军东征，建立横跨欧亚非的大帝国，开启希腊化时代。',
-    causes: ['马其顿崛起', '希腊城邦衰落'],
-    consequences: ['希腊化时代开启', '东西方文化交流'],
-    related: {
-      causes: [],
-      consequences: [{ id: 'roman_empire', weight: 7 }]
-    }
-  },
-  {
-    id: 'roman_empire',
-    name: '罗马帝国建立',
-    year: -27,
-    region: 'foreign',
-    importance: 10,
-    description: '屋大维获奥古斯都称号，罗马从共和制走向帝制。',
-    causes: ['共和制衰落', '内战频发'],
-    consequences: ['罗马和平时代', '法律体系完善'],
-    related: {
-      causes: [{ id: 'alexander_east', weight: 7 }],
-      consequences: []
-    }
-  },
-  {
-    id: 'french_revolution',
-    name: '法国大革命',
-    year: 1789,
-    region: 'foreign',
-    importance: 9,
-    description: '1789年巴黎人民攻占巴士底狱，法国大革命爆发，推翻了封建专制统治，传播了民主共和理念。',
-    causes: ['启蒙运动思想传播', '封建专制压迫', '财政危机严重'],
-    consequences: ['推翻封建专制', '传播民主理念', '拿破仑崛起'],
-    related: {
-      causes: [],
-      consequences: [{ id: 'industrial_revolution', weight: 6 }]
-    }
-  },
-  {
-    id: 'industrial_revolution',
-    name: '工业革命',
-    year: 1769,
-    region: 'foreign',
-    importance: 9,
-    description: '瓦特改进蒸汽机，开启工业革命，机器取代人力，人类社会进入工业化时代。',
-    causes: [],
-    consequences: [],
-    related: {
-      causes: [{ id: 'roman_empire', weight: 5 }],
-      consequences: []
-    }
+    _loaded = true
+  } catch {
+    _loaded = true
   }
-]
+}
 
 export function getEventById(id: string): HistoryEvent | undefined {
   return allEvents.find(e => e.id === id)
@@ -112,7 +89,7 @@ export function getRelatedEvents(
   const event = getEventById(eventId)
   if (!event) return []
 
-  const relations = event.related[type] || []
+  const relations = event.related?.[type] || []
   return relations
     .map(rel => {
       const found = getEventById(rel.id)
@@ -127,8 +104,11 @@ export function searchEvents(keyword: string): HistoryEvent[] {
   return allEvents.filter(e => {
     if (e.name.toLowerCase().includes(lower)) return true
     if (e.description.toLowerCase().includes(lower)) return true
-    if (e.causes.some(c => c.toLowerCase().includes(lower))) return true
-    if (e.consequences.some(c => c.toLowerCase().includes(lower))) return true
+    if (e.causes?.some(c => c.toLowerCase().includes(lower))) return true
+    if (e.consequences?.some(c => c.toLowerCase().includes(lower))) return true
+    if (e.related_concepts?.some(c => c.toLowerCase().includes(lower))) return true
+    if (e.figures?.some(f => f.toLowerCase().includes(lower))) return true
+    if (e.tags?.some(t => t.toLowerCase().includes(lower))) return true
     return false
   })
 }

@@ -1,7 +1,5 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 import logging
 import time
@@ -9,7 +7,7 @@ import time
 from .config import settings
 from .database import init_db
 from .redis_client import redis_client
-from .routers import exploration, rating, vote, signature, champion, dialogue, auth
+from .routers import exploration, rating, vote, signature, champion, dialogue, auth, rag, events, config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,6 +24,12 @@ async def lifespan(app: FastAPI):
         logger.info(f"Database tables initialized ({settings.DB_TYPE})")
     except Exception as e:
         logger.error(f"Database init failed: {e}")
+
+    await _seed_configs()
+
+    await load_db_config_safe()
+
+    await _seed_events()
 
     if redis_client is not None:
         try:
@@ -55,19 +59,30 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
-    allow_methods=settings.CORS_ALLOW_METHODS,
-    allow_headers=settings.CORS_ALLOW_HEADERS,
-)
-
 
 @app.middleware("http")
-async def log_requests(request: Request, call_next):
+async def cors_and_log_middleware(request: Request, call_next):
     start_time = time.time()
+
+    origin = request.headers.get("origin")
+    is_cors = origin and origin in settings.CORS_ORIGINS
+
+    if is_cors and request.method == "OPTIONS":
+        from fastapi.responses import Response
+        resp = Response()
+        resp.headers["Access-Control-Allow-Origin"] = origin
+        resp.headers["Access-Control-Allow-Credentials"] = "true"
+        resp.headers["Access-Control-Allow-Methods"] = ",".join(settings.CORS_ALLOW_METHODS)
+        resp.headers["Access-Control-Allow-Headers"] = ",".join(settings.CORS_ALLOW_HEADERS)
+        resp.headers["Access-Control-Max-Age"] = "600"
+        return resp
+
     response = await call_next(request)
+
+    if is_cors:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+
     duration = time.time() - start_time
     logger.info(
         f"{request.method} {request.url.path} - {response.status_code} - {duration:.3f}s"
@@ -91,6 +106,79 @@ app.include_router(signature.router)
 app.include_router(champion.router)
 app.include_router(dialogue.router)
 app.include_router(auth.router)
+app.include_router(rag.router)
+app.include_router(events.router)
+app.include_router(config.router)
+
+
+async def load_db_config_safe():
+    try:
+        from .config import load_db_config
+        await load_db_config()
+    except Exception as e:
+        logger.warning(f"Failed to load DB config: {e}")
+
+
+async def _seed_configs():
+    from sqlalchemy import select, func
+    from .database import AsyncSessionLocal
+    from .models.system_config import SystemConfig
+    from .data.config_data import DEFAULT_CONFIGS
+
+    try:
+        async with AsyncSessionLocal() as db:
+            count_result = await db.execute(select(func.count()).select_from(SystemConfig))
+            count = count_result.scalar()
+            if count and count > 0:
+                logger.info(f"SystemConfig table already has {count} records, skipping seed")
+                return
+
+            for cfg in DEFAULT_CONFIGS:
+                db.add(SystemConfig(
+                    key=cfg["key"],
+                    value=cfg["value"],
+                    group=cfg["group"],
+                    label=cfg["label"],
+                    value_type=cfg["value_type"],
+                ))
+            await db.commit()
+            logger.info(f"Seeded {len(DEFAULT_CONFIGS)} default config items")
+    except Exception as e:
+        logger.error(f"Failed to seed configs: {e}")
+
+
+async def _seed_events():
+    from sqlalchemy import select, func
+    from .database import AsyncSessionLocal
+    from .models.event import HistoryEvent
+    from .data.events_data import events_data
+
+    try:
+        async with AsyncSessionLocal() as db:
+            count_result = await db.execute(select(func.count()).select_from(HistoryEvent))
+            count = count_result.scalar()
+            if count and count > 0:
+                logger.info(f"Events table already has {count} records, skipping seed")
+                return
+
+            for ev in events_data:
+                db.add(HistoryEvent(
+                    id=ev["id"],
+                    name=ev["name"],
+                    year=ev["year"],
+                    region=ev["region"],
+                    importance=ev["importance"],
+                    description=ev.get("description", ""),
+                    causes=ev.get("causes", []),
+                    consequences=ev.get("consequences", []),
+                    related_concepts=ev.get("related_concepts", []),
+                    figures=ev.get("figures", []),
+                    tags=ev.get("tags", []),
+                ))
+            await db.commit()
+            logger.info(f"Seeded {len(events_data)} historical events into database")
+    except Exception as e:
+        logger.error(f"Failed to seed events: {e}")
 
 
 @app.get("/", tags=["健康检查"])

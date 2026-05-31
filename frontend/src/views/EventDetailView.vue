@@ -192,7 +192,7 @@ import StarlinkPlanets from '@/components/StarlinkPlanets.vue'
 import ExplorationRecord from '@/components/ExplorationRecord.vue'
 import VotingSystem from '@/components/VotingSystem.vue'
 import RatingSystem from '@/components/RatingSystem.vue'
-import { allEvents, getEventById, getRelatedEvents } from '@/data/events'
+import { allEvents, getEventById, getRelatedEvents, loadEvents } from '@/data/events'
 import { requireAuth } from '@/utils/auth'
 import { recordExploration } from '@/utils/exploration'
 

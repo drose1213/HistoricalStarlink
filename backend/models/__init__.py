@@ -5,6 +5,8 @@ from .signature import Signature
 from .champion_card import ChampionCard
 from .dialogue import DialogueSession
 from .user import User
+from .event import HistoryEvent
+from .system_config import SystemConfig
 
 __all__ = [
     "ExplorationRecord",
@@ -14,4 +16,6 @@ __all__ = [
     "ChampionCard",
     "DialogueSession",
     "User",
+    "HistoryEvent",
+    "SystemConfig",
 ]

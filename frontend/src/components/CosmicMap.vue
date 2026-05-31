@@ -84,30 +84,52 @@ const highlightConceptId = ref<string | null>(null)
 function runLayout() {
   const cx = W / 2
   const cy = H / 2
-  const minR = Math.min(W, H) * 0.28
+  const baseR = Math.min(W, H) * 0.22
 
-  const events = nodes.filter(n => n.type === 'event')
+  const chinaEvts = nodes.filter(n => n.type === 'event' && n.region === 'china')
+  const foreignEvts = nodes.filter(n => n.type === 'event' && n.region === 'foreign')
   const concepts = nodes.filter(n => n.type === 'concept')
 
-  events.forEach((n, i) => {
-    const angle = (i / events.length) * Math.PI * 2 - Math.PI / 2
-    const layerIdx = Math.floor(i / Math.ceil(events.length / 2))
-    const r = minR + layerIdx * minR * 0.7 + Math.random() * 60
+  const perRing = 10
+
+  chinaEvts.forEach((n, i) => {
+    const ring = Math.floor(i / perRing)
+    const pos = i % perRing
+    const count = Math.min(perRing, chinaEvts.length - ring * perRing)
+    const arcSpan = Math.PI * 0.85
+    const arcCenter = -Math.PI * 0.5
+    const angle = arcCenter + ((pos / Math.max(count - 1, 1)) - 0.5) * arcSpan + ring * 0.25
+    const r = baseR + ring * (baseR * 0.5)
     n.x = cx + Math.cos(angle) * r
     n.y = cy + Math.sin(angle) * r
   })
+
+  foreignEvts.forEach((n, i) => {
+    const ring = Math.floor(i / perRing)
+    const pos = i % perRing
+    const count = Math.min(perRing, foreignEvts.length - ring * perRing)
+    const arcSpan = Math.PI * 0.85
+    const arcCenter = Math.PI * 0.5
+    const angle = arcCenter + ((pos / Math.max(count - 1, 1)) - 0.5) * arcSpan - ring * 0.25
+    const r = baseR + ring * (baseR * 0.5)
+    n.x = cx + Math.cos(angle) * r
+    n.y = cy + Math.sin(angle) * r
+  })
+
+  const outerR = baseR + Math.max(
+    Math.ceil(chinaEvts.length / perRing),
+    Math.ceil(foreignEvts.length / perRing)
+  ) * baseR * 0.5 + 100
 
   concepts.forEach((n, i) => {
     const angle = (i / concepts.length) * Math.PI * 2 + Math.PI / concepts.length
-    const r = minR * 1.8 + Math.random() * minR * 0.6
-    n.x = cx + Math.cos(angle) * r
-    n.y = cy + Math.sin(angle) * r
+    n.x = cx + Math.cos(angle) * outerR
+    n.y = cy + Math.sin(angle) * outerR
   })
 
-  for (let i = 0; i < nodes.length; i++) {
-    const a = nodes[i]
-    a.x = Math.max(a.radius + 30, Math.min(W - a.radius - 30, a.x))
-    a.y = Math.max(a.radius + 30, Math.min(H - a.radius - 30, a.y))
+  for (const n of nodes) {
+    n.x = Math.max(n.radius + 30, Math.min(W - n.radius - 30, n.x))
+    n.y = Math.max(n.radius + 30, Math.min(H - n.radius - 30, n.y))
   }
 }
 
@@ -133,9 +155,7 @@ function initGraph() {
   const exploreCounts = getAllExplorationCounts()
   const maxExplore = Math.max(1, ...Object.values(exploreCounts))
 
-  allEvents.forEach((ev, i) => {
-    const angle = (i / allEvents.length) * Math.PI * 2 - Math.PI * 0.2
-    const dist = 220 + Math.random() * 280
+  allEvents.forEach((ev) => {
     const isChina = ev.region === 'china'
     const exploreBonus = (exploreCounts[ev.id] || 0) / maxExplore * 5
     const node: GNode = {
@@ -145,8 +165,8 @@ function initGraph() {
       year: ev.year,
       region: ev.region,
       importance: ev.importance,
-      x: cx + Math.cos(angle) * dist,
-      y: cy + Math.sin(angle) * dist,
+      x: cx,
+      y: cy,
       radius: 7 + (ev.importance / 10) * 10 + exploreBonus,
       color: isChina ? '#8bffe1' : '#ff68b8',
       glowColor: isChina ? 'rgba(139,255,225,' : 'rgba(255,104,184,'
@@ -171,16 +191,14 @@ function initGraph() {
   ]
 
   concepts.forEach((c, i) => {
-    const angle = (i / concepts.length) * Math.PI * 2 + Math.random() * 0.24
-    const dist = 260 + Math.random() * 340
     const id = `concept_${i}`
     const node: GNode = {
       id,
       label: c.label,
       type: 'concept',
       importance: c.r,
-      x: cx + Math.cos(angle) * dist,
-      y: cy + Math.sin(angle) * dist,
+      x: cx,
+      y: cy,
       radius: c.r,
       color: c.color,
       glowColor: c.glow
@@ -193,12 +211,70 @@ function initGraph() {
   const eventEdges: Array<[string, string, number]> = [
     ['shangyang_reform', 'qin_unification', 1],
     ['qin_unification', 'han_empire', 1],
-    ['alexander_east', 'roman_empire', 1],
-    ['qin_unification', 'alexander_east', 0.62],
-    ['french_revolution', 'roman_empire', 0.42],
-    ['industrial_revolution', 'french_revolution', 0.5],
-    ['han_empire', 'roman_empire', 0.42],
-    ['shangyang_reform', 'alexander_east', 0.3]
+    ['han_empire', 'tang_prosperity', 0.6],
+    ['han_empire', 'silk_road', 0.8],
+    ['tang_prosperity', 'song_innovations', 0.7],
+    ['song_innovations', 'mongol_conquests', 0.6],
+    ['mongol_conquests', 'black_death', 0.5],
+    ['han_empire', 'great_wall', 0.7],
+    ['han_empire', 'invention_paper', 0.5],
+    ['tang_prosperity', 'invention_gunpowder', 0.6],
+    ['song_innovations', 'invention_compass', 0.7],
+    ['tang_prosperity', 'invention_printing', 0.5],
+    ['mongol_conquests', 'an_shi_rebellion', 0.4],
+    ['silk_road', 'zhenghe_voyages', 0.7],
+    ['han_empire', 'buddhism_china', 0.5],
+    ['tang_prosperity', 'buddhism_china', 0.6],
+    ['silk_road', 'alexander_east', 0.5],
+    ['alexander_east', 'roman_empire', 0.8],
+    ['roman_empire', 'crusades', 0.6],
+    ['crusades', 'renaissance', 0.7],
+    ['black_death', 'renaissance', 0.7],
+    ['renaissance', 'enlightenment', 0.8],
+    ['enlightenment', 'french_revolution', 0.9],
+    ['enlightenment', 'american_independence', 0.7],
+    ['french_revolution', 'american_independence', 0.6],
+    ['french_revolution', 'napoleonic_wars', 0.8],
+    ['napoleonic_wars', 'latin_american_independence', 0.7],
+    ['enlightenment', 'industrial_revolution', 0.6],
+    ['industrial_revolution', 'crimean_war', 0.5],
+    ['crimean_war', 'world_war_1', 0.5],
+    ['world_war_1', 'world_war_2', 0.9],
+    ['world_war_2', 'cold_war', 0.9],
+    ['cold_war', 'fall_of_berlin_wall', 0.8],
+    ['cold_war', 'moon_landing', 0.7],
+    ['cold_war', 'internet_birth', 0.6],
+    ['world_war_2', 'independence_india', 0.6],
+    ['world_war_2', 'state_of_israel', 0.6],
+    ['world_war_2', 'african_decolonization', 0.6],
+    ['roman_empire', 'justinian_code', 0.7],
+    ['renaissance', 'printing_press', 0.7],
+    ['industrial_revolution', 'meiji_restoration', 0.5],
+    ['meiji_restoration', 'qin_unification', 0.3],
+    ['han_empire', 'roman_empire', 0.5],
+    ['roman_empire', 'anglo_saxon_chronicle', 0.5],
+    ['crusades', 'islamic_golden_age', 0.6],
+    ['islamic_golden_age', 'renaissance', 0.5],
+    ['islamic_golden_age', 'printing_press', 0.4],
+    ['printing_press', 'enlightenment', 0.6],
+    ['opium_wars', 'self_strengthening', 0.8],
+    ['self_strengthening', 'hundred_days_reform', 0.7],
+    ['hundred_days_reform', 'xinhai_revolution', 0.8],
+    ['xinhai_revolution', 'may_fourth_movement', 0.8],
+    ['xinhai_revolution', 'founding_prc', 0.6],
+    ['founding_prc', 'reform_opening', 0.9],
+    ['founding_prc', 'korean_war', 0.6],
+    ['korean_war', 'cold_war', 0.5],
+    ['rome_to_byzantium', 'crusades', 0.5],
+    ['rome_to_byzantium', 'justinian_code', 0.7],
+    ['industrial_revolution', 'taiping_rebellion', 0.5],
+    ['taiping_rebellion', 'opium_wars', 0.6],
+    ['french_revolution', 'napoleonic_code', 0.8],
+    ['napoleonic_wars', 'napoleonic_code', 0.6],
+    ['british_parliament', 'american_independence', 0.5],
+    ['world_war_1', 'treaty_versailles', 0.9],
+    ['treaty_versailles', 'world_war_2', 0.6],
+    ['treaty_versailles', 'french_revolution', 0.3],
   ]
 
   eventEdges.forEach(([source, target, strength]) => addEdge(source, target, strength))
@@ -216,7 +292,30 @@ function initGraph() {
     ['french_revolution', '革命', 0.4],
     ['french_revolution', '启蒙', 0.32],
     ['industrial_revolution', '科技', 0.4],
-    ['industrial_revolution', '经济', 0.3]
+    ['industrial_revolution', '经济', 0.3],
+    ['silk_road', '贸易', 0.35],
+    ['tang_prosperity', '文化', 0.35],
+    ['song_innovations', '科技', 0.35],
+    ['mongol_conquests', '军事', 0.35],
+    ['crusades', '军事', 0.3],
+    ['renaissance', '文化', 0.4],
+    ['enlightenment', '启蒙', 0.45],
+    ['cold_war', '政治', 0.35],
+    ['world_war_1', '军事', 0.35],
+    ['world_war_2', '军事', 0.35],
+    ['meiji_restoration', '改革', 0.35],
+    ['black_death', '经济', 0.3],
+    ['xinhai_revolution', '革命', 0.4],
+    ['founding_prc', '政治', 0.35],
+    ['reform_opening', '经济', 0.35],
+    ['printing_press', '科技', 0.35],
+    ['great_wall', '军事', 0.3],
+    ['buddhism_china', '文化', 0.35],
+    ['moon_landing', '科技', 0.35],
+    ['internet_birth', '科技', 0.35],
+    ['african_decolonization', '革命', 0.3],
+    ['napoleonic_code', '法律', 0.35],
+    ['british_parliament', '政治', 0.35],
   ]
 
   conceptLinks.forEach(([eventId, label, strength]) => {
@@ -231,7 +330,16 @@ function initGraph() {
     ['文化', '启蒙', 0.2],
     ['经济', '贸易', 0.2],
     ['科技', '经济', 0.2],
-    ['法律', '政治', 0.18]
+    ['法律', '政治', 0.18],
+    ['政治', '统一', 0.16],
+    ['军事', '革命', 0.16],
+    ['科技', '文化', 0.15],
+    ['经济', '改革', 0.16],
+    ['帝国', '统一', 0.18],
+    ['贸易', '文化', 0.15],
+    ['启蒙', '革命', 0.2],
+    ['法律', '帝国', 0.16],
+    ['改革', '经济', 0.16],
   ]
 
   conceptConceptLinks.forEach(([a, b, strength]) => {
@@ -242,7 +350,7 @@ function initGraph() {
 
   runLayout()
 
-  for (let i = 0; i < 18; i++) {
+  for (let i = 0; i < 30; i++) {
     const edgeIdx = Math.floor(Math.random() * edges.length)
     edgeParticles.push({
       t: Math.random(),

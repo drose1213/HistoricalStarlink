@@ -163,6 +163,17 @@ import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import CosmicMap from '@/components/CosmicMap.vue'
 import { allEvents as historyEvents, searchEvents } from '@/data/events'
+import { ragApi } from '@/api/rag'
+
+interface RagSearchResult {
+  id: string
+  name: string
+  year: number
+  region: string
+  importance: number
+  description: string
+  score: number
+}
 
 const router = useRouter()
 const appStore = useAppStore()
@@ -173,18 +184,33 @@ const searchQuery = ref('')
 const showSearchDropdown = ref(false)
 const searchLoading = ref(false)
 let searchLoadingTimer: ReturnType<typeof setTimeout> | null = null
+let searchAbortTimer: ReturnType<typeof setTimeout> | null = null
+
+const ragSearchResults = ref<RagSearchResult[]>([])
 
 function onSearchInput() {
   showSearchDropdown.value = true
   searchLoading.value = true
   if (searchLoadingTimer) clearTimeout(searchLoadingTimer)
+  if (searchAbortTimer) clearTimeout(searchAbortTimer)
   searchLoadingTimer = setTimeout(() => {
     searchLoading.value = false
   }, 600)
+  searchAbortTimer = setTimeout(async () => {
+    const q = searchQuery.value.trim()
+    if (!q) { ragSearchResults.value = []; return }
+    try {
+      const res = await ragApi.search(q, 5)
+      ragSearchResults.value = res.data || []
+    } catch {
+      ragSearchResults.value = []
+    }
+  }, 300)
 }
 
 const searchResults = computed(() => {
   if (!searchQuery.value.trim()) return []
+  if (ragSearchResults.value.length > 0) return ragSearchResults.value
   return searchEvents(searchQuery.value.trim()).slice(0, 5)
 })
 
