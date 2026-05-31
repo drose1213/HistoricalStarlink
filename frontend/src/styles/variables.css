@@ -1,0 +1,43 @@
+:root {
+  --space-black: #05070d;
+  --space-blue: #081525;
+  --soil-shadow: #180c08;
+  --cyan-core: #31f7ff;
+  --pink-core: #ff35f3;
+  --cyan-soft: rgba(49, 247, 255, 0.28);
+  --pink-soft: rgba(255, 53, 243, 0.28);
+  --accent-gold: #d4a84b;
+  --text-light: #e0e0e0;
+  --text-muted: #8ea4b8;
+
+  --bg-primary: #05070d;
+  --bg-secondary: #081525;
+  --bg-card: rgba(10, 15, 24, 0.92);
+  --bg-input: rgba(4, 9, 18, 0.62);
+
+  --border-cyan: rgba(49, 247, 255, 0.42);
+  --border-pink: rgba(255, 53, 243, 0.42);
+  --border-subtle: rgba(49, 247, 255, 0.14);
+
+  --glow-cyan: 0 0 18px rgba(49, 247, 255, 0.48);
+  --glow-pink: 0 0 18px rgba(255, 53, 243, 0.48);
+  --glow-cyan-strong: 0 0 18px var(--cyan-core), 0 0 34px var(--cyan-soft);
+  --glow-pink-strong: 0 0 18px var(--pink-core), 0 0 34px var(--pink-soft);
+
+  --font-sans: 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+  --font-serif: 'Noto Serif SC', serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-display: 'Orbitron', 'Noto Sans SC', sans-serif;
+
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-full: 999px;
+
+  --transition-fast: 0.2s ease;
+  --transition-normal: 0.3s ease;
+
+  --z-header: 100;
+  --z-modal: 200;
+  --z-toast: 300;
+}

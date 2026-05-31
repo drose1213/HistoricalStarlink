@@ -1,0 +1,52 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+uploads/
+
+# Node
+node_modules/
+frontend/dist/
+
+# 环境配置（敏感信息）
+.env
+.env.local
+.env.production
+
+# 临时脚本（自动生成）
+_start_backend.cmd
+_start_frontend.cmd
+
+# PID文件
+.backend.pid
+.frontend.pid
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# 数据
+backend/data/
+*.db
+
+# Docs
+docs/superpowers/
+
+# Tool state
+.superpowers/
+.trae/
+.ports
+*.pid
