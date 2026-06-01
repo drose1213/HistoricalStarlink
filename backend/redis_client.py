@@ -1,4 +1,5 @@
 import json
+import time
 import logging
 from typing import Any, Optional
 
@@ -20,9 +21,18 @@ try:
     redis_client = aioredis.Redis(connection_pool=redis_pool)
     _REDIS_AVAILABLE = True
 except (ImportError, Exception) as e:
-    logger.warning(f"Redis unavailable, caching disabled: {e}")
+    logger.warning(f"Redis unavailable, falling back to in-memory cache: {e}")
     redis_client = None
     _REDIS_AVAILABLE = False
+
+_mem_store: dict[str, tuple[Any, float]] = {}
+
+
+def _mem_cleanup():
+    now = time.time()
+    expired = [k for k, (_, exp) in _mem_store.items() if exp <= now]
+    for k in expired:
+        del _mem_store[k]
 
 
 class RedisCache:
@@ -31,6 +41,13 @@ class RedisCache:
 
     async def get(self, key: str) -> Optional[Any]:
         if not _REDIS_AVAILABLE:
+            _mem_cleanup()
+            entry = _mem_store.get(key)
+            if entry is not None:
+                value, exp = entry
+                if exp > time.time():
+                    return value
+                del _mem_store[key]
             return None
         try:
             value = await redis_client.get(key)
@@ -45,6 +62,8 @@ class RedisCache:
 
     async def set(self, key: str, value: Any, expire: Optional[int] = None) -> None:
         if not _REDIS_AVAILABLE:
+            exp = time.time() + (expire or self.default_expire)
+            _mem_store[key] = (value, exp)
             return
         try:
             if isinstance(value, (dict, list)):
@@ -56,6 +75,7 @@ class RedisCache:
 
     async def delete(self, key: str) -> None:
         if not _REDIS_AVAILABLE:
+            _mem_store.pop(key, None)
             return
         try:
             await redis_client.delete(key)
@@ -64,6 +84,13 @@ class RedisCache:
 
     async def exists(self, key: str) -> bool:
         if not _REDIS_AVAILABLE:
+            _mem_cleanup()
+            entry = _mem_store.get(key)
+            if entry is not None:
+                _, exp = entry
+                if exp > time.time():
+                    return True
+                del _mem_store[key]
             return False
         try:
             return bool(await redis_client.exists(key))
@@ -72,6 +99,16 @@ class RedisCache:
 
     async def incr(self, key: str, amount: int = 1) -> int:
         if not _REDIS_AVAILABLE:
+            entry = _mem_store.get(key)
+            if entry is not None:
+                val, exp = entry
+                if exp > time.time():
+                    try:
+                        new_val = int(val) + amount
+                    except (ValueError, TypeError):
+                        new_val = amount
+                    _mem_store[key] = (new_val, exp)
+                    return new_val
             return 0
         try:
             return await redis_client.incr(key, amount)
@@ -135,6 +172,7 @@ class RedisCache:
 
     async def flush_db(self) -> None:
         if not _REDIS_AVAILABLE:
+            _mem_store.clear()
             return
         try:
             await redis_client.flushdb()

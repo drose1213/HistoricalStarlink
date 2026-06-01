@@ -245,8 +245,9 @@ async def send_email_code(
     async def _send_in_background(email: str, code: str):
         try:
             await _send_email(email, code)
+            logger.info(f"验证码已发送到 {email}")
         except Exception as e:
-            logger.error(f"后台发送验证码失败: {e}")
+            logger.error(f"发送验证码到 {email} 失败: {type(e).__name__}: {e}")
 
     asyncio.create_task(_send_in_background(req.email, code))
 
@@ -265,12 +266,20 @@ async def register(
     existing = result.scalar_one_or_none()
 
     if existing:
+        if existing.email == req.email and existing.username == req.username:
+            logger.info(f"幂等注册: 用户 {req.username} ({req.email}) 已存在，返回成功")
+            token = create_token(existing.id)
+            return BaseResponse(
+                message="注册成功",
+                data={"token": token, "user": _user_out(existing)},
+            )
         if existing.username == req.username:
             raise HTTPException(status_code=400, detail="用户名已存在")
         raise HTTPException(status_code=400, detail="邮箱已被注册")
 
     code_key = _email_code_key(req.email)
     stored_code = await cache.get(code_key)
+    logger.info(f"注册验证: email={req.email}, input_code={req.email_code}, stored={stored_code}")
     if stored_code is None:
         raise HTTPException(status_code=400, detail="验证码已过期，请重新获取")
     if str(stored_code) != req.email_code:
@@ -290,6 +299,7 @@ async def register(
     await db.refresh(user)
 
     token = create_token(user.id)
+    logger.info(f"新用户注册成功: {req.username} ({req.email})")
     return BaseResponse(
         message="注册成功",
         data={"token": token, "user": _user_out(user)},

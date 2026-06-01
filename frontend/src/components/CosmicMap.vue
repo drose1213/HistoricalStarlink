@@ -665,6 +665,8 @@ function onResize() {
 
   W = c.clientWidth
   H = c.clientHeight
+  lastW = W
+  lastH = H
 
   for (const cv of [bgCanvasRef.value, graphCanvasRef.value]) {
     if (!cv) continue
@@ -685,6 +687,8 @@ function onResize() {
 }
 
 let resizeObs: ResizeObserver | null = null
+let lastW = 0
+let lastH = 0
 
 onMounted(() => {
   initBgStars()
@@ -693,7 +697,13 @@ onMounted(() => {
   window.addEventListener('resize', onResize)
   if (containerRef.value) {
     resizeObs = new ResizeObserver(() => {
-      if (W === 0 || H === 0) onResize()
+      const c = containerRef.value
+      if (!c) return
+      const w = c.clientWidth
+      const h = c.clientHeight
+      if (w !== lastW || h !== lastH) {
+        onResize()
+      }
     })
     resizeObs.observe(containerRef.value)
   }
