@@ -684,16 +684,25 @@ function onResize() {
   }
 }
 
+let resizeObs: ResizeObserver | null = null
+
 onMounted(() => {
   initBgStars()
   onResize()
   animId = requestAnimationFrame(animate)
   window.addEventListener('resize', onResize)
+  if (containerRef.value) {
+    resizeObs = new ResizeObserver(() => {
+      if (W === 0 || H === 0) onResize()
+    })
+    resizeObs.observe(containerRef.value)
+  }
 })
 
 onBeforeUnmount(() => {
   if (animId !== null) cancelAnimationFrame(animId)
   window.removeEventListener('resize', onResize)
+  resizeObs?.disconnect()
 })
 </script>
 

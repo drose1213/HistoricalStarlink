@@ -216,11 +216,12 @@ class Settings:
         import socket
         try:
             s = socket.create_connection(
-                (self.MYSQL_HOST, self.MYSQL_PORT), timeout=2
+                (self.MYSQL_HOST, self.MYSQL_PORT), timeout=5
             )
             s.close()
             return True
-        except (ConnectionRefusedError, OSError, TimeoutError):
+        except (ConnectionRefusedError, OSError, TimeoutError) as e:
+            logger.warning(f"MySQL TCP probe failed: {e}")
             return False
 
     @property

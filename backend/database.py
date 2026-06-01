@@ -30,6 +30,11 @@ from . import models  # noqa: F401,E402  触发所有 Model 类的注册，使 B
 _db_url = settings.DATABASE_URL
 _is_sqlite = _db_url.startswith("sqlite")
 
+if _is_sqlite:
+    logger.warning(f"Using SQLite (DB_DRIVER={settings.DB_DRIVER}). MySQL was not available or not configured.")
+else:
+    logger.info(f"MySQL mode: {settings.MYSQL_HOST}:{settings.MYSQL_PORT}/{settings.MYSQL_DATABASE}")
+
 if not _is_sqlite:
     try:
         import aiomysql
