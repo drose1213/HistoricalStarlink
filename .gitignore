@@ -39,7 +39,6 @@ Thumbs.db
 docker-compose.override.yml
 
 # 数据
-backend/data/
 *.db
 
 # Docs

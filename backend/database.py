@@ -24,6 +24,9 @@ class Base(DeclarativeBase):
     metadata = metadata
 
 
+from . import models  # noqa: F401,E402  触发所有 Model 类的注册，使 Base.metadata.create_all 生效
+
+
 _db_url = settings.DATABASE_URL
 _is_sqlite = _db_url.startswith("sqlite")
 

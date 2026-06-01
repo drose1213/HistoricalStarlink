@@ -1,8 +1,8 @@
-# 文明星链：遗迹探索 — 功能模块全景图
+# 历史星链探索 — 功能模块全景图
 
 > **技术栈**: Vue 3 + TypeScript + Pinia + FastAPI + SQLAlchemy + MySQL/SQLite + Redis  
 > **服务器**: `111.231.50.67`  
-> **最后更新**: 2026-05-30
+> **最后更新**: 2026-06-01
 
 ---
 
@@ -23,13 +23,14 @@
 │                  后端 (FastAPI + Python)                   │
 │  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ │
 │  │Auth  │ │Dialogue│ │Explore│ │Vote  │ │Rating│ │Champion│ │
+│  │Signature│ │Events │ │RAG  │ │Config│ └──────┘ └──────┘ │
 │  └──┬───┘ └──┬───┘ └──┬───┘ └──┬───┘ └──┬───┘ └──┬───┘ │
 │     └────────┴────────┴────────┴────────┴────────┘     │
 │              SQLAlchemy ORM + Redis Cache                  │
 └────────────────────────┬────────────────────────────────┘
                          │
               ┌──────────┴──────────┐
-              │ MySQL (优先)          │
+              │ MySQL (优先/强制)     │
               │ SQLite (自动回退)     │
               └─────────────────────┘
 ```
@@ -97,7 +98,7 @@
 #### 功能
 - Canvas 星空背景（250颗闪烁星星）
 - SVG 星座连线（东方青色/西方粉色/跨文明金色虚线）
-- 5个历史事件星节点（可点击跳转详情）
+- 50个历史事件星节点（可点击跳转详情）
 - 星云雾气效果
 - 左侧抽屉式事件列表（可展开/收起）
 - 底部搜索栏（关键词搜索历史事件）
@@ -129,17 +130,37 @@ interface HistoryEvent {
   description: string
   causes: string[]
   consequences: string[]
-  related: {
+  related_concepts: string[]
+  figures: string[]
+  tags: string[]
+  related?: {
     causes: Array<{ id: string; weight: number }>
     consequences: Array<{ id: string; weight: number }>
   }
 }
 ```
 
-#### 当前 7 个事件
-商鞅变法(-356) → 秦始皇统一六国(-221) → 大汉帝国建立(-202)  
-亚历山大东征(-334) → 罗马帝国建立(-27)  
-法国大革命(1789) → 工业革命(1760)
+#### 50 个历史事件（数据库 seed 数据）
+
+**中国历史事件（26个）**:
+长城修建(-221) → 造纸术发明(105) → 火药发明(850) → 指南针发明(1100) → 印刷术发明(1040)  
+商鞅变法(-356) → 秦统一六国(-221) → 汉朝建立(-202)  
+丝绸之路(-130) → 海上丝绸之路(200)  
+唐朝盛世(618) → 安史之乱(755)  
+宋朝科技文化(960) → 宋朝商业繁荣(960)  
+蒙古帝国(1206) → 郑和下西洋(1405)  
+鸦片战争(1840) → 太平天国运动(1851) → 洋务运动(1861) → 戊戌变法(1898)  
+辛亥革命(1911) → 五四运动(1919) → 红军长征(1934) → 新中国成立(1949) → 改革开放(1978)
+
+**世界历史事件（19个）**:
+亚历山大东征(-334) → 罗马帝国建立(-27) → 西罗马帝国灭亡(476)  
+十字军东征(1096) → 黑死病(1347) → 文艺复兴(1400) → 宗教改革(1517)  
+光荣革命(1688) → 科学革命(1543) → 启蒙运动(1685)  
+美国独立(1776) → 法国大革命(1789) → 工业革命(1760)  
+一战(1914) → 二战(1939) → 冷战(1947) → 柏林墙倒塌(1989)  
+互联网诞生(1969) → 人类登月(1969)  
+废除奴隶制(1833) → 明治维新(1868) → 美国内战(1861) → 日本废藩置县(1871)  
+包豪斯学院(1919) → 法属印度支那(1887)
 
 ---
 
@@ -155,17 +176,6 @@ interface HistoryEvent {
 - 打字动画效果
 - 结局面板（历史定论/平行时间线）
 - 对话历史记录
-
-#### NPC 角色映射
-| 事件 | NPC | 角色 |
-|------|-----|------|
-| 商鞅变法 | 商鞅 | 变法主导者 |
-| 秦始皇统一六国 | 秦始皇 | 皇帝 |
-| 大汉帝国建立 | 刘邦 | 开国皇帝 |
-| 亚历山大东征 | 亚历山大 | 军事天才 |
-| 罗马帝国建立 | 屋大维 | 奥古斯都 |
-| 法国大革命 | 巴黎市民 | 革命参与者 |
-| 工业革命 | 瓦特 | 发明家 |
 
 #### API 端点
 | 方法 | 路径 | 说明 |
@@ -259,14 +269,6 @@ interface HistoryEvent {
 - 卡牌属性网格
 - 拥有者信息
 
-#### 稀有度系统
-| 稀有度 | 边框颜色 | 特效 |
-|--------|---------|------|
-| 传说 (legendary) | 金色 | 金色闪光动画 |
-| 史诗 (epic) | 紫色 | 紫色光晕 |
-| 稀有 (rare) | 青色 | 青色发光 |
-| 普通 (common) | 灰色 | 无特效 |
-
 #### API 端点
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -299,7 +301,7 @@ interface HistoryEvent {
 
 #### 功能
 - 时间段切换（每日/每周/每月/每年）
-- 前三名领奖台（🥇🥈🥉）
+- 前三名领奖台
 - 排名表格
 - 热门事件排行
 
@@ -325,65 +327,276 @@ interface HistoryEvent {
 
 ---
 
-## 四、共享数据
+### 模块 12: 历史事件 API (`events`)
 
-### 事件数据 (`src/data/events.ts`)
+**状态**: ✅ 已完成  
+**文件**: `backend/routers/events.py`, `backend/models/event.py`, `backend/data/events_data.py`
 
-统一管理所有历史事件数据，供多个页面引用：
-- HomeView（宇宙星图）
-- EventDetailView（详情+星链）
-- ProfileView（探索记录+趋势）
-- CosmicMap（星图可视化）
-- LeaderboardView（排行榜）
+#### 功能
+- 数据库存储的事件数据（50 个中外历史事件）
+- 启动时自动 seed 到 `history_events` 表
+- 支持区域筛选（china/foreign）
+- 支持标签筛选和关键词搜索
+- 分页查询
 
-#### 导出函数
-```typescript
-allEvents: HistoryEvent[]           // 所有事件
-getEventById(id): HistoryEvent      // 按ID获取
-getRelatedEvents(id, type): ...     // 获取关联事件
-searchEvents(keyword): HistoryEvent[] // 关键词搜索
+#### API 端点
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/events` | 获取事件列表（支持筛选+分页） |
+| GET | `/api/events/search?q=xxx` | 搜索事件 |
+| GET | `/api/events/{event_id}` | 获取单个事件详情 |
+
+---
+
+### 模块 13: RAG 知识库 (`rag`)
+
+**状态**: ✅ 后端完成（需要 MiniMax API Key 才能使用 AI 功能）  
+**文件**: `backend/routers/rag.py`, `backend/rag_engine.py`
+
+#### 功能
+- 基于 MiniMax API 的向量嵌入检索（embedding mode）
+- 无 API Key 时自动降级为关键词匹配模式（keyword mode）
+- RAG 智能问答（基于检索结果 + MiniMax Chat API 生成回答）
+- 索引重建接口
+
+#### 双模式降级
+| 条件 | 搜索模式 | 问答模式 |
+|------|---------|---------|
+| 配置了 MINIMAX_API_KEY | 向量语义搜索 | MiniMax Chat API |
+| 未配置 API Key | 关键词匹配 | 本地模板回答 |
+
+#### API 端点
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/rag/search` | 搜索相关历史事件 |
+| POST | `/api/rag/ask` | RAG 智能问答 |
+| POST | `/api/rag/rebuild` | 重建 RAG 索引 |
+
+---
+
+### 模块 14: 系统配置 (`config`)
+
+**状态**: ✅ 已完成  
+**文件**: `backend/routers/config.py`, `backend/models/system_config.py`, `backend/data/config_data.py`
+
+#### 功能
+- 数据库存储系统配置（35 项默认配置）
+- 支持分组查看（app/database/redis/cors/security/email/upload/ai）
+- 支持按 Key 查询和批量更新
+- 配置修改后自动热加载到运行时 Settings
+- 启动时自动 seed 默认配置
+
+#### API 端点
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/config` | 获取所有配置（可按分组筛选） |
+| GET | `/api/config/groups` | 获取所有配置分组 |
+| GET | `/api/config/{key}` | 获取单个配置 |
+| PUT | `/api/config` | 批量更新配置 |
+| PUT | `/api/config/{key}` | 更新单个配置 |
+
+---
+
+## 四、数据库自动初始化
+
+### 启动时自动执行
+
+应用启动时通过 FastAPI lifespan 执行以下初始化流程：
+
+```
+lifespan.start
+  ├─ init_db()              → 创建所有表（Base.metadata.create_all）
+  ├─ _seed_configs()        → 写入 35 项默认系统配置（首次启动）
+  ├─ load_db_config_safe()  → 从数据库加载配置到运行时
+  └─ _seed_events()         → 写入 50 个历史事件（首次启动）
+```
+
+**关键修复**: `database.py` 中 `from . import models` 确保所有 ORM 模型在 `create_all` 前已注册到 `Base.metadata`，否则表不会被创建。
+
+---
+
+## 五、数据库选择策略
+
+数据库通过 `DB_DRIVER` 环境变量控制：
+
+| `DB_DRIVER` 值 | 行为 | 适用场景 |
+|---|---|---|
+| `auto`（默认） | TCP 探测 MySQL，连上用 MySQL，连不上自动降级 SQLite | 开发/测试 |
+| `mysql` | 强制使用 MySQL | 生产环境 |
+| `sqlite` | 强制使用 SQLite | 本地开发 |
+
+**注意**: 生产环境建议设为 `mysql`，避免因 MySQL 临时不可用而静默降级到 SQLite。两种数据库的数据完全隔离。
+
+---
+
+## 六、部署配置
+
+### 快速启动（本地开发）
+
+```bash
+# 1. 进入项目根目录
+cd HistoricalStarlink
+
+# 2. 启动所有服务（一键脚本）
+.\start.ps1
+
+# 或手动启动：
+# 后端
+python -m venv venv
+.\venv\Scripts\pip install -r backend\requirements.txt
+.\venv\Scripts\python.exe -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+
+# 前端
+cd frontend
+npm install
+npm run dev
+```
+
+### Docker Compose 部署（生产环境）
+
+```bash
+# 启动全部服务
+docker-compose up -d
+
+# 服务组件
+# - mysql:8.0       → 数据库（端口 3306）
+# - redis:7-alpine   → 缓存（端口 6379）
+# - backend          → FastAPI 后端（端口 8000）
+# - frontend         → Vue 3 前端
+# - nginx:alpine     → 反向代理（端口 80）
+```
+
+### 环境变量配置 (.env)
+
+```env
+# === 数据库 ===
+DB_DRIVER=auto            # auto/mysql/sqlite
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=your_password
+MYSQL_DATABASE=historical_starlink
+
+# === Redis（可选） ===
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_PASSWORD=
+
+# === 服务器 ===
+SERVER_HOST=0.0.0.0
+SERVER_PORT=8000
+DEBUG=false
+
+# === JWT ===
+JWT_SECRET_KEY=your_secret_key
+
+# === 邮件（QQ邮箱 SMTP） ===
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=465
+SMTP_USER=your_email@qq.com
+SMTP_PASSWORD=your_smtp_authorization_code
+SMTP_FROM=your_email@qq.com
+
+# === CORS ===
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+
+# === MiniMax API（RAG 知识库，可选） ===
+MINIMAX_API_KEY=your_api_key
+```
+
+### 服务健康检查
+
+```
+GET /health → 数据库连接状态 + Redis 连接状态
+GET /       → 应用名称、版本、运行状态
+GET /docs  → Swagger API 文档
 ```
 
 ---
 
-## 五、CSS 变量系统
+## 七、文件结构索引
 
-所有组件使用统一的 CSS 变量：
-
-```css
---cyan-core: #31f7ff        /* 青色主色 */
---pink-core: #ff35f3        /* 粉色强调 */
---accent-gold: #d4a84b      /* 金色/历史 */
---bg-primary: #05070d       /* 深空黑背景 */
---bg-card: #0f1a2d          /* 卡片背景 */
---bg-input: #0a1525         /* 输入框背景 */
---border-cyan: rgba(49,247,255,0.2)
---border-pink: rgba(255,53,243,0.2)
---border-subtle: rgba(255,255,255,0.08)
---text-light: #e0e6f0
---text-muted: #5a6478
---font-serif: 'Noto Serif SC', serif
---font-mono: 'JetBrains Mono', monospace
---font-display: 'Orbitron', sans-serif
+```
+HistoricalStarlink/
+├── frontend/
+│   └── src/
+│       ├── views/              # 页面组件
+│       │   ├── HomeView.vue           # 首页
+│       │   ├── EventDetailView.vue    # 事件详情
+│       │   ├── ProfileView.vue        # 个人中心
+│       │   ├── ChampionsView.vue      # 卡牌展馆
+│       │   ├── LeaderboardView.vue    # 排行榜
+│       │   ├── ExploreView.vue        # 探索记录(旧)
+│       │   ├── TrendsView.vue         # 趋势分析(旧)
+│       │   └── AuthView.vue           # 登录/注册
+│       ├── components/         # 可复用组件
+│       │   ├── CosmicMap.vue          # 宇宙星图
+│       │   ├── StarlinkPlanets.vue    # 星链行星
+│       │   ├── DialogueExplorer.vue   # 时空对话
+│       │   ├── ExplorationRecord.vue  # 探索记录
+│       │   ├── VotingSystem.vue       # 投票系统
+│       │   ├── RatingSystem.vue       # 评分系统
+│       │   ├── ChampionCard.vue       # 卡牌展示
+│       │   └── SignatureUpload.vue    # 签名上传
+│       ├── stores/             # Pinia Store
+│       ├── api/                # API 模块
+│       ├── data/
+│       │   └── events.ts       # 共享事件数据（前端关系映射）
+│       ├── utils/              # 工具函数
+│       ├── types/              # TypeScript 类型定义
+│       └── router/             # 路由配置
+├── backend/
+│   ├── main.py                 # FastAPI 入口 + lifespan
+│   ├── config.py               # 配置中心（.env + 数据库双来源）
+│   ├── database.py             # 数据库连接 + 模型注册 + init_db()
+│   ├── redis_client.py         # Redis 缓存客户端
+│   ├── deps.py                 # 依赖注入(JWT)
+│   ├── schemas.py              # Pydantic 模型
+│   ├── dialogue_engine.py      # 对话引擎
+│   ├── rag_engine.py           # RAG 引擎（MiniMax + 关键词降级）
+│   ├── routers/                # 10 个 API 路由模块
+│   │   ├── auth.py             # 认证（注册/登录/验证码）
+│   │   ├── dialogue.py         # 时空对话
+│   │   ├── exploration.py      # 探索记录
+│   │   ├── vote.py             # 投票系统
+│   │   ├── rating.py           # 评分系统
+│   │   ├── champion.py         # 冠军卡牌
+│   │   ├── signature.py        # 签名上传
+│   │   ├── events.py           # 历史事件 API
+│   │   ├── rag.py              # RAG 知识库 API
+│   │   └── config.py           # 系统配置管理
+│   ├── models/                 # 9 个 ORM 模型
+│   │   ├── user.py             # users 表
+│   │   ├── dialogue.py         # dialogue_sessions 表
+│   │   ├── exploration_record.py # exploration_records 表
+│   │   ├── vote.py             # votes 表
+│   │   ├── rating.py           # ratings 表
+│   │   ├── champion_card.py    # champion_cards 表
+│   │   ├── signature.py        # signatures 表
+│   │   ├── event.py            # history_events 表
+│   │   └── system_config.py    # system_config 表
+│   ├── data/                   # 初始化种子数据
+│   │   ├── __init__.py
+│   │   ├── config_data.py      # 35 项默认系统配置
+│   │   └── events_data.py      # 50 个历史事件数据
+│   └── requirements.txt        # Python 依赖
+├── deploy/
+│   ├── nginx.conf              # 开发环境 Nginx 配置
+│   └── nginx.prod.conf         # 生产环境 Nginx 配置
+├── docker-compose.yml          # Docker 部署配置
+├── .env.example                # 环境变量示例
+├── start.ps1                   # Windows 一键启动脚本
+├── stop.ps1                    # Windows 一键停止脚本
+└── docs/
+    ├── FEATURES.md             # 本文档
+    ├── MIGRATION.md            # 跨平台迁移指南
+    └── specs/                  # 设计规格文档
 ```
 
 ---
 
-## 六、后端数据库表
-
-| 表名 | 模型文件 | 说明 |
-|------|---------|------|
-| `users` | `models/user.py` | 用户表（JWT鉴权） |
-| `dialogue_sessions` | `models/dialogue.py` | 对话会话 |
-| `exploration_records` | `models/exploration_record.py` | 探索记录 |
-| `votes` | `models/vote.py` | 投票记录 |
-| `ratings` | `models/rating.py` | 评分记录 |
-| `champion_cards` | `models/champion_card.py` | 冠军卡牌 |
-| `signatures` | `models/signature.py` | 签名图片 |
-
----
-
-## 七、开发进度总览
+## 八、开发进度总览
 
 | 模块 | 前端 | 后端 | 状态 | 备注 |
 |------|------|------|------|------|
@@ -399,135 +612,53 @@ searchEvents(keyword): HistoryEvent[] // 关键词搜索
 | 排行榜 | ✅ | - | 完成 | 时间段排行 |
 | 签名上传 | ✅ | ✅ | 完成 | 拖拽上传 |
 | 邮件服务 | - | ✅ | 完成 | SMTP配置 |
+| 历史事件 API | ✅ | ✅ | 完成 | 50 个事件+筛选+搜索 |
+| RAG 知识库 | - | ✅ | 完成 | MiniMax 向量搜索+问答 |
+| 系统配置管理 | - | ✅ | 完成 | 数据库配置+热加载 |
+| 数据库自动初始化 | - | ✅ | 完成 | 自动建表+种子数据 |
 | 后台管理系统 | ❌ | ❌ | 待开发 | 文献上传+RAG |
 | 每日爬虫任务 | ❌ | ❌ | 待开发 | 历史数据采集 |
-| RAG知识库 | ❌ | ❌ | 待开发 | 向量搜索+实时API |
 
 ---
 
-## 八、待开发功能 (Future)
+## 九、待开发功能 (Future)
 
-### 8.1 后台管理系统
+### 9.1 后台管理系统
 - 历史文献上传
 - 事件管理（CRUD）
 - 用户管理
 - 数据统计面板
 
-### 8.2 每日爬虫任务
-- 定时爬取历史数据
+### 9.2 每日爬虫任务
+- 定定爬取历史数据
 - 事件去重处理
 - 自动生成事件文档
 
-### 8.3 RAG 知识库
-- 文档向量化存储
-- 用户搜索匹配
-- 实时 API 查询
-- 知识库更新机制
-
 ---
 
-## 九、开发环境配置
+## 十、更新日志
 
-### 前端
-```bash
-cd frontend
-npm install
-npm run dev        # 开发服务器 http://localhost:5173
-npm run build      # 生产构建
-```
+### 2026-06-01
 
-### 后端
-```bash
-cd backend
-pip install -r requirements.txt
-python -m uvicorn main:app --reload  # 开发服务器 http://localhost:8000
-```
+**Bug Fix**:
+- 修复数据库启动时未自动建表的问题：`database.py` 中 `Base.metadata` 在 `create_all` 前未注册任何模型，通过添加 `from . import models` 解决
+- 修复 `events_data.py` 中文引号导致 Python 语法错误的问题
 
-### 环境变量 (.env)
-```env
-# 数据库
-DB_DRIVER=mysql
-MYSQL_HOST=127.0.0.1
-MYSQL_PORT=3306
-MYSQL_USER=root
-MYSQL_PASSWORD=xxx
-MYSQL_DATABASE=historical_starlink
+**New Features**:
+- 新增 `backend/data/` 目录：`config_data.py`（35 项默认配置）+ `events_data.py`（50 个历史事件）
+- 新增 `backend/routers/events.py`：历史事件 CRUD API（列表/搜索/详情）
+- 新增 `backend/routers/rag.py`：RAG 知识库 API（搜索/问答/索引重建）
+- 新增 `backend/routers/config.py`：系统配置管理 API（查询/更新）
+- 新增 `backend/rag_engine.py`：RAG 引擎（MiniMax 向量嵌入 + 关键词降级）
+- 新增 `backend/models/event.py`：`history_events` 数据表
+- 新增 `backend/models/system_config.py`：`system_config` 数据表
+- 数据库表从 7 张扩展到 9 张
+- 数据库启动时自动 seed 35 项配置和 50 个历史事件
+- 更新 `.env.example`：添加 `MINIMAX_API_KEY` 配置项
+- 更新 `docker-compose.yml`：完整的 MySQL + Redis + Backend + Frontend + Nginx 部署配置
 
-# Redis
-REDIS_HOST=127.0.0.1
-REDIS_PORT=6379
-
-# JWT
-JWT_SECRET_KEY=xxx
-
-# 邮件
-SMTP_HOST=smtp.qq.com
-SMTP_PORT=465
-SMTP_USER=xxx@qq.com
-SMTP_PASSWORD=xxx
-SMTP_FROM=xxx@qq.com
-
-# CORS
-CORS_ORIGINS=http://localhost:3000,http://localhost:5173
-```
-
----
-
-## 十、文件结构索引
-
-```
-HistoricalStarlink/
-├── frontend/
-│   └── src/
-│       ├── views/              # 8个页面组件
-│       │   ├── HomeView.vue           # 首页
-│       │   ├── EventDetailView.vue    # 事件详情
-│       │   ├── ProfileView.vue        # 个人中心
-│       │   ├── ChampionsView.vue      # 卡牌展馆
-│       │   ├── LeaderboardView.vue    # 排行榜
-│       │   ├── ExploreView.vue        # 探索记录(旧)
-│       │   ├── TrendsView.vue         # 趋势分析(旧)
-│       │   └── AuthView.vue           # 登录/注册
-│       ├── components/         # 8个可复用组件
-│       │   ├── CosmicMap.vue          # 宇宙星图
-│       │   ├── StarlinkPlanets.vue    # 星链行星
-│       │   ├── DialogueExplorer.vue   # 时空对话
-│       │   ├── ExplorationRecord.vue  # 探索记录
-│       │   ├── VotingSystem.vue       # 投票系统
-│       │   ├── RatingSystem.vue       # 评分系统
-│       │   ├── ChampionCard.vue       # 卡牌展示
-│       │   └── SignatureUpload.vue    # 签名上传
-│       ├── stores/             # 8个Pinia Store
-│       │   ├── auth.ts, app.ts, dialogue.ts
-│       │   ├── exploration.ts, vote.ts, rating.ts
-│       │   ├── champion.ts, signature.ts
-│       ├── api/                # 8个API模块
-│       │   ├── request.ts, auth.ts, dialogue.ts
-│       │   ├── exploration.ts, vote.ts, rating.ts
-│       │   ├── champion.ts, signature.ts
-│       ├── data/
-│       │   └── events.ts       # 共享事件数据
-│       ├── utils/
-│       │   ├── auth.ts         # requireAuth()
-│       │   └── session.ts      # sessionId生成
-│       ├── types/
-│       │   └── index.ts        # TypeScript类型定义
-│       └── router/
-│           └── index.ts        # 路由配置
-├── backend/
-│   ├── main.py                 # FastAPI入口
-│   ├── config.py               # 配置中心
-│   ├── database.py             # 数据库连接
-│   ├── redis_client.py         # Redis缓存
-│   ├── deps.py                 # 依赖注入(JWT)
-│   ├── schemas.py              # Pydantic模型
-│   ├── dialogue_engine.py      # 对话引擎
-│   ├── routers/                # 7个API路由
-│   │   ├── auth.py, dialogue.py, exploration.py
-│   │   ├── vote.py, rating.py, champion.py, signature.py
-│   └── models/                 # 7个数据库模型
-│       ├── user.py, dialogue.py, exploration_record.py
-│       ├── vote.py, rating.py, champion_card.py, signature.py
-└── docs/
-    └── FEATURES.md             # 本文档
-```
+**Documentation**:
+- 更新 FEATURES.md：添加事件 API、RAG、配置管理等模块文档
+- 添加数据库自动初始化说明
+- 添加部署配置清单
+- 添加数据库选择策略说明
