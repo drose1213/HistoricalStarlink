@@ -48,8 +48,7 @@
 
         <div class="cosmic-overlay">
           <div class="hero-copy">
-            <h2 class="cosmic-title">穿越时空的探索之旅</h2>
-            <p class="cosmic-subtitle">星图仍是主视觉，但标题、搜索和入口更清晰，适合保留一点产品感。</p>
+            <h2 class="cosmic-title">探索时空之旅</h2>
           </div>
 
           <div class="search-bar">

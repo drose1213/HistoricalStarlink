@@ -128,20 +128,36 @@ async def _send_email(to_email: str, code: str) -> None:
     msg["From"] = settings.SMTP_FROM or settings.SMTP_USER
     msg["To"] = to_email
 
+    import ssl
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+
     loop = asyncio.get_running_loop()
     if settings.SMTP_USE_SSL:
         def _do_send():
-            with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT) as s:
+            with smtplib.SMTP_SSL(
+                settings.SMTP_HOST,
+                settings.SMTP_PORT,
+                context=ssl_context,
+                timeout=10,
+            ) as s:
                 s.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
                 s.sendmail(msg["From"], [to_email], msg.as_string())
-        await loop.run_in_executor(None, _do_send)
+        await asyncio.wait_for(
+            loop.run_in_executor(None, _do_send), timeout=10
+        )
     else:
         def _do_send():
-            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as s:
-                s.starttls()
+            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as s:
+                s.ehlo()
+                s.starttls(context=ssl_context)
+                s.ehlo()
                 s.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
                 s.sendmail(msg["From"], [to_email], msg.as_string())
-        await loop.run_in_executor(None, _do_send)
+        await asyncio.wait_for(
+            loop.run_in_executor(None, _do_send), timeout=10
+        )
 
 
 # ==================== 请求模型 ====================
@@ -167,8 +183,8 @@ class RegisterRequest(BaseModel):
     @field_validator("username")
     @classmethod
     def validate_username(cls, v):
-        if not v.isalnum() and not all(c.isalnum() or c in ("_", "-") for c in v):
-            raise ValueError("用户名只能包含字母、数字、下划线和连字符")
+        if not all(c.isalnum() or c in ("_", "-") for c in v):
+            raise ValueError("用户名只能包含字母、数字、下划线、连字符和中文")
         return v
 
     @field_validator("email")
@@ -226,12 +242,13 @@ async def send_email_code(
         except (ValueError, TypeError):
             await cache.set(rate_key, "1", 3600)
 
-    try:
-        await _send_email(req.email, code)
-    except Exception as e:
-        logger.error(f"发送验证码失败: {e}")
-        await cache.delete(_email_code_key(req.email))
-        raise HTTPException(status_code=500, detail="验证码发送失败，请稍后重试")
+    async def _send_in_background(email: str, code: str):
+        try:
+            await _send_email(email, code)
+        except Exception as e:
+            logger.error(f"后台发送验证码失败: {e}")
+
+    asyncio.create_task(_send_in_background(req.email, code))
 
     return BaseResponse(message="验证码已发送，请查收邮箱")
 

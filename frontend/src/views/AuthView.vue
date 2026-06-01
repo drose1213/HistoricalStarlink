@@ -236,8 +236,8 @@ async function handleSubmit() {
       error.value = '用户名至少3个字符'
       return
     }
-    if (!/^[a-zA-Z0-9_-]+$/.test(u)) {
-      error.value = '用户名只能包含字母、数字、下划线和连字符'
+    if (!/^[\w\u4e00-\u9fa5-]+$/.test(u)) {
+      error.value = '用户名只能包含字母、数字、下划线、连字符和中文'
       return
     }
   }
