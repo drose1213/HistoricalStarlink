@@ -84,3 +84,75 @@ async def init_db():
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    # Idempotent migration: add columns that may be missing on older deployments.
+    await _run_lightweight_migrations()
+
+
+async def _run_lightweight_migrations():
+    """Add columns that are missing from the existing tables.
+    Safe to run repeatedly — uses information_schema and skips columns that already exist.
+    """
+    from sqlalchemy import text
+
+    async def _table_exists(conn, table: str) -> bool:
+        if _is_sqlite:
+            row = await conn.execute(text(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=:t"
+            ), {"t": table})
+            return row.scalar() is not None
+        row = await conn.execute(text(
+            "SELECT COUNT(*) FROM information_schema.tables "
+            "WHERE table_schema = DATABASE() AND table_name = :t"
+        ), {"t": table})
+        return (row.scalar() or 0) > 0
+
+    if _is_sqlite:
+        for table, column, col_def in _PENDING_MIGRATIONS:
+            try:
+                async with engine.connect() as conn:
+                    if not await _table_exists(conn, table):
+                        continue
+                    rows = await conn.execute(text(f"PRAGMA table_info({table})"))
+                    existing = {r[1] for r in rows.fetchall()}
+                    if column not in existing:
+                        await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}"))
+                        await conn.commit()
+                        logger.info(f"Migration: added {table}.{column}")
+            except Exception as e:
+                logger.warning(f"Migration {table}.{column} skipped: {e}")
+    else:
+        for table, column, col_def in _PENDING_MIGRATIONS:
+            try:
+                async with engine.connect() as conn:
+                    if not await _table_exists(conn, table):
+                        continue
+                    result = await conn.execute(text(
+                        "SELECT COUNT(*) FROM information_schema.columns "
+                        "WHERE table_schema = DATABASE() AND table_name = :t AND column_name = :c"
+                    ), {"t": table, "c": column})
+                    exists = (result.scalar() or 0) > 0
+                    if not exists:
+                        await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}"))
+                        await conn.commit()
+                        logger.info(f"Migration: added {table}.{column}")
+            except Exception as e:
+                logger.warning(f"Migration {table}.{column} skipped: {e}")
+
+
+_PENDING_MIGRATIONS = [
+    ("knowledge_entries", "year_end", "INT NULL"),
+    ("knowledge_entries", "language", "VARCHAR(16) NULL DEFAULT 'zh-CN'"),
+    ("knowledge_entries", "source_reliability", "INT NULL DEFAULT 5"),
+    ("knowledge_entries", "latest_version_id", "INT NULL"),
+    ("knowledge_entries", "version_count", "INT NOT NULL DEFAULT 1"),
+    ("knowledge_entries", "parent_event_id", "VARCHAR(64) NULL"),
+    ("knowledge_entries", "is_locked", "INT NOT NULL DEFAULT 0"),
+    ("knowledge_entries", "last_indexed_at", "DATETIME NULL"),
+    # crawl_sources: must align with the model
+    ("crawl_sources", "url_hash", "VARCHAR(64) NULL"),
+    ("crawl_sources", "last_status", "VARCHAR(16) NULL DEFAULT 'pending'"),
+    ("crawl_sources", "last_imported", "INT NULL DEFAULT 0"),
+    ("crawl_sources", "priority", "INT NOT NULL DEFAULT 5"),
+    ("crawl_sources", "recommended", "INT NOT NULL DEFAULT 0"),
+    ("crawl_sources", "enabled", "INT NOT NULL DEFAULT 1"),
+]

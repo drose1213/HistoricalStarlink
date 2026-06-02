@@ -7,6 +7,7 @@ from .dialogue import DialogueSession
 from .user import User
 from .event import HistoryEvent
 from .system_config import SystemConfig
+from .knowledge_base import KnowledgeEntry, KnowledgeVersion, CrawlSource
 
 __all__ = [
     "ExplorationRecord",
@@ -18,4 +19,7 @@ __all__ = [
     "User",
     "HistoryEvent",
     "SystemConfig",
+    "KnowledgeEntry",
+    "KnowledgeVersion",
+    "CrawlSource",
 ]

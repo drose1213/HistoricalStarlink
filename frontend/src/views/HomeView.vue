@@ -10,6 +10,7 @@
         <router-link to="/" class="nav-link nav-link--active">首页</router-link>
         <router-link to="/champions" class="nav-link">卡牌</router-link>
         <router-link to="/leaderboard" class="nav-link">排行</router-link>
+        <router-link to="/knowledge-base" class="nav-link">知识库</router-link>
         <router-link v-if="authStore.isLoggedIn" to="/profile" class="nav-link">个人中心</router-link>
       </nav>
 
@@ -172,16 +173,16 @@ import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import CosmicMap from '@/components/CosmicMap.vue'
-import { allEvents as historyEvents, searchEvents, backendAvailable, loadError } from '@/data/events'
+import { allEvents as historyEvents, searchEvents, backendAvailable, loadError, loadEvents } from '@/data/events'
 import { ragApi } from '@/api/rag'
 
-interface RagSearchResult {
+interface LocalSearchResult {
   id: string
   name: string
-  year: number
+  year: number | null
   region: string
   importance: number
-  description: string
+  description?: string
   score: number
 }
 
@@ -196,7 +197,7 @@ const searchLoading = ref(false)
 let searchLoadingTimer: ReturnType<typeof setTimeout> | null = null
 let searchAbortTimer: ReturnType<typeof setTimeout> | null = null
 
-const ragSearchResults = ref<RagSearchResult[]>([])
+const ragSearchResults = ref<LocalSearchResult[]>([])
 
 function onSearchInput() {
   showSearchDropdown.value = true
@@ -210,7 +211,7 @@ function onSearchInput() {
     const q = searchQuery.value.trim()
     if (!q) { ragSearchResults.value = []; return }
     try {
-      const res = await ragApi.search(q, 5)
+      const res = await ragApi.search({ query: q, top_k: 5 })
       ragSearchResults.value = res.data || []
     } catch {
       ragSearchResults.value = []
@@ -238,7 +239,8 @@ const filteredEvents = computed(() => {
   })
 })
 
-function formatEventYear(year: number): string {
+function formatEventYear(year: number | null): string {
+  if (year === null || year === undefined) return '-'
   if (year < 0) return `公元前${Math.abs(year)}年`
   return `${year}年`
 }
@@ -286,6 +288,7 @@ async function retryLoad() {
 onMounted(() => {
   authStore.init()
   document.addEventListener('click', handleClickOutside)
+  loadEvents()
 })
 
 onBeforeUnmount(() => {

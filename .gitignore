@@ -1,5 +1,7 @@
 # Python
 venv/
+.venv/
+backend/.venv/
 __pycache__/
 *.pyc
 *.pyo
@@ -59,3 +61,9 @@ backend/.pytest_cache/
 backend/_tmp_check.py
 backend/frontend/dist/
 frontend/coverage/
+
+# Temporary logs and test scripts
+tmp/
+test_*.js
+test_results.txt
+backend/frontend/dist/

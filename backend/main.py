@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -32,6 +33,8 @@ async def lifespan(app: FastAPI):
 
     await _seed_events()
 
+    await _seed_knowledge_base()
+
     if redis_client is not None:
         try:
             await redis_client.ping()
@@ -40,6 +43,12 @@ async def lifespan(app: FastAPI):
             logger.warning(f"Redis unavailable, caching disabled: {e}")
     else:
         logger.warning("Redis not installed, caching disabled")
+
+    try:
+        from .crawler import start_crawl_scheduler
+        asyncio.create_task(start_crawl_scheduler())
+    except Exception as e:
+        logger.warning(f"Failed to start crawl scheduler: {e}")
 
     yield
 
@@ -181,6 +190,143 @@ async def _seed_events():
             logger.info(f"Seeded {len(events_data)} historical events into database")
     except Exception as e:
         logger.error(f"Failed to seed events: {e}")
+
+
+async def _seed_knowledge_base():
+    """Seed the RAG knowledge base from events_data on first run.
+    This gives the homepage real knowledge base content instead of dummy data.
+    Idempotent — uses event_name + source_url dedup so re-runs are safe.
+    """
+    from datetime import datetime
+    from sqlalchemy import select, func
+    from .database import AsyncSessionLocal
+    from .models.knowledge_base import KnowledgeEntry, KnowledgeVersion
+    from .data.events_data import events_data
+
+    try:
+        async with AsyncSessionLocal() as db:
+            count_result = await db.execute(
+                select(func.count()).select_from(KnowledgeEntry).where(
+                    KnowledgeEntry.source_type == "seed_data"
+                )
+            )
+            existing = count_result.scalar() or 0
+            if existing >= len(events_data):
+                logger.info(
+                    f"Knowledge base already has {existing} seed entries, skipping seed"
+                )
+                return
+
+            now = datetime.utcnow()
+            imported = 0
+            skipped = 0
+            for ev in events_data:
+                ev_name = ev.get("name")
+                if not ev_name:
+                    continue
+
+                # Dedup by event_name + source_url=None + chunk_index=0
+                existing_entry = await db.execute(
+                    select(KnowledgeEntry).where(
+                        KnowledgeEntry.event_name == ev_name,
+                        KnowledgeEntry.chunk_index == 0,
+                        KnowledgeEntry.source_url.is_(None),
+                    )
+                )
+                if existing_entry.scalar_one_or_none():
+                    skipped += 1
+                    continue
+
+                causes = "；".join(ev.get("causes", []))
+                consequences = "；".join(ev.get("consequences", []))
+                related = "；".join(ev.get("related_concepts", []))
+                figures = ev.get("figures", [])
+                tags = ev.get("tags", [])
+
+                year_str = (
+                    f"公元前{abs(ev['year'])}年" if ev["year"] < 0
+                    else f"公元{ev['year']}年"
+                )
+                region_str = "中国" if ev["region"] == "china" else "外国"
+
+                text = (
+                    f"{ev_name}（{year_str}，{region_str}，重要性{ev['importance']}/10）："
+                    f"{ev.get('description', '')}。"
+                    f"原因：{causes}。影响：{consequences}。相关概念：{related}。"
+                    f"相关人物：{'、'.join(figures)}。标签：{'、'.join(tags)}。"
+                )
+                content_hash = KnowledgeEntry.compute_hash(text)
+
+                entry = KnowledgeEntry(
+                    title=ev_name,
+                    content=text,
+                    content_hash=content_hash,
+                    source_type="seed_data",
+                    source_url=None,
+                    file_name=None,
+                    file_type="seed",
+                    event_name=ev_name,
+                    year=ev.get("year"),
+                    region=ev.get("region"),
+                    importance=ev.get("importance"),
+                    category=ev.get("category") or "综合",
+                    tags=tags,
+                    figures=figures,
+                    keywords=tags + [ev_name, ev.get("region", "")],
+                    language="zh-CN",
+                    source_reliability=10,
+                    chunk_index=0,
+                    chunk_total=1,
+                    version=1,
+                    version_count=1,
+                    parent_event_id=ev.get("id"),
+                    status="active",
+                    is_locked=0,
+                    created_at=now,
+                    updated_at=now,
+                    last_indexed_at=now,
+                )
+                db.add(entry)
+                try:
+                    await db.flush()
+                except Exception:
+                    pass
+
+                snapshot_meta = {
+                    "event_name": ev_name,
+                    "region": ev.get("region"),
+                    "category": ev.get("category") or "综合",
+                    "year": ev.get("year"),
+                    "importance": ev.get("importance"),
+                    "tags": tags,
+                    "figures": figures,
+                    "source_type": "seed_data",
+                }
+                db.add(KnowledgeVersion(
+                    entry_id=entry.id,
+                    version=1,
+                    title=ev_name,
+                    content=text,
+                    content_hash=content_hash,
+                    change_summary="Seeded from events_data on first run",
+                    change_source="seed_data",
+                    operator="system",
+                    snapshot_meta=snapshot_meta,
+                    created_at=now,
+                ))
+                imported += 1
+
+            await db.commit()
+            try:
+                from .rag_engine import build_index
+                await build_index()
+            except Exception:
+                pass
+            logger.info(
+                f"Seeded knowledge base with {imported} entries, skipped {skipped}"
+            )
+    except Exception as e:
+        logger.error(f"Failed to seed knowledge base: {e}")
 
 
 @app.get("/", tags=["健康检查"])

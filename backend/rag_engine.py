@@ -1,6 +1,7 @@
 """
 RAG (检索增强生成) 引擎
 使用 MiniMax API 进行向量检索和问答生成
+支持从数据库知识库加载条目 + 条件检索
 """
 import logging
 import os
@@ -21,6 +22,8 @@ HISTORY_EVENTS = events_data
 
 _query_cache: dict[str, list[float]] = {}
 _index_vectors: Optional[np.ndarray] = None
+_index_texts: list[str] = []
+_index_metadata: list[dict] = []
 _index_built = False
 
 
@@ -33,6 +36,21 @@ def _event_to_text(event: dict) -> str:
         f"{event['name']}（{year_str}，{region_str}，重要性{event['importance']}/10）：{event['description']}。"
         f"原因：{causes}。影响：{consequences}。"
     )
+
+
+def _kb_entry_to_text(entry) -> str:
+    year_str = ""
+    if entry.year is not None:
+        year_str = f"公元前{abs(entry.year)}年" if entry.year < 0 else f"公元{entry.year}年"
+    region_str = {"china": "中国", "foreign": "外国"}.get(entry.region or "", entry.region or "")
+    parts = [f"{entry.title}"]
+    if year_str:
+        parts[0] += f"（{year_str}"
+        if region_str:
+            parts[0] += f"，{region_str}"
+        parts[0] += "）"
+    parts.append(entry.content[:500])
+    return "：".join(parts)
 
 
 async def _get_embedding(texts: list[str]) -> list[list[float]]:
@@ -50,28 +68,21 @@ async def _get_embedding(texts: list[str]) -> list[list[float]]:
         return data.get("vectors", [])
 
 
-def _keyword_fallback_scores(query: str, events: list[dict]) -> list[tuple[int, float]]:
+def _keyword_fallback_scores(query: str, items: list[tuple[str, dict]]) -> list[tuple[int, float]]:
     query_lower = query.lower()
     scored: list[tuple[int, float]] = []
-    for idx, event in enumerate(events):
-        text = _event_to_text(event).lower()
+    for idx, (text, meta) in enumerate(items):
+        text_lower = text.lower()
         score = 0.0
-        if event["name"] in query or event["name"].lower() in query_lower:
+        name = meta.get("name", meta.get("title", ""))
+        if name and (name in query or name.lower() in query_lower):
             score += 5.0
-        # 双向子串匹配（支持部分 name 命中）
         for q_token in [query, query_lower]:
-            if q_token and q_token in event["name"]:
+            if q_token and q_token in text_lower:
                 score += 3.0
-        for cause in event.get("causes", []):
-            if any(kw in query_lower for kw in cause.split("，")):
-                score += 1.0
-        for consequence in event.get("consequences", []):
-            if any(kw in query_lower for kw in consequence.split("，")):
-                score += 1.0
-        # 按字符级别的 token（中文单字、英文整词都算）
         tokens = [ch for ch in query_lower if ch.strip()]
         for token in tokens:
-            if token in text:
+            if token in text_lower:
                 score += 0.3
         if score > 0:
             scored.append((idx, score))
@@ -79,39 +90,126 @@ def _keyword_fallback_scores(query: str, events: list[dict]) -> list[tuple[int, 
     return scored
 
 
-async def build_index() -> dict:
-    global _index_vectors, _index_built
+async def build_index(region: Optional[str] = None, category: Optional[str] = None,
+                      year_min: Optional[int] = None, year_max: Optional[int] = None) -> dict:
+    global _index_vectors, _index_built, _index_texts, _index_metadata
 
-    texts = [_event_to_text(e) for e in HISTORY_EVENTS]
+    texts = []
+    metadata = []
+
+    for ev in HISTORY_EVENTS:
+        if region and ev.get("region") != region:
+            continue
+        if year_min and ev.get("year", 0) < year_min:
+            continue
+        if year_max and ev.get("year", 0) > year_max:
+            continue
+        texts.append(_event_to_text(ev))
+        metadata.append({
+            "source": "seed_data",
+            "id": ev["id"],
+            "name": ev["name"],
+            "year": ev.get("year"),
+            "region": ev.get("region"),
+            "importance": ev.get("importance"),
+        })
+
+    try:
+        from .database import AsyncSessionLocal
+        from .models.knowledge_base import KnowledgeEntry
+        from sqlalchemy import select
+
+        async with AsyncSessionLocal() as db:
+            conditions = [KnowledgeEntry.status == "active"]
+            if region:
+                conditions.append(KnowledgeEntry.region == region)
+            if category:
+                conditions.append(KnowledgeEntry.category == category)
+            if year_min is not None:
+                conditions.append(KnowledgeEntry.year >= year_min)
+            if year_max is not None:
+                conditions.append(KnowledgeEntry.year <= year_max)
+
+            stmt = select(KnowledgeEntry).where(*conditions).order_by(KnowledgeEntry.id)
+            result = await db.execute(stmt)
+            entries = result.scalars().all()
+
+            for entry in entries:
+                texts.append(_kb_entry_to_text(entry))
+                metadata.append({
+                    "source": "knowledge_base",
+                    "id": entry.id,
+                    "title": entry.title,
+                    "name": entry.event_name or entry.title,
+                    "year": entry.year,
+                    "region": entry.region,
+                    "category": entry.category,
+                    "tags": entry.tags or [],
+                    "importance": entry.importance,
+                    "source_type": entry.source_type,
+                    "source_url": entry.source_url,
+                })
+
+        logger.info(f"Loaded {len(entries)} knowledge base entries for RAG index")
+    except Exception as e:
+        logger.warning(f"Failed to load knowledge base entries: {e}")
+
+    if not texts:
+        _index_built = True
+        _index_texts = []
+        _index_metadata = []
+        _index_vectors = None
+        return {"mode": "empty", "count": 0}
 
     if MINIMAX_API_KEY:
         try:
-            vectors = await _get_embedding(texts)
-            if vectors and len(vectors) == len(texts):
-                _index_vectors = np.array(vectors, dtype=np.float32)
+            batch_size = 16
+            all_vectors = []
+            for i in range(0, len(texts), batch_size):
+                batch = texts[i:i + batch_size]
+                vectors = await _get_embedding(batch)
+                all_vectors.extend(vectors)
+
+            if all_vectors and len(all_vectors) == len(texts):
+                _index_vectors = np.array(all_vectors, dtype=np.float32)
                 norms = np.linalg.norm(_index_vectors, axis=1, keepdims=True)
                 norms[norms == 0] = 1
                 _index_vectors = _index_vectors / norms
                 _index_built = True
-                logger.info(f"RAG index built with MiniMax embeddings, {len(texts)} events")
+                _index_texts = texts
+                _index_metadata = metadata
+                logger.info(f"RAG index built with MiniMax embeddings, {len(texts)} entries")
                 return {"mode": "embedding", "count": len(texts)}
             logger.warning("MiniMax embedding returned mismatched vectors, falling back to keyword mode")
         except Exception as e:
             logger.warning(f"MiniMax embedding failed: {e}, falling back to keyword mode")
 
     _index_built = True
-    logger.info(f"RAG index built with keyword mode, {len(texts)} events")
+    _index_texts = texts
+    _index_metadata = metadata
+    _index_vectors = None
+    logger.info(f"RAG index built with keyword mode, {len(texts)} entries")
     return {"mode": "keyword", "count": len(texts)}
 
 
-async def search_similar(query: str, top_k: int = 5) -> list[dict]:
+async def search_similar(query: str, top_k: int = 5,
+                         region: Optional[str] = None,
+                         category: Optional[str] = None,
+                         year_min: Optional[int] = None,
+                         year_max: Optional[int] = None) -> list[dict]:
+    if region or category or year_min is not None or year_max is not None:
+        await build_index(region=region, category=category, year_min=year_min, year_max=year_max)
+
     if not _index_built:
         await build_index()
 
-    if _index_vectors is not None:
+    if _index_vectors is not None and len(_index_texts) > 0:
         return await _embedding_search(query, top_k)
 
-    return _keyword_search(query, top_k)
+    if _index_texts:
+        return _keyword_search(query, top_k)
+
+    return _keyword_search_events_only(query, top_k)
 
 
 async def _embedding_search(query: str, top_k: int) -> list[dict]:
@@ -133,26 +231,75 @@ async def _embedding_search(query: str, top_k: int) -> list[dict]:
 
     results = []
     for idx in top_indices:
-        event = HISTORY_EVENTS[int(idx)]
+        idx = int(idx)
+        meta = _index_metadata[idx]
         results.append({
-            "event": event,
+            "source": meta.get("source", "unknown"),
+            "id": meta.get("id"),
+            "name": meta.get("name", meta.get("title", "")),
+            "title": meta.get("title", ""),
+            "year": meta.get("year"),
+            "region": meta.get("region"),
+            "category": meta.get("category"),
+            "importance": meta.get("importance"),
+            "tags": meta.get("tags", []),
             "score": round(float(similarities[idx]), 4),
         })
     return results
 
 
 def _keyword_search(query: str, top_k: int) -> list[dict]:
-    scored = _keyword_fallback_scores(query, HISTORY_EVENTS)
+    items = [(text, meta) for text, meta in zip(_index_texts, _index_metadata)]
+    scored = _keyword_fallback_scores(query, items)
     results = []
     for idx, score in scored[:top_k]:
-        event = HISTORY_EVENTS[idx]
+        meta = _index_metadata[idx]
         results.append({
-            "event": event,
+            "source": meta.get("source", "unknown"),
+            "id": meta.get("id"),
+            "name": meta.get("name", meta.get("title", "")),
+            "title": meta.get("title", ""),
+            "year": meta.get("year"),
+            "region": meta.get("region"),
+            "category": meta.get("category"),
+            "importance": meta.get("importance"),
+            "tags": meta.get("tags", []),
             "score": round(score, 4),
         })
     if not results:
-        for event in HISTORY_EVENTS[:top_k]:
-            results.append({"event": event, "score": 0.0})
+        for idx, meta in enumerate(_index_metadata[:top_k]):
+            results.append({
+                "source": meta.get("source", "unknown"),
+                "id": meta.get("id"),
+                "name": meta.get("name", meta.get("title", "")),
+                "title": meta.get("title", ""),
+                "year": meta.get("year"),
+                "region": meta.get("region"),
+                "category": meta.get("category"),
+                "importance": meta.get("importance"),
+                "tags": meta.get("tags", []),
+                "score": 0.0,
+            })
+    return results
+
+
+def _keyword_search_events_only(query: str, top_k: int) -> list[dict]:
+    items = [(_event_to_text(ev), {"id": ev["id"], "name": ev["name"], "year": ev.get("year"),
+                                    "region": ev.get("region"), "importance": ev.get("importance"),
+                                    "source": "seed_data"})
+             for ev in HISTORY_EVENTS]
+    scored = _keyword_fallback_scores(query, items)
+    results = []
+    for idx, score in scored[:top_k]:
+        meta = items[idx][1]
+        results.append({**meta, "score": round(score, 4)})
+    if not results:
+        for ev in HISTORY_EVENTS[:top_k]:
+            results.append({
+                "source": "seed_data", "id": ev["id"], "name": ev["name"],
+                "year": ev.get("year"), "region": ev.get("region"),
+                "importance": ev.get("importance"), "score": 0.0,
+            })
     return results
 
 
@@ -162,12 +309,13 @@ async def generate_answer(query: str, context_events: list[dict]) -> str:
 
     context_parts = []
     for item in context_events:
-        ev = item["event"]
-        year_str = f"公元前{abs(ev['year'])}年" if ev["year"] < 0 else f"公元{ev['year']}年"
-        context_parts.append(
-            f"【{ev['name']}】（{year_str}）{ev['description']}。"
-            f"原因：{'；'.join(ev.get('causes', []))}。影响：{'；'.join(ev.get('consequences', []))}。"
-        )
+        name = item.get("name", item.get("title", "未知"))
+        year = item.get("year")
+        year_str = ""
+        if year is not None:
+            year_str = f"公元前{abs(year)}年" if year < 0 else f"公元{year}年"
+        desc = item.get("description", item.get("content", ""))
+        context_parts.append(f"【{name}】（{year_str}）{desc}")
     context_text = "\n".join(context_parts)
 
     system_prompt = (
@@ -194,8 +342,7 @@ async def generate_answer(query: str, context_events: list[dict]) -> str:
             )
             resp.raise_for_status()
             data = resp.json()
-            content = data["choices"][0]["message"]["content"]
-            return content
+            return data["choices"][0]["message"]["content"]
     except Exception as e:
         logger.error(f"MiniMax chat API failed: {e}")
         return _generate_fallback_answer(query, context_events)
@@ -207,27 +354,38 @@ def _generate_fallback_answer(query: str, context_events: list[dict]) -> str:
 
     parts = [f"关于「{query}」，以下是相关历史事件的分析：\n"]
     for item in context_events:
-        ev = item["event"]
-        year_str = f"公元前{abs(ev['year'])}年" if ev["year"] < 0 else f"公元{ev['year']}年"
-        parts.append(f"▸ {ev['name']}（{year_str}）：{ev['description']}")
+        name = item.get("name", item.get("title", "未知"))
+        year = item.get("year")
+        year_str = ""
+        if year is not None:
+            year_str = f"公元前{abs(year)}年" if year < 0 else f"公元{year}年"
+        desc = item.get("description", item.get("content", ""))[:200]
+        parts.append(f"▸ {name}（{year_str}）：{desc}")
     parts.append(f"\n以上为知识库中检索到的 {len(context_events)} 个相关事件。")
     parts.append("（提示：未配置 MINIMAX_API_KEY，当前为关键词匹配模式，如需 AI 生成回答请配置 API Key。）")
     return "\n".join(parts)
 
 
-async def full_rag_query(query: str, top_k: int = 5) -> dict:
-    search_results = await search_similar(query, top_k=top_k)
+async def full_rag_query(query: str, top_k: int = 5,
+                         region: Optional[str] = None,
+                         category: Optional[str] = None,
+                         year_min: Optional[int] = None,
+                         year_max: Optional[int] = None) -> dict:
+    search_results = await search_similar(query, top_k=top_k,
+                                          region=region, category=category,
+                                          year_min=year_min, year_max=year_max)
     answer = await generate_answer(query, search_results)
     sources = []
     for item in search_results:
-        ev = item["event"]
         sources.append({
-            "id": ev["id"],
-            "name": ev["name"],
-            "year": ev["year"],
-            "region": ev["region"],
-            "importance": ev["importance"],
-            "description": ev["description"],
-            "score": item["score"],
+            "id": item.get("id"),
+            "name": item.get("name", item.get("title", "")),
+            "year": item.get("year"),
+            "region": item.get("region"),
+            "category": item.get("category"),
+            "importance": item.get("importance"),
+            "tags": item.get("tags", []),
+            "score": item.get("score", 0),
+            "source": item.get("source", "unknown"),
         })
     return {"answer": answer, "sources": sources}
