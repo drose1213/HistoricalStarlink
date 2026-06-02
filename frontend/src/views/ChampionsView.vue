@@ -26,7 +26,25 @@
       </button>
     </div>
 
-    <main class="gallery-main">
+    <div v-if="loading" class="loading-state">
+      <div class="loading-icon">⬡</div>
+      <p class="loading-text">正在加载卡牌数据…</p>
+    </div>
+
+    <div v-else-if="loadError" class="error-state">
+      <div class="error-icon">⚠</div>
+      <p class="error-text">{{ loadError }}</p>
+      <button class="retry-btn" @click="loadCards">重试</button>
+    </div>
+
+    <div v-else-if="!hasAnyCard" class="empty-state empty-state--full">
+      <div class="empty-icon">⬡</div>
+      <p class="empty-text">暂无卡牌</p>
+      <p class="empty-hint">去首页探索事件以解锁卡牌</p>
+      <router-link to="/" class="empty-cta">前往首页探索 →</router-link>
+    </div>
+
+    <main v-else class="gallery-main">
       <Transition name="tab-switch" mode="out-in">
         <div :key="activeTab" class="card-grid">
           <div
@@ -104,10 +122,18 @@
               <span class="detail-label">关联事件</span>
               <span class="detail-value detail-value--link">{{ detailCard.event }}</span>
             </div>
+            <div class="detail-row">
+              <span class="detail-label">探索次数</span>
+              <span class="detail-value">{{ detailCard.exploreCount }} 次</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">累计停留</span>
+              <span class="detail-value">{{ detailCard.stayText }}</span>
+            </div>
           </div>
           <div class="modal-lore">
             <p class="lore-title">◈ 卡牌故事</p>
-            <p class="lore-text">{{ getLore(detailCard) }}</p>
+            <p class="lore-text">{{ detailCard.lore }}</p>
           </div>
         </div>
       </div>
@@ -118,7 +144,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { championApi } from '@/api/champion'
+import { getSessionId } from '@/utils/session'
+import type { BackendChampionCard } from '@/types'
+
+type RarityKey = 'legendary' | 'epic' | 'rare' | 'common'
 
 interface ChampionEntry {
   id: number
@@ -127,65 +158,129 @@ interface ChampionEntry {
   owner: string
   score: number
   date: string
-  rarity: string
+  rarity: RarityKey
+  exploreCount: number
+  stayText: string
+  lore: string
 }
 
-const activeTab = ref('legendary')
+const activeTab = ref<RarityKey>('legendary')
 const detailCard = ref<ChampionEntry | null>(null)
+const cards = ref<ChampionEntry[]>([])
+const loading = ref(false)
+const loadError = ref<string | null>(null)
 
-const allCards: ChampionEntry[] = [
-  { id: 1, title: '时空主宰·秦', event: '秦始皇统一六国', owner: '司马星辰', score: 98, date: '2025-12-01', rarity: 'legendary' },
-  { id: 2, title: '帝国缔造者', event: '罗马帝国建立', owner: '诸葛云霄', score: 95, date: '2025-11-15', rarity: 'legendary' },
-  { id: 3, title: '变革先锋', event: '法国大革命', owner: '李白银河', score: 92, date: '2025-10-20', rarity: 'legendary' },
-  { id: 4, title: '铁血商君', event: '商鞅变法', owner: '轩辕破晓', score: 88, date: '2025-09-10', rarity: 'epic' },
-  { id: 5, title: '丝路开拓者', event: '大汉帝国建立', owner: '王羲之光', score: 85, date: '2025-08-22', rarity: 'epic' },
-  { id: 6, title: '启蒙之火', event: '工业革命', owner: '苏轼流星', score: 82, date: '2025-07-18', rarity: 'epic' },
-  { id: 7, title: '东征战神', event: '亚历山大东征', owner: '诸葛亮辰', score: 78, date: '2025-06-05', rarity: 'rare' },
-  { id: 8, title: '文化使者', event: '大汉帝国建立', owner: '杜甫月华', score: 75, date: '2025-05-12', rarity: 'rare' },
-  { id: 9, title: '航海先驱', event: '工业革命', owner: '辛弃疾风', score: 72, date: '2025-04-08', rarity: 'rare' },
-  { id: 10, title: '历史初探', event: '商鞅变法', owner: '陆游星河', score: 65, date: '2025-03-01', rarity: 'common' },
-  { id: 11, title: '文明观察者', event: '罗马帝国建立', owner: '陶渊明日', score: 60, date: '2025-02-14', rarity: 'common' },
-  { id: 12, title: '探索学徒', event: '法国大革命', owner: '柳宗元辰', score: 55, date: '2025-01-20', rarity: 'common' },
-]
+const LEVEL_TO_RARITY: Record<number, RarityKey> = {
+  4: 'legendary',
+  3: 'epic',
+  2: 'rare',
+  1: 'common',
+}
 
-const tabs = computed(() => [
-  { key: 'legendary', label: '传说', icon: '◆', count: allCards.filter(c => c.rarity === 'legendary').length },
-  { key: 'epic', label: '史诗', icon: '◈', count: allCards.filter(c => c.rarity === 'epic').length },
-  { key: 'rare', label: '稀有', icon: '◇', count: allCards.filter(c => c.rarity === 'rare').length },
-  { key: 'common', label: '普通', icon: '○', count: allCards.filter(c => c.rarity === 'common').length },
-])
+const RARITY_LABEL: Record<RarityKey, string> = {
+  legendary: '传说',
+  epic: '史诗',
+  rare: '稀有',
+  common: '普通',
+}
+
+function rarityLabel(r: RarityKey): string {
+  return RARITY_LABEL[r] || r
+}
+
+function formatDate(input: string | null | undefined): string {
+  if (!input) return '-'
+  const d = new Date(input)
+  if (isNaN(d.getTime())) return '-'
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function formatDuration(seconds: number): string {
+  if (!seconds || seconds <= 0) return '0 分钟'
+  const minutes = Math.round(seconds / 60)
+  if (minutes >= 60) {
+    const h = Math.floor(minutes / 60)
+    const m = minutes % 60
+    return `${h} 小时 ${m} 分`
+  }
+  return `${minutes} 分钟`
+}
+
+function deriveScore(card: BackendChampionCard): number {
+  // 综合得分: 探索次数 * 10 + 停留秒数 / 6, 归一到 0-100 区间
+  const raw = card.explore_count * 10 + Math.floor((card.total_stay_duration || 0) / 6)
+  if (card.card_level >= 4) return Math.max(85, Math.min(100, raw))
+  if (card.card_level === 3) return Math.max(70, Math.min(90, raw))
+  if (card.card_level === 2) return Math.max(55, Math.min(80, raw))
+  return Math.max(30, Math.min(60, raw))
+}
+
+function deriveLore(card: BackendChampionCard): string {
+  const desc = (card.event_description || '').trim()
+  if (!desc) return '该卡牌记录了一段真实的探索旅程。'
+  return desc.length > 120 ? `${desc.slice(0, 120)}…` : desc
+}
+
+function mapCard(card: BackendChampionCard): ChampionEntry {
+  const rarity = LEVEL_TO_RARITY[card.card_level] || 'common'
+  return {
+    id: card.id,
+    title: card.nickname?.trim() || card.event_name,
+    event: card.event_name,
+    owner: card.nickname?.trim() || '匿名探索者',
+    score: deriveScore(card),
+    date: formatDate(card.created_at),
+    rarity,
+    exploreCount: card.explore_count || 0,
+    stayText: formatDuration(card.total_stay_duration || 0),
+    lore: deriveLore(card),
+  }
+}
+
+async function loadCards() {
+  loading.value = true
+  loadError.value = null
+  try {
+    const sid = getSessionId()
+    const res = await championApi.getChampionCards(1, 100)
+    const items = res.data?.items || []
+    cards.value = items.map(mapCard)
+  } catch (e: any) {
+    loadError.value = e?.message || '网络异常, 请稍后重试'
+    cards.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadCards)
+
+const hasAnyCard = computed(() => cards.value.length > 0)
+
+const tabs = computed(() => {
+  const counts: Record<RarityKey, number> = {
+    legendary: 0, epic: 0, rare: 0, common: 0,
+  }
+  for (const c of cards.value) counts[c.rarity] += 1
+  return [
+    { key: 'legendary' as const, label: '传说', icon: '◆', count: counts.legendary },
+    { key: 'epic' as const, label: '史诗', icon: '◈', count: counts.epic },
+    { key: 'rare' as const, label: '稀有', icon: '◇', count: counts.rare },
+    { key: 'common' as const, label: '普通', icon: '○', count: counts.common },
+  ]
+})
 
 const currentTab = computed(() => tabs.value.find(t => t.key === activeTab.value) || tabs.value[0])
 
 const currentCards = computed(() =>
-  allCards.filter(c => c.rarity === activeTab.value).sort((a, b) => b.score - a.score)
+  cards.value.filter(c => c.rarity === activeTab.value).sort((a, b) => b.score - a.score)
 )
 
 function openDetail(card: ChampionEntry) {
   detailCard.value = card
-}
-
-function rarityLabel(rarity: string): string {
-  const map: Record<string, string> = { legendary: '传说', epic: '史诗', rare: '稀有', common: '普通' }
-  return map[rarity] || rarity
-}
-
-function getLore(card: ChampionEntry): string {
-  const lores: Record<string, string> = {
-    '时空主宰·秦': '穿越两千年的迷雾，以铁血手腕统一六国，书同文、车同轨，铸就华夏第一帝国的不朽传说。',
-    '帝国缔造者': '从罗马废墟中崛起，以智慧与权谋缔造延续千年的辉煌帝国，永恒之城的奠基者。',
-    '变革先锋': '当旧制度的枷锁破碎，自由之声响彻巴黎街头，一个新时代在革命的火焰中诞生。',
-    '铁血商君': '以严刑峻法重塑秦国，废井田、开阡陌，为统一天下奠定根基的改革先驱。',
-    '丝路开拓者': '凿空西域，开辟万里丝路，将东方文明的光辉播撒至世界的每一个角落。',
-    '启蒙之火': '蒸汽机的轰鸣唤醒了沉睡的生产力，人类文明从此驶入工业化的快车道。',
-    '东征战神': '率军横扫欧亚大陆，以征服者的姿态将希腊文明的种子播撒到已知世界的尽头。',
-    '文化使者': '驼铃声声，佛经万卷，以一人之力搭建起东西方文明交流的桥梁。',
-    '航海先驱': '当大洋不再未知，文明的航船便驶向了更广阔的星辰大海。',
-    '历史初探': '每一次翻阅史书，都是与古人的一次跨时空对话，探索之路由此开始。',
-    '文明观察者': '以旁观者的视角审视历史的洪流，在细微处发现文明演进的密码。',
-    '探索学徒': '踏出探索的第一步，虽是学徒，却怀揣着对历史最纯粹的好奇与敬畏。',
-  }
-  return lores[card.title] || '这张卡牌记录了一段珍贵的探索旅程。'
 }
 </script>
 
@@ -328,6 +423,67 @@ function getLore(card: ChampionEntry): string {
   border-radius: var(--radius-full);
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-muted);
+}
+
+/* Loading / Error / Empty state */
+.loading-state,
+.error-state,
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  gap: 12px;
+}
+
+.empty-state--full { min-height: 50vh; }
+
+.loading-icon,
+.empty-icon,
+.error-icon {
+  font-size: 48px;
+  opacity: 0.4;
+}
+
+.loading-icon { color: var(--cyan-core); animation: pulse 1.4s ease-in-out infinite; }
+.empty-icon { color: var(--text-muted); }
+.error-icon { color: #ff8a4d; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.08); }
+}
+
+.loading-text,
+.error-text,
+.empty-text {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.error-text { color: #ffba6b; }
+.empty-hint { font-size: 13px; color: var(--text-muted); opacity: 0.7; }
+
+.retry-btn,
+.empty-cta {
+  margin-top: 6px;
+  padding: 8px 22px;
+  background: rgba(49, 247, 255, 0.12);
+  border: 1px solid var(--border-cyan);
+  border-radius: var(--radius-full);
+  color: var(--cyan-core);
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.retry-btn:hover,
+.empty-cta:hover {
+  background: rgba(49, 247, 255, 0.2);
+  box-shadow: var(--glow-cyan);
 }
 
 .gallery-main {

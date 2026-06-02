@@ -155,4 +155,6 @@ _PENDING_MIGRATIONS = [
     ("crawl_sources", "priority", "INT NOT NULL DEFAULT 5"),
     ("crawl_sources", "recommended", "INT NOT NULL DEFAULT 0"),
     ("crawl_sources", "enabled", "INT NOT NULL DEFAULT 1"),
+    # users: 管理员标识, 知识库管理页访问控制
+    ("users", "is_admin", "BOOLEAN NOT NULL DEFAULT 0"),
 ]

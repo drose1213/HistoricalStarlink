@@ -50,6 +50,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Failed to start crawl scheduler: {e}")
 
+    # 异步预热 RAG 索引, 从 DB 加载已持久化的向量
+    async def _warmup_rag() -> None:
+        try:
+            from .rag_engine import _load_index_from_db
+            loaded = await _load_index_from_db()
+            if loaded:
+                logger.info("RAG index warmed from DB cache (no API call)")
+            else:
+                logger.info("No persisted embeddings yet, will compute on first query")
+        except Exception as e:
+            logger.warning(f"RAG warmup failed (non-fatal): {e}")
+
+    asyncio.create_task(_warmup_rag())
+
     yield
 
     logger.info("Historical Starlink backend shutting down...")

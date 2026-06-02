@@ -13,7 +13,7 @@ import asyncio
 import hashlib
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from html.parser import HTMLParser
 
@@ -283,6 +283,31 @@ async def _gather_active_sources(db) -> list[dict]:
     ]
 
 
+async def _get_todays_event_names(db, day: datetime) -> set[str]:
+    """返回当天 0 点至次日 0 点之间已入库的 event_name 集合, 用于每日去重.
+
+    Args:
+        db: AsyncSession 实例
+        day: 参考时间 (UTC), 取其 0 点作为当日起点
+
+    Returns:
+        当日已存在且非空的 event_name 集合
+    """
+    from .models.knowledge_base import KnowledgeEntry
+    from sqlalchemy import select, distinct
+
+    start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=1)
+    stmt = select(distinct(KnowledgeEntry.event_name)).where(
+        KnowledgeEntry.created_at >= start,
+        KnowledgeEntry.created_at < end,
+        KnowledgeEntry.event_name.isnot(None),
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    result = {name for name in rows if name and name.strip()}
+    return result
+
+
 async def crawl_and_store() -> dict:
     """Crawl all active sources, dedup by event_name+source_url, write new entries to DB."""
     from .database import AsyncSessionLocal
@@ -298,6 +323,9 @@ async def crawl_and_store() -> dict:
         "failed": 0,
         "sources_processed": 0,
         "sources_failed": 0,
+        "filtered_empty_event_name": 0,
+        "skipped_daily_duplicate": 0,
+        "todays_unique_count": 0,
     }
 
     async with AsyncSessionLocal() as db:
@@ -313,6 +341,15 @@ async def crawl_and_store() -> dict:
 
         sources = await _gather_active_sources(db)
         logger.info(f"Crawl job: {len(sources)} active sources")
+
+        # 一次性加载今日已存在的 event_name 集合, 用于每日去重
+        try:
+            today_events = await _get_todays_event_names(db, datetime.utcnow())
+            stats["todays_unique_count"] = len(today_events)
+            logger.info(f"Daily dedup: {len(today_events)} event_names already imported today (UTC)")
+        except Exception as e:
+            logger.warning(f"Failed to load today's event names, dedup disabled: {e}")
+            today_events = set()
 
         for source in sources:
             url = source["url"]
@@ -352,11 +389,38 @@ async def crawl_and_store() -> dict:
             chunks = chunk_text(text)
             now = datetime.utcnow()
             event_name_base = source_name.split(" - ")[0] if " - " in source_name else source_name
+            # event_name_base 为空或仅含空白字符时, 整批 chunk 跳过写入, 但仍计入 sources_processed
+            if not event_name_base or not event_name_base.strip():
+                logger.warning(
+                    f"Skip crawl source due to empty event_name_base: source_name={source_name!r}, "
+                    f"url={url!r}, chunks={len(chunks)}"
+                )
+                stats["filtered_empty_event_name"] = stats.get("filtered_empty_event_name", 0) + len(chunks)
+                stats["sources_processed"] += 0  # 仍计入 source
+                if source.get("id") is not None:
+                    try:
+                        await db.execute(
+                            update(CrawlSource)
+                            .where(CrawlSource.id == source["id"])
+                            .values(last_status="failed", last_crawled_at=now, last_imported=0)
+                        )
+                    except Exception:
+                        pass
+                continue
             imported_this_source = 0
             skipped_this_source = 0
             updated_this_source = 0
 
             for idx, chunk in enumerate(chunks):
+                # 每日去重: 同一 event_name 当日已存在则跳过整个 chunk
+                if event_name_base in today_events:
+                    stats["skipped_daily_duplicate"] += 1
+                    logger.debug(
+                        f"Skip daily duplicate: event_name={event_name_base!r}, "
+                        f"chunk={idx}, url={url!r}"
+                    )
+                    continue
+
                 content_hash = KnowledgeEntry.compute_hash(chunk)
 
                 existing = await db.execute(
@@ -483,7 +547,11 @@ async def crawl_and_store() -> dict:
 
     logger.info(
         f"Crawl job finished. imported={stats['imported']}, updated={stats['updated']}, "
-        f"skipped={stats['skipped_duplicates']}, sources={stats['sources_processed']}, failed={stats['sources_failed']}"
+        f"skipped={stats['skipped_duplicates']}, sources={stats['sources_processed']}, "
+        f"failed={stats['sources_failed']}, "
+        f"filtered_empty_event_name={stats.get('filtered_empty_event_name', 0)}, "
+        f"skipped_daily_duplicate={stats.get('skipped_daily_duplicate', 0)}, "
+        f"todays_unique_count={stats.get('todays_unique_count', 0)}"
     )
     return stats
 

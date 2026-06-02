@@ -1,5 +1,7 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import { useAppStore } from '@/stores/app'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -53,13 +55,33 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/knowledge-base',
     name: 'KnowledgeBase',
-    component: () => import('@/views/KnowledgeBaseView.vue')
+    component: () => import('@/views/KnowledgeBaseView.vue'),
+    meta: { requiresAdmin: true }
   }
 ]
 
 const router = createRouter({
   history: createWebHashHistory(),
   routes
+})
+
+router.beforeEach((to, _from, next) => {
+  if (to.meta?.requiresAdmin) {
+    const auth = useAuthStore()
+    if (!auth.isLoggedIn) {
+      return next({ name: 'Login' })
+    }
+    if (!auth.user?.is_admin) {
+      try {
+        const app = useAppStore()
+        app.showToast('warning', '无访问权限, 仅管理员可访问知识库')
+      } catch (_) {
+        // app store 不可用时静默
+      }
+      return next({ name: 'Home' })
+    }
+  }
+  next()
 })
 
 export default router

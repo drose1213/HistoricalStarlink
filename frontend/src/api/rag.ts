@@ -139,6 +139,11 @@ export const ragApi = {
     return res
   },
 
+  async hybridSearch(params: SearchParams) {
+    const res = await post<RagSearchResult[]>('/api/rag/search-hybrid', params)
+    return res
+  },
+
   async ask(question: string, filters?: Partial<SearchParams>) {
     const res = await post<RagAskResult>('/api/rag/ask', { question, ...filters })
     return res

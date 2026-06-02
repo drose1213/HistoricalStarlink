@@ -2,11 +2,12 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Query, Depends
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
 from ..models.event import HistoryEvent
+from ..models.exploration_record import ExplorationRecord
 from ..schemas import BaseResponse
 
 logger = logging.getLogger("historical_starlink.events")
@@ -28,6 +29,65 @@ def _event_dict(e: HistoryEvent) -> dict:
         "figures": e.figures or [],
         "tags": e.tags or [],
     }
+
+
+@router.get("/home", summary="首页聚合 feed: 系统推荐 + 用户已探索")
+async def get_home_feed(
+    user_id: Optional[int] = Query(default=None, description="用户ID(已登录必传)"),
+    session_id: Optional[str] = Query(default=None, description="匿名会话ID(前端localStorage)"),
+    recommended_limit: int = Query(default=50, ge=1, le=100, description="系统推荐数量"),
+    explored_limit: int = Query(default=50, ge=1, le=100, description="已探索数量"),
+    db: AsyncSession = Depends(get_db),
+):
+    """首页初始化加载, 一次返回系统推荐与用户已探索两类事件.
+
+    - 推荐: 按 importance DESC, id ASC 排序
+    - 已探索: 按 exploration_records 中 event_id 访问次数 DESC, 最近访问 DESC 排序
+    """
+    # 1) 系统推荐
+    rec_stmt = (
+        select(HistoryEvent)
+        .order_by(HistoryEvent.importance.desc(), HistoryEvent.id.asc())
+        .limit(recommended_limit)
+    )
+    recommended = (await db.execute(rec_stmt)).scalars().all()
+
+    # 2) 用户已探索
+    explored: list[dict] = []
+    if session_id:
+        exp_stmt = (
+            select(
+                ExplorationRecord.event_id.label("event_id"),
+                func.count().label("visit_count"),
+                func.max(ExplorationRecord.created_at).label("last_visit"),
+            )
+            .where(
+                ExplorationRecord.session_id == session_id,
+                ExplorationRecord.is_deleted == False,  # noqa: E712
+            )
+            .group_by(ExplorationRecord.event_id)
+            .order_by(func.count().desc(), func.max(ExplorationRecord.created_at).desc())
+            .limit(explored_limit)
+        )
+        rows = (await db.execute(exp_stmt)).all()
+        if rows:
+            ids = [r.event_id for r in rows]
+            ev_map = {
+                e.id: e for e in
+                (await db.execute(select(HistoryEvent).where(HistoryEvent.id.in_(ids)))).scalars()
+            }
+            explored = [
+                {**_event_dict(ev_map[r.event_id]), "visit_count": r.visit_count, "last_visit": str(r.last_visit)}
+                for r in rows
+                if r.event_id in ev_map
+            ]
+
+    return BaseResponse(data={
+        "recommended": [_event_dict(e) for e in recommended],
+        "explored": explored,
+        "recommended_total": len(recommended),
+        "explored_total": len(explored),
+    })
 
 
 @router.get("", summary="获取所有事件列表")

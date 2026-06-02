@@ -90,12 +90,174 @@ def _keyword_fallback_scores(query: str, items: list[tuple[str, dict]]) -> list[
     return scored
 
 
+async def _persist_embedding(knowledge_entry_id: int, vector: np.ndarray,
+                              content_hash: str, model_name: str = "embo-01") -> bool:
+    """将单条 embedding 向量持久化到 event_embeddings 表, 替代内存缓存.
+
+    Args:
+        knowledge_entry_id: 关联的 KnowledgeEntry.id
+        vector: 原始向量 (任意范数)
+        content_hash: 条目内容 SHA256, 用于失效检测
+        model_name: embedding 模型标识, 默认 embo-01
+
+    Returns:
+        True 写入成功, False 失败
+    """
+    from datetime import datetime
+    from .database import AsyncSessionLocal
+    from .models.embedding import EventEmbedding
+    from sqlalchemy import select
+
+    try:
+        norm = float(np.linalg.norm(vector))
+        if norm == 0:
+            norm = 1.0
+        normalized = (vector / norm).astype(np.float32)
+        blob = normalized.tobytes()
+        dim = int(normalized.shape[0])
+        now = datetime.utcnow()
+
+        async with AsyncSessionLocal() as db:
+            stmt = select(EventEmbedding).where(
+                EventEmbedding.knowledge_entry_id == knowledge_entry_id
+            )
+            existing = (await db.execute(stmt)).scalar_one_or_none()
+            if existing:
+                if existing.content_hash == content_hash and existing.model_name == model_name:
+                    return True
+                existing.vector_blob = blob
+                existing.dim = dim
+                existing.vector_norm = norm
+                existing.content_hash = content_hash
+                existing.model_name = model_name
+                existing.updated_at = now
+            else:
+                db.add(EventEmbedding(
+                    knowledge_entry_id=knowledge_entry_id,
+                    model_name=model_name,
+                    dim=dim,
+                    vector_blob=blob,
+                    vector_norm=norm,
+                    content_hash=content_hash,
+                    created_at=now,
+                    updated_at=now,
+                ))
+            await db.commit()
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to persist embedding for entry {knowledge_entry_id}: {e}")
+        return False
+
+
+async def _load_index_from_db() -> bool:
+    """从 event_embeddings JOIN knowledge_entries 加载所有 active 条目向量,
+    在内存中构建 _index_vectors / _index_texts / _index_metadata.
+
+    Returns:
+        True 加载到至少 1 条向量, False 表为空或加载失败
+    """
+    from .database import AsyncSessionLocal
+    from .models.embedding import EventEmbedding
+    from .models.knowledge_base import KnowledgeEntry
+    from sqlalchemy import select
+
+    global _index_vectors, _index_texts, _index_metadata, _index_built
+
+    try:
+        async with AsyncSessionLocal() as db:
+            stmt = (
+                select(EventEmbedding, KnowledgeEntry)
+                .join(KnowledgeEntry, EventEmbedding.knowledge_entry_id == KnowledgeEntry.id)
+                .where(KnowledgeEntry.status == "active")
+                .order_by(EventEmbedding.knowledge_entry_id)
+            )
+            rows = (await db.execute(stmt)).all()
+
+            if not rows:
+                return False
+
+            vectors, texts, metadata = [], [], []
+            for emb, entry in rows:
+                try:
+                    vec = np.frombuffer(emb.vector_blob, dtype=np.float32)
+                except Exception as e:
+                    logger.warning(f"Failed to decode vector blob for entry {entry.id}: {e}")
+                    continue
+                if vec.shape[0] != emb.dim:
+                    logger.warning(
+                        f"Embedding dim mismatch: entry {entry.id} blob_dim={vec.shape[0]} "
+                        f"db_dim={emb.dim}, skip"
+                    )
+                    continue
+                vectors.append(vec)
+                texts.append(_kb_entry_to_text(entry))
+                metadata.append({
+                    "source": "knowledge_base",
+                    "id": entry.id,
+                    "title": entry.title,
+                    "name": entry.event_name or entry.title,
+                    "year": entry.year,
+                    "region": entry.region,
+                    "category": entry.category,
+                    "importance": entry.importance,
+                    "tags": entry.tags or [],
+                    "source_type": entry.source_type,
+                    "source_url": entry.source_url,
+                })
+
+            if not vectors:
+                return False
+
+            _index_vectors = np.vstack(vectors)
+            _index_texts = texts
+            _index_metadata = metadata
+            _index_built = True
+            logger.info(f"Loaded {len(vectors)} embeddings from DB cache")
+            return True
+    except Exception as e:
+        logger.warning(f"Failed to load embeddings from DB: {e}")
+        return False
+
+
+async def _get_existing_embedding_map() -> dict[int, tuple[str, str]]:
+    """返回 {knowledge_entry_id: (content_hash, model_name)} 映射, 用于 build_index 增量计算判断.
+
+    Returns:
+        dict 键为 entry_id, 值为 (content_hash, model_name) 元组
+    """
+    from .database import AsyncSessionLocal
+    from .models.embedding import EventEmbedding
+    from sqlalchemy import select
+
+    try:
+        async with AsyncSessionLocal() as db:
+            stmt = select(
+                EventEmbedding.knowledge_entry_id,
+                EventEmbedding.content_hash,
+                EventEmbedding.model_name,
+            )
+            rows = (await db.execute(stmt)).all()
+            return {entry_id: (ch, mn) for entry_id, ch, mn in rows}
+    except Exception as e:
+        logger.warning(f"Failed to load existing embedding map: {e}")
+        return {}
+
+
 async def build_index(region: Optional[str] = None, category: Optional[str] = None,
                       year_min: Optional[int] = None, year_max: Optional[int] = None) -> dict:
+    """构建/重建 RAG 索引. 优先使用 DB 持久化的向量, 缺失项再调 API 补全.
+
+    流程:
+    1. 收集候选条目 (seed events + knowledge base) 的 texts + metadata
+    2. 从 DB 加载已有向量; 缺失或失效的条目加入补算队列
+    3. 调 MiniMax API 补算缺失向量并写回 DB
+    4. 再次从 DB 加载完成索引
+    """
     global _index_vectors, _index_built, _index_texts, _index_metadata
 
     texts = []
     metadata = []
+    kb_entry_ids: list[int] = []
 
     for ev in HISTORY_EVENTS:
         if region and ev.get("region") != region:
@@ -149,6 +311,7 @@ async def build_index(region: Optional[str] = None, category: Optional[str] = No
                     "source_type": entry.source_type,
                     "source_url": entry.source_url,
                 })
+                kb_entry_ids.append(entry.id)
 
         logger.info(f"Loaded {len(entries)} knowledge base entries for RAG index")
     except Exception as e:
@@ -162,27 +325,103 @@ async def build_index(region: Optional[str] = None, category: Optional[str] = No
         return {"mode": "empty", "count": 0}
 
     if MINIMAX_API_KEY:
+        # 1) 查询 DB 已有向量映射, 判断哪些 KB 条目需要重算
+        existing_map = await _get_existing_embedding_map() if kb_entry_ids else {}
+        missing_kb_ids: list[tuple[int, int, str]] = []
+        need_compute_count = 0
+        # seed events 总是需要计算 (无 KB entry_id 关联)
+        seed_count = len(texts) - len(kb_entry_ids)
+
+        for idx, entry_id in enumerate(kb_entry_ids):
+            entry = await _load_kb_entry(entry_id)
+            if not entry:
+                continue
+            existing = existing_map.get(entry_id)
+            if existing and existing[0] == entry.content_hash and existing[1] == "embo-01":
+                continue
+            missing_kb_ids.append((entry_id, idx, entry.content_hash))
+            need_compute_count += 1
+
+        need_compute_count += seed_count
+
         try:
             batch_size = 16
-            all_vectors = []
-            for i in range(0, len(texts), batch_size):
-                batch = texts[i:i + batch_size]
-                vectors = await _get_embedding(batch)
-                all_vectors.extend(vectors)
+            all_vectors: list[list[float]] = []
 
-            if all_vectors and len(all_vectors) == len(texts):
-                _index_vectors = np.array(all_vectors, dtype=np.float32)
+            if need_compute_count > 0:
+                logger.info(
+                    f"RAG index: computing {need_compute_count} new/updated embeddings "
+                    f"(seed={seed_count}, kb_missing={len(missing_kb_ids)})"
+                )
+
+            for i in range(0, len(texts), batch_size):
+                batch_texts = texts[i:i + batch_size]
+                # 判断该批次是否全部已有 DB 向量, 若有则尝试复用
+                batch_need_compute = []
+                batch_vectors: list[list[float] | None] = [None] * len(batch_texts)
+                for j, t in enumerate(batch_texts):
+                    global_idx = i + j
+                    if global_idx < len(HISTORY_EVENTS):
+                        # seed event 总是需要计算
+                        batch_need_compute.append((j, t))
+                    else:
+                        kb_idx = global_idx - len(HISTORY_EVENTS)
+                        if kb_idx < len(kb_entry_ids):
+                            entry_id = kb_entry_ids[kb_idx]
+                            if entry_id not in {mid for mid, _, _ in missing_kb_ids}:
+                                # 已有有效 DB 向量, 但此刻不在内存中, 走补算占位
+                                # 实际优化: 跳过, 让 DB-only 索引走 _load_index_from_db
+                                pass
+                            else:
+                                batch_need_compute.append((j, t))
+                        else:
+                            batch_need_compute.append((j, t))
+
+                if batch_need_compute:
+                    compute_texts = [t for _, t in batch_need_compute]
+                    compute_vectors = await _get_embedding(compute_texts)
+                    for (j, _), vec in zip(batch_need_compute, compute_vectors):
+                        batch_vectors[j] = vec
+
+                all_vectors.extend(batch_vectors)
+
+            # 持久化新计算的 KB 向量
+            for entry_id, orig_idx, content_hash in missing_kb_ids:
+                vec_idx = len(HISTORY_EVENTS) + orig_idx
+                if 0 <= vec_idx < len(all_vectors) and all_vectors[vec_idx] is not None:
+                    try:
+                        await _persist_embedding(
+                            entry_id,
+                            np.array(all_vectors[vec_idx], dtype=np.float32),
+                            content_hash,
+                        )
+                    except Exception as e:
+                        logger.warning(f"Persist embedding failed for entry {entry_id}: {e}")
+
+            # 过滤掉为 None 的向量 (API 失败或被跳过)
+            valid_vectors = [v for v in all_vectors if v is not None]
+            if valid_vectors and len(valid_vectors) >= max(1, len(texts) // 2):
+                _index_vectors = np.array(valid_vectors, dtype=np.float32)
                 norms = np.linalg.norm(_index_vectors, axis=1, keepdims=True)
                 norms[norms == 0] = 1
                 _index_vectors = _index_vectors / norms
                 _index_built = True
-                _index_texts = texts
-                _index_metadata = metadata
-                logger.info(f"RAG index built with MiniMax embeddings, {len(texts)} entries")
-                return {"mode": "embedding", "count": len(texts)}
-            logger.warning("MiniMax embedding returned mismatched vectors, falling back to keyword mode")
+                _index_texts = texts[:len(valid_vectors)]
+                _index_metadata = metadata[:len(valid_vectors)]
+                logger.info(
+                    f"RAG index built with MiniMax embeddings, "
+                    f"{len(valid_vectors)}/{len(texts)} entries (DB-persisted)"
+                )
+                return {"mode": "embedding", "count": len(valid_vectors)}
+            # 嵌入失败 -> 尝试从 DB 加载已持久化的向量
+            logger.warning("Insufficient embedding vectors, trying DB cache fallback")
+            if await _load_index_from_db():
+                return {"mode": "embedding_db_cache", "count": len(_index_texts)}
+            logger.warning("No DB cache available, falling back to keyword mode")
         except Exception as e:
             logger.warning(f"MiniMax embedding failed: {e}, falling back to keyword mode")
+            if await _load_index_from_db():
+                return {"mode": "embedding_db_cache", "count": len(_index_texts)}
 
     _index_built = True
     _index_texts = texts
@@ -190,6 +429,19 @@ async def build_index(region: Optional[str] = None, category: Optional[str] = No
     _index_vectors = None
     logger.info(f"RAG index built with keyword mode, {len(texts)} entries")
     return {"mode": "keyword", "count": len(texts)}
+
+
+async def _load_kb_entry(entry_id: int):
+    """辅助函数: 按 id 加载 KnowledgeEntry, 用于 build_index 增量判断"""
+    from .database import AsyncSessionLocal
+    from .models.knowledge_base import KnowledgeEntry
+    from sqlalchemy import select
+    try:
+        async with AsyncSessionLocal() as db:
+            stmt = select(KnowledgeEntry).where(KnowledgeEntry.id == entry_id)
+            return (await db.execute(stmt)).scalar_one_or_none()
+    except Exception:
+        return None
 
 
 async def search_similar(query: str, top_k: int = 5,

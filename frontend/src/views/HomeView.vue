@@ -10,7 +10,7 @@
         <router-link to="/" class="nav-link nav-link--active">首页</router-link>
         <router-link to="/champions" class="nav-link">卡牌</router-link>
         <router-link to="/leaderboard" class="nav-link">排行</router-link>
-        <router-link to="/knowledge-base" class="nav-link">知识库</router-link>
+        <router-link v-if="authStore.user?.is_admin" to="/knowledge-base" class="nav-link">知识库</router-link>
         <router-link v-if="authStore.isLoggedIn" to="/profile" class="nav-link">个人中心</router-link>
       </nav>
 
@@ -58,52 +58,7 @@
       <div class="cosmic-section">
         <CosmicMap @select-event="goToEvent" />
 
-        <div class="cosmic-overlay">
-          <div class="hero-copy">
-            <h2 class="cosmic-title">探索时空之旅</h2>
-          </div>
-
-          <div class="search-bar">
-            <div class="search-input-wrap">
-              <input
-                v-model="searchQuery"
-                type="text"
-                class="search-input"
-                placeholder="搜索历史事件"
-                @input="onSearchInput"
-                @focus="showSearchDropdown = true"
-                @blur="handleSearchBlur"
-                @keydown.enter="handleSearchEnter"
-              />
-              <button class="search-btn" aria-label="搜索" @mousedown.prevent="handleSearchEnter">
-                <span class="search-icon" aria-hidden="true"></span>
-              </button>
-            </div>
-            <div class="search-loading-bar" :class="{ active: searchLoading }">
-              <div class="loading-track" />
-            </div>
-            <Transition name="menu-fade">
-              <div v-if="showSearchDropdown && searchQuery.trim()" class="search-dropdown">
-                <template v-if="searchResults.length > 0">
-                  <div
-                    v-for="item in searchResults"
-                    :key="item.id"
-                    class="search-item"
-                    @mousedown.prevent="handleSearchSelect(item.id)"
-                  >
-                    <span class="search-item-name">{{ item.name }}</span>
-                    <span class="search-item-meta">
-                      {{ formatEventYear(item.year) }} · {{ item.region === 'china' ? '东方' : '西方' }}
-                    </span>
-                  </div>
-                </template>
-                <div v-else class="search-item search-empty">
-                  <span class="search-item-name" style="opacity:0.4">未找到匹配事件</span>
-                </div>
-              </div>
-            </Transition>
-          </div>
-        </div>
+        <div class="cosmic-overlay" aria-hidden="true"></div>
       </div>
 
       <a
@@ -123,6 +78,49 @@
       <Transition name="drawer-slide">
         <div v-if="drawerOpen" class="event-drawer">
           <div class="drawer-header">
+            <h2 class="drawer-hero-title">探索时空之旅</h2>
+
+            <div class="search-bar">
+              <div class="search-input-wrap">
+                <input
+                  v-model="searchQuery"
+                  type="text"
+                  class="search-input"
+                  placeholder="搜索历史事件"
+                  @input="onSearchInput"
+                  @focus="showSearchDropdown = true"
+                  @blur="handleSearchBlur"
+                  @keydown.enter="handleSearchEnter"
+                />
+                <button class="search-btn" aria-label="搜索" @mousedown.prevent="handleSearchEnter">
+                  <span class="search-icon" aria-hidden="true"></span>
+                </button>
+              </div>
+              <div class="search-loading-bar" :class="{ active: searchLoading }">
+                <div class="loading-track" />
+              </div>
+              <Transition name="menu-fade">
+                <div v-if="showSearchDropdown && searchQuery.trim()" class="search-dropdown">
+                  <template v-if="searchResults.length > 0">
+                    <div
+                      v-for="item in searchResults"
+                      :key="item.id"
+                      class="search-item"
+                      @mousedown.prevent="handleSearchSelect(item.id)"
+                    >
+                      <span class="search-item-name">{{ item.name }}</span>
+                      <span class="search-item-meta">
+                        {{ formatEventYear(item.year) }} · {{ item.region === 'china' ? '东方' : '西方' }}
+                      </span>
+                    </div>
+                  </template>
+                  <div v-else class="search-item search-empty">
+                    <span class="search-item-name" style="opacity:0.4">未找到匹配事件</span>
+                  </div>
+                </div>
+              </Transition>
+            </div>
+
             <h3 class="drawer-title">
               <span class="title-icon" aria-hidden="true"></span>
               历史事件
@@ -175,6 +173,9 @@ import { useAuthStore } from '@/stores/auth'
 import CosmicMap from '@/components/CosmicMap.vue'
 import { allEvents as historyEvents, searchEvents, backendAvailable, loadError, loadEvents } from '@/data/events'
 import { ragApi } from '@/api/rag'
+import { eventsApi, type HomeFeedResponse } from '@/api/events'
+import { getSessionId } from '@/utils/session'
+import type { HistoryEvent } from '@/types'
 
 interface LocalSearchResult {
   id: string
@@ -184,6 +185,7 @@ interface LocalSearchResult {
   importance: number
   description?: string
   score: number
+  source?: string
 }
 
 const router = useRouter()
@@ -199,6 +201,15 @@ let searchAbortTimer: ReturnType<typeof setTimeout> | null = null
 
 const ragSearchResults = ref<LocalSearchResult[]>([])
 
+const homeFeed = ref<HomeFeedResponse>({
+  recommended: [],
+  explored: [],
+  recommended_total: 0,
+  explored_total: 0,
+})
+
+const exploredIdSet = computed(() => new Set(homeFeed.value.explored.map(e => e.id)))
+
 function onSearchInput() {
   showSearchDropdown.value = true
   searchLoading.value = true
@@ -211,8 +222,14 @@ function onSearchInput() {
     const q = searchQuery.value.trim()
     if (!q) { ragSearchResults.value = []; return }
     try {
-      const res = await ragApi.search({ query: q, top_k: 5 })
-      ragSearchResults.value = res.data || []
+      // 优先调用混合搜索 (事件表 + RAG 知识库), 失败时降级到纯 RAG
+      try {
+        const res = await ragApi.hybridSearch({ query: q, top_k: 5 })
+        ragSearchResults.value = (res.data || []) as LocalSearchResult[]
+      } catch {
+        const res = await ragApi.search({ query: q, top_k: 5 })
+        ragSearchResults.value = (res.data || []) as LocalSearchResult[]
+      }
     } catch {
       ragSearchResults.value = []
     }
@@ -222,7 +239,7 @@ function onSearchInput() {
 const searchResults = computed(() => {
   if (!searchQuery.value.trim()) return []
   if (ragSearchResults.value.length > 0) return ragSearchResults.value
-  return searchEvents(searchQuery.value.trim()).slice(0, 5)
+  return searchEvents(searchQuery.value.trim()).slice(0, 5) as LocalSearchResult[]
 })
 
 const filters = [
@@ -231,13 +248,33 @@ const filters = [
   { value: 'foreign' as const, label: '西方' }
 ]
 
-const filteredEvents = computed(() => {
+// 抽屉事件列表: 探索过的优先, 再用推荐补足, 再去重
+const drawerEvents = computed<HistoryEvent[]>(() => {
+  const seen = new Set<string>()
+  const out: HistoryEvent[] = []
+  for (const e of homeFeed.value.explored) {
+    if (!seen.has(e.id)) {
+      seen.add(e.id)
+      out.push(e as HistoryEvent)
+    }
+  }
+  for (const e of homeFeed.value.recommended) {
+    if (!seen.has(e.id)) {
+      seen.add(e.id)
+      out.push(e)
+    }
+  }
+  if (out.length > 0) {
+    if (appStore.currentFilter === 'china') return out.filter(e => e.region === 'china')
+    if (appStore.currentFilter === 'foreign') return out.filter(e => e.region === 'foreign')
+    return out
+  }
+  // 降级: home feed 失败时, 使用本地 historyEvents
   if (appStore.currentFilter === 'all') return historyEvents
-  return historyEvents.filter(e => {
-    if (appStore.currentFilter === 'china') return e.region === 'china'
-    return e.region === 'foreign'
-  })
+  return historyEvents.filter(e => e.region === appStore.currentFilter)
 })
+
+const filteredEvents = computed(() => drawerEvents.value)
 
 function formatEventYear(year: number | null): string {
   if (year === null || year === undefined) return '-'
@@ -283,12 +320,25 @@ function goToEvent(id: string) {
 async function retryLoad() {
   const { loadEvents } = await import('@/data/events')
   await loadEvents()
+  await loadHomeFeed()
 }
 
-onMounted(() => {
+async function loadHomeFeed() {
+  try {
+    const sid = getSessionId()
+    const res = await eventsApi.getHomeFeed({ session_id: sid })
+    homeFeed.value = res.data || { recommended: [], explored: [], recommended_total: 0, explored_total: 0 }
+  } catch (e) {
+    console.warn('[HistoricalStarlink] Home feed load failed, fallback to local events', e)
+    homeFeed.value = { recommended: [], explored: [], recommended_total: 0, explored_total: 0 }
+  }
+}
+
+onMounted(async () => {
   authStore.init()
   document.addEventListener('click', handleClickOutside)
-  loadEvents()
+  // 并行加载: 事件全集 + 首页 feed
+  await Promise.all([loadEvents(), loadHomeFeed()])
 })
 
 onBeforeUnmount(() => {
@@ -623,10 +673,10 @@ onBeforeUnmount(() => {
   position: relative;
   left: auto;
   bottom: auto;
-  width: min(360px, 100%);
+  width: 100%;
   display: flex;
   align-items: center;
-  margin-top: 20px;
+  margin-top: 0;
   pointer-events: auto;
 }
 
@@ -781,7 +831,7 @@ onBeforeUnmount(() => {
 .drawer-trigger {
   position: fixed;
   left: 0;
-  top: 50%;
+  top: 90px;
   z-index: var(--z-header);
   display: flex;
   align-items: center;
@@ -793,7 +843,6 @@ onBeforeUnmount(() => {
   border-left: 0;
   border-radius: 0 6px 6px 0;
   box-shadow: 0 0 20px rgba(139, 255, 225, 0.08);
-  transform: translateY(-50%);
   transition: left 0.28s ease, background 0.18s ease;
   writing-mode: vertical-rl;
 }
@@ -819,7 +868,7 @@ onBeforeUnmount(() => {
 .event-drawer {
   position: fixed;
   left: 0;
-  top: 0;
+  top: 90px;
   bottom: 0;
   z-index: calc(var(--z-header) - 1);
   width: 306px;
@@ -832,15 +881,29 @@ onBeforeUnmount(() => {
 }
 
 .drawer-header {
-  padding: 88px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 18px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.drawer-hero-title {
+  margin: 0;
+  color: #ffffff;
+  font-family: var(--font-serif);
+  font-size: clamp(20px, 2.4vw, 28px);
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: 0;
+  text-shadow: 0 0 18px rgba(65, 166, 255, 0.32), 0 2px 16px rgba(0, 0, 0, 0.76);
 }
 
 .drawer-title {
   display: flex;
   align-items: center;
   gap: 9px;
-  margin: 0 0 14px;
+  margin: 0;
   color: #ffffff;
   font-family: var(--font-serif);
   font-size: 16px;

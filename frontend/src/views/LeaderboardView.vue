@@ -25,7 +25,25 @@
         </button>
       </div>
 
-      <div class="podium-section">
+      <div v-if="loading" class="loading-state">
+        <div class="loading-icon">⬡</div>
+        <p class="loading-text">正在加载排行榜…</p>
+      </div>
+
+      <div v-else-if="loadError" class="empty-card empty-card--error">
+        <div class="empty-icon">⚠</div>
+        <p class="empty-title">数据加载失败</p>
+        <p class="empty-hint">{{ loadError }}</p>
+        <button class="retry-btn" @click="loadLeaderboard(activePeriod)">重试</button>
+      </div>
+
+      <div v-else-if="ranking.length === 0" class="empty-card">
+        <div class="empty-icon">⬡</div>
+        <p class="empty-title">暂无探索者</p>
+        <p class="empty-hint">邀请好友一起加入时空之旅, 一起探索历史星河</p>
+      </div>
+
+      <div v-else class="podium-section">
         <div class="podium-bg-glow"></div>
         <h3 class="section-title">
           <span class="section-icon">⬡</span>
@@ -69,7 +87,7 @@
         </div>
       </div>
 
-      <div class="ranking-table">
+      <div v-if="ranking.length > 0" class="ranking-table">
         <div class="table-header">
           <h3 class="section-title">
             <span class="section-icon">◇</span>
@@ -104,7 +122,7 @@
               <span v-else class="rank-num">{{ index + 1 }}</span>
             </span>
             <span class="col-name">
-              <span class="explorer-avatar" :style="{ background: avatarGradient(index) }">
+              <span class="explorer-avatar" :style="{ background: avatarGradient(explorer.name) }">
                 {{ explorer.name.charAt(0) }}
               </span>
               <span class="explorer-name-text">{{ explorer.name }}</span>
@@ -128,7 +146,10 @@
           <span class="section-icon">◈</span>
           热门探索事件 · {{ periodLabel }}
         </h3>
-        <div class="champion-grid">
+        <div v-if="!loading && championEvents.length === 0 && !loadError" class="empty-inline">
+          <span class="empty-inline-text">暂未统计到热门事件</span>
+        </div>
+        <div v-else-if="!loading" class="champion-grid">
           <div
             v-for="(event, idx) in championEvents"
             :key="event.name"
@@ -172,14 +193,17 @@ const activePeriod = ref<Period>('weekly')
 const ranking = ref<Explorer[]>([])
 const championEventsRaw = ref<ChampionEvent[]>([])
 const loading = ref(false)
+const loadError = ref<string | null>(null)
 
 async function loadLeaderboard(period: Period) {
   loading.value = true
+  loadError.value = null
   try {
     const res = await leaderboardApi.get(period, 10)
     ranking.value = res.data?.ranking || []
     championEventsRaw.value = res.data?.championEvents || []
-  } catch (e) {
+  } catch (e: any) {
+    loadError.value = e?.message || '网络异常, 请稍后重试'
     ranking.value = []
     championEventsRaw.value = []
   } finally {
@@ -224,14 +248,24 @@ function formatDuration(seconds: number): string {
   return `${minutes}分钟`
 }
 
-function avatarGradient(index: number): string {
-  const gradients = [
-    'linear-gradient(135deg, rgba(212, 168, 75, 0.6), rgba(255, 200, 100, 0.3))',
-    'linear-gradient(135deg, rgba(49, 247, 255, 0.4), rgba(255, 53, 243, 0.2))',
-    'linear-gradient(135deg, rgba(255, 53, 243, 0.35), rgba(49, 247, 255, 0.2))',
-    'linear-gradient(135deg, rgba(49, 247, 255, 0.25), rgba(142, 164, 184, 0.15))'
+function avatarGradient(name: string): string {
+  // 基于用户名 hash 派生稳定且独特的渐变色, 同一用户名始终同一颜色
+  const palettes: Array<[string, string]> = [
+    ['rgba(212, 168, 75, 0.6)', 'rgba(255, 200, 100, 0.3)'],   // 金色
+    ['rgba(49, 247, 255, 0.4)', 'rgba(255, 53, 243, 0.2)'],    // 青-粉
+    ['rgba(255, 53, 243, 0.35)', 'rgba(49, 247, 255, 0.2)'],   // 粉-青
+    ['rgba(49, 247, 255, 0.25)', 'rgba(142, 164, 184, 0.15)'], // 青-灰
+    ['rgba(255, 152, 71, 0.4)', 'rgba(255, 53, 243, 0.2)'],    // 橙-粉
+    ['rgba(120, 220, 168, 0.4)', 'rgba(49, 247, 255, 0.2)'],   // 绿-青
+    ['rgba(186, 132, 255, 0.4)', 'rgba(255, 53, 243, 0.2)'],   // 紫-粉
+    ['rgba(212, 168, 75, 0.4)', 'rgba(49, 247, 255, 0.2)'],    // 金-青
   ]
-  return gradients[Math.min(index, gradients.length - 1)]
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) >>> 0
+  }
+  const [c1, c2] = palettes[hash % palettes.length]
+  return `linear-gradient(135deg, ${c1}, ${c2})`
 }
 </script>
 
@@ -813,5 +847,104 @@ function avatarGradient(index: number): string {
 .champion-card--highlight .champion-count {
   color: var(--accent-gold);
   text-shadow: 0 0 8px rgba(212, 168, 75, 0.5);
+}
+
+/* Loading / Empty / Error states */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  gap: 12px;
+}
+
+.loading-icon {
+  font-size: 48px;
+  color: var(--cyan-core);
+  opacity: 0.5;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.08); }
+}
+
+.loading-text {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.empty-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 60px 20px;
+  margin-bottom: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  backdrop-filter: blur(10px);
+}
+
+.empty-card--error {
+  border-color: rgba(255, 138, 77, 0.4);
+  background: linear-gradient(180deg, rgba(255, 138, 77, 0.06), var(--bg-card));
+}
+
+.empty-icon {
+  font-size: 48px;
+  color: var(--text-muted);
+  opacity: 0.4;
+}
+
+.empty-card--error .empty-icon { color: #ff8a4d; opacity: 0.7; }
+
+.empty-title {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-light);
+}
+
+.empty-card--error .empty-title { color: #ffba6b; }
+
+.empty-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.retry-btn {
+  margin-top: 6px;
+  padding: 8px 22px;
+  background: rgba(49, 247, 255, 0.12);
+  border: 1px solid var(--border-cyan);
+  border-radius: var(--radius-full);
+  color: var(--cyan-core);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.retry-btn:hover {
+  background: rgba(49, 247, 255, 0.2);
+  box-shadow: var(--glow-cyan);
+}
+
+.empty-inline {
+  padding: 32px 20px;
+  text-align: center;
+  background: rgba(49, 247, 255, 0.04);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.empty-inline-text {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-muted);
 }
 </style>

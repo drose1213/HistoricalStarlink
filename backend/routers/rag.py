@@ -131,7 +131,8 @@ async def _find_existing_by_event(db: AsyncSession, event_name: Optional[str],
                                    source_url: Optional[str],
                                    chunk_index: int) -> Optional[KnowledgeEntry]:
     """Dedup by event_name + source_url + chunk_index. Returns the existing entry if any."""
-    if not event_name:
+    if not event_name or not event_name.strip():
+        # event_name 为空或仅含空白字符, 无法作为去重主键, 直接返回 None
         return None
     stmt = select(KnowledgeEntry).where(
         KnowledgeEntry.event_name == event_name,
@@ -201,6 +202,19 @@ async def _store_chunks(db: AsyncSession, title: str, content: str,
                          parent_event_id: Optional[str] = None,
                          change_source: str = "file_import",
                          operator: Optional[str] = None) -> dict:
+    # event_name 为空或仅含空白字符时, 直接过滤, 不进行分块也不写入 DB
+    if not event_name or not event_name.strip():
+        logger.warning(
+            f"Skip import due to empty event_name: title={title!r}, "
+            f"file_name={file_name!r}, source_url={source_url!r}"
+        )
+        return {
+            "imported": 0,
+            "skipped": 0,
+            "updated": 0,
+            "chunks": 0,
+            "filtered_reason": "empty_event_name",
+        }
     chunks = _split_content(content)
     now = datetime.utcnow()
     imported = 0
@@ -343,6 +357,62 @@ async def search_events(req: SearchRequest):
         year_min=req.year_min, year_max=req.year_max,
     )
     return BaseResponse(data=results)
+
+
+@router.post("/search-hybrid", response_model=BaseResponse,
+             summary="事件表 + RAG 知识库 混合搜索, 用于首页搜索框")
+async def search_hybrid(req: SearchRequest, db: AsyncSession = Depends(get_db)):
+    """联合事件表 ILIKE 与 RAG 向量检索, 事件表结果 score 加权 ×1.5."""
+    from ..models.event import HistoryEvent
+
+    # 1) RAG 向量搜索
+    rag_results = await search_similar(
+        req.query, top_k=req.top_k,
+        region=req.region, category=req.category,
+        year_min=req.year_min, year_max=req.year_max,
+    )
+
+    # 2) 事件表精确匹配
+    like = f"%{req.query}%"
+    event_stmt = (
+        select(HistoryEvent)
+        .where(
+            (HistoryEvent.name.ilike(like))
+            | (HistoryEvent.description.ilike(like))
+            | (HistoryEvent.tags.cast(__import__("sqlalchemy").String).ilike(like))
+        )
+        .limit(req.top_k)
+    )
+    events = (await db.execute(event_stmt)).scalars().all()
+
+    # 3) 合并去重
+    seen_ids: set = set()
+    merged: list[dict] = []
+    for ev in events:
+        item = {
+            "source": "event_table",
+            "id": ev.id,
+            "name": ev.name,
+            "year": ev.year,
+            "region": ev.region,
+            "importance": ev.importance,
+            "description": (ev.description or "")[:200],
+            "tags": ev.tags or [],
+            "score": 1.5,
+        }
+        merged.append(item)
+        seen_ids.add(ev.id)
+
+    for r in rag_results:
+        rid = r.get("id")
+        if rid in seen_ids:
+            continue
+        merged.append({**r, "source": r.get("source", "knowledge_base")})
+        seen_ids.add(rid)
+
+    # 4) 排序后截断
+    merged.sort(key=lambda x: x.get("score", 0), reverse=True)
+    return BaseResponse(data=merged[:req.top_k])
 
 
 @router.post("/ask", response_model=BaseResponse, summary="RAG 智能问答(支持条件过滤)")

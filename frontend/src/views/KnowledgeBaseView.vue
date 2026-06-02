@@ -541,10 +541,23 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ragApi, type KnowledgeEntry, type KnowledgeStats, type KnowledgeVersion, type CrawlSource } from '@/api/rag'
 import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 
 const appStore = useAppStore()
+const authStore = useAuthStore()
+const router = useRouter()
+
+if (!authStore.user?.is_admin) {
+  try {
+    appStore.showToast('warning', '无访问权限, 仅管理员可访问知识库')
+  } catch (_) {
+    // app store 不可用时静默
+  }
+  router.replace({ name: 'Home' })
+}
 
 const activeTab = ref('overview')
 const tabs = [

@@ -6,6 +6,7 @@ export interface UserInfo {
   email: string
   nickname: string
   avatar_url: string
+  is_admin: boolean
 }
 
 export interface AuthResponse {
