@@ -19,6 +19,8 @@ export const useDialogueStore = defineStore('dialogue', () => {
   const outcomeSummary = ref('')
   const round = ref(0)
   const sessionId = ref(generateSessionId())
+  const errorMessage = ref<string>('')
+  const notFound = ref(false)
 
   const isTimelineAnimating = ref(false)
 
@@ -33,6 +35,8 @@ export const useDialogueStore = defineStore('dialogue', () => {
 
   async function startDialogue(eventId: string) {
     isLoading.value = true
+    errorMessage.value = ''
+    notFound.value = false
     try {
       const res = await dialogueApi.startDialogue(sessionId.value, eventId) as any
       const data = res.data
@@ -73,6 +77,15 @@ export const useDialogueStore = defineStore('dialogue', () => {
       }
 
       return data
+    } catch (err: any) {
+      const status = err?.response?.status
+      if (status === 404) {
+        notFound.value = true
+        errorMessage.value = '该历史事件暂未配置时空对话剧本'
+      } else {
+        errorMessage.value = err?.response?.data?.detail || err?.message || '对话启动失败'
+      }
+      throw err
     } finally {
       isLoading.value = false
     }
@@ -206,6 +219,8 @@ export const useDialogueStore = defineStore('dialogue', () => {
     round.value = 0
     sessionId.value = generateSessionId()
     isTimelineAnimating.value = false
+    errorMessage.value = ''
+    notFound.value = false
   }
 
   return {
@@ -221,6 +236,8 @@ export const useDialogueStore = defineStore('dialogue', () => {
     round,
     sessionId,
     isTimelineAnimating,
+    errorMessage,
+    notFound,
     lastNpcMessage,
     startDialogue,
     sendChoice,

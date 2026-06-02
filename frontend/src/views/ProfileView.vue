@@ -50,8 +50,17 @@
             <span class="section-icon">◈</span>
             探索时间线
           </h3>
-          <div class="timeline">
-            <div v-for="(item, idx) in exploreTimeline" :key="idx" class="timeline-item">
+          <div v-if="loading" class="loading-state">
+            <div class="cy-loading"></div>
+            <p>正在加载探索记录…</p>
+          </div>
+          <div v-else-if="exploreTimeline.length === 0" class="empty-state">
+            <div class="empty-icon">◇</div>
+            <p>暂无探索记录</p>
+            <router-link to="/" class="cy-btn cy-btn--gold">开始探索</router-link>
+          </div>
+          <div v-else class="timeline">
+            <div v-for="(item, idx) in exploreTimeline" :key="item.id" class="timeline-item">
               <div class="timeline-date">{{ item.date }}</div>
               <div class="timeline-track">
                 <div class="timeline-line" v-if="idx < exploreTimeline.length - 1"></div>
@@ -72,23 +81,26 @@
             <span class="section-icon">⬡</span>
             区域分布
           </h3>
-          <div class="region-bar-container">
+          <div v-if="regionChinaPercent + regionForeignPercent === 0" class="empty-state">
+            <p>暂无区域数据</p>
+          </div>
+          <div v-else class="region-bar-container">
             <div class="region-bar">
-              <div class="region-segment region-cyan" :style="{ width: '60%' }">
-                <span class="region-segment-label">东方 60%</span>
+              <div class="region-segment region-cyan" :style="{ width: regionChinaPercent + '%' }">
+                <span v-if="regionChinaPercent >= 12" class="region-segment-label">东方 {{ regionChinaPercent }}%</span>
               </div>
-              <div class="region-segment region-pink" :style="{ width: '40%' }">
-                <span class="region-segment-label">西方 40%</span>
+              <div class="region-segment region-pink" :style="{ width: regionForeignPercent + '%' }">
+                <span v-if="regionForeignPercent >= 12" class="region-segment-label">西方 {{ regionForeignPercent }}%</span>
               </div>
             </div>
             <div class="region-legend">
               <div class="legend-item">
                 <span class="legend-dot legend-dot--cyan"></span>
-                <span class="legend-text">东方 60%</span>
+                <span class="legend-text">东方 {{ regionChinaPercent }}%</span>
               </div>
               <div class="legend-item">
                 <span class="legend-dot legend-dot--pink"></span>
-                <span class="legend-text">西方 40%</span>
+                <span class="legend-text">西方 {{ regionForeignPercent }}%</span>
               </div>
             </div>
           </div>
@@ -99,7 +111,10 @@
             <span class="section-icon">◇</span>
             兴趣维度
           </h3>
-          <div class="dimensions-list">
+          <div v-if="interestDimensions.length === 0" class="empty-state">
+            <p>探索事件后再来查看兴趣分布吧</p>
+          </div>
+          <div v-else class="dimensions-list">
             <div v-for="dim in interestDimensions" :key="dim.name" class="dimension-row">
               <span class="dimension-name">{{ dim.name }}</span>
               <div class="dimension-bar-wrap">
@@ -115,8 +130,11 @@
             <span class="section-icon">◈</span>
             近期活动
           </h3>
-          <div class="activity-list">
-            <div v-for="(act, idx) in recentActivities" :key="idx" class="activity-row">
+          <div v-if="recentActivities.length === 0" class="empty-state">
+            <p>暂无活动</p>
+          </div>
+          <div v-else class="activity-list">
+            <div v-for="act in recentActivities" :key="act.id" class="activity-row">
               <span class="activity-dot"></span>
               <span class="activity-event">{{ act.event }}</span>
               <span class="activity-meta">{{ act.date }} · {{ act.duration }}</span>
@@ -126,7 +144,11 @@
       </div>
 
       <div v-if="activeTab === 'cards'" class="tab-content">
-        <div v-if="myCards.length > 0" class="cards-grid">
+        <div v-if="loading" class="loading-state">
+          <div class="cy-loading"></div>
+          <p>正在加载卡牌…</p>
+        </div>
+        <div v-else-if="myCards.length > 0" class="cards-grid">
           <div
             v-for="card in myCards"
             :key="card.id"
@@ -142,6 +164,7 @@
             <div class="card-event">{{ card.event }}</div>
             <div class="card-footer">
               <span class="card-date">{{ card.unlockDate }}</span>
+              <span v-if="card.exploreCount > 1" class="card-count">探索 {{ card.exploreCount }} 次</span>
             </div>
           </div>
         </div>
@@ -159,9 +182,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import {
+  profileApi,
+  cardLevelToRarity,
+  rarityLabel as rarityLabelApi,
+  formatDuration as formatDurationApi,
+  formatDate as formatDateApi,
+  type BackendExplorationRecord,
+  type BackendChampionCard,
+  type ExplorationStats,
+  type ChampionStats
+} from '@/api/profile'
 
 const router = useRouter()
 const route = useRoute()
@@ -187,43 +221,142 @@ function switchTab(key: TabKey) {
   router.replace({ query: { ...route.query, tab: key } })
 }
 
-const stats = ref({
-  totalExplorations: 42,
-  uniqueEvents: 7,
-  totalDuration: '5h 23m',
-  streakDays: '3天'
+const loading = ref(false)
+const explorationStats = ref<ExplorationStats>({
+  total_records: 0,
+  unique_events: 0,
+  total_stay_duration: 0,
+})
+const championStats = ref<ChampionStats | null>(null)
+const records = ref<BackendExplorationRecord[]>([])
+const cards = ref<BackendChampionCard[]>([])
+
+const stats = computed(() => ({
+  totalExplorations: explorationStats.value.total_records,
+  uniqueEvents: explorationStats.value.unique_events,
+  totalDuration: formatDurationApi(explorationStats.value.total_stay_duration),
+  streakDays: computeStreakDays(),
+}))
+
+function computeStreakDays(): string {
+  if (records.value.length === 0) return '0天'
+  const days = new Set<string>()
+  for (const r of records.value) {
+    if (r.created_at) days.add(r.created_at.slice(0, 10))
+  }
+  const sortedDays = Array.from(days).sort().reverse()
+  if (sortedDays.length === 0) return '0天'
+
+  const today = new Date()
+  const todayStr = today.toISOString().slice(0, 10)
+  let cursor = new Date(today)
+  if (sortedDays[0] !== todayStr) {
+    const yesterday = new Date(today)
+    yesterday.setDate(today.getDate() - 1)
+    if (sortedDays[0] !== yesterday.toISOString().slice(0, 10)) {
+      return '0天'
+    }
+    cursor = yesterday
+  }
+
+  let streak = 0
+  for (let i = 0; i < sortedDays.length; i++) {
+    const expected = cursor.toISOString().slice(0, 10)
+    if (sortedDays[i] === expected) {
+      streak++
+      cursor.setDate(cursor.getDate() - 1)
+    } else if (i === 0 && sortedDays[i] === today.toISOString().slice(0, 10)) {
+      streak++
+      cursor.setDate(cursor.getDate() - 1)
+    } else {
+      break
+    }
+  }
+  return `${streak}天`
+}
+
+const exploreTimeline = computed(() => {
+  return records.value
+    .slice(0, 10)
+    .map(r => ({
+      id: r.id,
+      date: formatDateApi(r.created_at),
+      event: r.event_name,
+      duration: formatDurationApi(r.stay_duration),
+    }))
 })
 
-const exploreTimeline = ref([
-  { date: '2026-05-28', event: '商鞅变法', duration: '32min' },
-  { date: '2026-05-26', event: '秦始皇统一六国', duration: '45min' },
-  { date: '2026-05-24', event: '大汉帝国建立', duration: '28min' },
-  { date: '2026-05-22', event: '亚历山大东征', duration: '37min' },
-  { date: '2026-05-20', event: '罗马帝国建立', duration: '41min' },
-  { date: '2026-05-18', event: '法国大革命', duration: '52min' },
-  { date: '2026-05-15', event: '工业革命', duration: '38min' },
-  { date: '2026-05-13', event: '商鞅变法', duration: '27min' },
-  { date: '2026-05-11', event: '大汉帝国建立', duration: '33min' },
-  { date: '2026-05-08', event: '法国大革命', duration: '29min' }
-])
+const regionStats = computed(() => {
+  let china = 0
+  let foreign = 0
+  for (const r of records.value) {
+    if (r.event_region === 'china') china++
+    else if (r.event_region === 'foreign') foreign++
+  }
+  const total = china + foreign
+  if (total === 0) return { china: 0, foreign: 0, chinaPercent: 0, foreignPercent: 0 }
+  return {
+    china,
+    foreign,
+    chinaPercent: Math.round((china / total) * 100),
+    foreignPercent: Math.round((foreign / total) * 100),
+  }
+})
 
-const interestDimensions = ref([
-  { name: '政治变革', value: 85 },
-  { name: '军事征伐', value: 70 },
-  { name: '文化交流', value: 55 },
-  { name: '经济发展', value: 45 },
-  { name: '科技进步', value: 65 }
-])
+const regionChinaPercent = computed(() => regionStats.value.chinaPercent)
+const regionForeignPercent = computed(() => regionStats.value.foreignPercent)
 
-const recentActivities = ref([
-  { event: '商鞅变法', date: '2026-05-28', duration: '32min' },
-  { event: '秦始皇统一六国', date: '2026-05-26', duration: '45min' },
-  { event: '大汉帝国建立', date: '2026-05-24', duration: '28min' },
-  { event: '亚历山大东征', date: '2026-05-22', duration: '37min' },
-  { event: '罗马帝国建立', date: '2026-05-20', duration: '41min' },
-  { event: '法国大革命', date: '2026-05-18', duration: '52min' },
-  { event: '工业革命', date: '2026-05-15', duration: '38min' }
-])
+const interestDimensions = computed(() => {
+  if (records.value.length === 0) return []
+  const buckets: Record<string, string[]> = {
+    '政治变革': ['改革', '统一', '革命', '帝国', '政治', '议会', '民主', '共和', '立宪', '制度'],
+    '军事征伐': ['军事', '征伐', '战争', '远征', '东征', '东渡', '北伐', '南征', '抗战', '十字军'],
+    '文化交流': ['文化', '宗教', '艺术', '文学', '思想', '哲学', '儒', '佛', '禅', '启蒙'],
+    '经济发展': ['经济', '贸易', '商业', '市场', '资本', '工业', '金融', '货币', '工业革命'],
+    '科技进步': ['科技', '技术', '发明', '科学', '医学', '工程', '天文', '数学', '网络', '蒸汽'],
+    '社会生活': ['社会', '生活', '家庭', '教育', '医疗', '人口', '城市', '建筑'],
+  }
+  const scores: Record<string, number> = {}
+  for (const name of Object.keys(buckets)) scores[name] = 0
+  const total = records.value.length
+  for (const r of records.value) {
+    const text = `${r.event_name}`
+    let matched = false
+    for (const [dim, keywords] of Object.entries(buckets)) {
+      if (keywords.some(k => text.includes(k))) {
+        scores[dim] = (scores[dim] || 0) + 1
+        matched = true
+      }
+    }
+    if (!matched) {
+      scores['政治变革'] = (scores['政治变革'] || 0) + 0.4
+    }
+  }
+  const max = Math.max(...Object.values(scores), 1)
+  return Object.entries(scores)
+    .filter(([, v]) => v > 0)
+    .map(([name, v]) => ({ name, value: Math.round((v / max) * 100) }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5)
+})
+
+const recentActivities = computed(() => {
+  return records.value
+    .slice(0, 7)
+    .map(r => ({
+      id: r.id,
+      event: r.event_name,
+      date: formatDateApi(r.created_at),
+      duration: formatDurationApi(r.stay_duration),
+    }))
+})
+
+const rarityLabels: Record<string, string> = {
+  legendary: '传说',
+  epic: '史诗',
+  rare: '稀有',
+  common: '普通',
+}
 
 interface CardItem {
   id: number
@@ -231,29 +364,67 @@ interface CardItem {
   event: string
   rarity: 'legendary' | 'epic' | 'rare' | 'common'
   unlockDate: string
+  exploreCount: number
 }
 
-const rarityLabels: Record<string, string> = {
-  legendary: '传说',
-  epic: '史诗',
-  rare: '稀有',
-  common: '普通'
+const myCards = computed<CardItem[]>(() =>
+  cards.value.map(c => ({
+    id: c.id,
+    title: generateCardTitle(c),
+    event: c.event_name,
+    rarity: cardLevelToRarity(c.card_level),
+    unlockDate: formatDateApi(c.created_at),
+    exploreCount: c.explore_count,
+  }))
+)
+
+function generateCardTitle(c: BackendChampionCard): string {
+  const name = c.event_name
+  if (c.card_level >= 4) return `${name}·史诗回响`
+  if (c.card_level >= 3) return `${name}·命运之钥`
+  if (c.card_level >= 2) return `${name}·时空印记`
+  return `${name}·初次发现`
 }
 
-const myCards = ref<CardItem[]>([
-  { id: 1, title: '秦始皇·天下归一', event: '秦始皇统一六国', rarity: 'legendary', unlockDate: '2026-05-20' },
-  { id: 2, title: '商鞅·变法图强', event: '商鞅变法', rarity: 'epic', unlockDate: '2026-05-18' },
-  { id: 3, title: '凯撒·帝国之鹰', event: '罗马帝国建立', rarity: 'epic', unlockDate: '2026-05-15' },
-  { id: 4, title: '汉武帝·开疆拓土', event: '大汉帝国建立', rarity: 'rare', unlockDate: '2026-05-12' },
-  { id: 5, title: '亚历山大·远征号角', event: '亚历山大东征', rarity: 'rare', unlockDate: '2026-05-10' },
-  { id: 6, title: '瓦特·蒸汽先驱', event: '工业革命', rarity: 'common', unlockDate: '2026-05-08' }
-])
+async function loadAll() {
+  loading.value = true
+  try {
+    const [statsRes, recordsRes, cardsRes] = await Promise.all([
+      profileApi.getExplorationStats(),
+      profileApi.getExplorationRecords(1, 50),
+      profileApi.getChampionCards(1, 100),
+    ])
+    if (statsRes.code === 200 && statsRes.data) {
+      explorationStats.value = statsRes.data
+    }
+    if (recordsRes.code === 200 && recordsRes.data) {
+      const data = recordsRes.data as any
+      records.value = Array.isArray(data) ? data : (data.items || data.data || [])
+    }
+    if (cardsRes.code === 200 && cardsRes.data) {
+      const data = cardsRes.data as any
+      cards.value = Array.isArray(data) ? data : (data.items || data.data || [])
+    }
+  } catch (e) {
+    console.warn('[ProfileView] 数据加载失败', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+watch(activeTab, (tab) => {
+  if (records.value.length === 0 && !loading.value) {
+    loadAll()
+  }
+})
 
 onMounted(async () => {
   await authStore.init()
   if (!authStore.isLoggedIn) {
     router.push('/login')
+    return
   }
+  await loadAll()
 })
 </script>
 
@@ -765,11 +936,6 @@ onMounted(async () => {
   margin-bottom: 14px;
 }
 
-.card-footer {
-  display: flex;
-  justify-content: flex-end;
-}
-
 .card-date {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -791,6 +957,49 @@ onMounted(async () => {
   color: var(--accent-gold);
   opacity: 0.3;
   text-shadow: 0 0 30px rgba(212, 168, 75, 0.4);
+}
+
+.loading-state,
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 14px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.cy-loading {
+  width: 36px;
+  height: 36px;
+  border: 2px solid rgba(49, 247, 255, 0.18);
+  border-top-color: var(--cyan-core);
+  border-radius: 50%;
+  animation: cy-spin 0.9s linear infinite;
+}
+
+@keyframes cy-spin {
+  to { transform: rotate(360deg); }
+}
+
+.card-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--cyan-core);
+  margin-left: 12px;
+  padding: 2px 8px;
+  background: rgba(49, 247, 255, 0.08);
+  border: 1px solid rgba(49, 247, 255, 0.24);
+  border-radius: var(--radius-full);
+}
+
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
 }
 
 .cards-empty h3 {

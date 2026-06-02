@@ -24,10 +24,10 @@
   --glow-cyan-strong: 0 0 18px var(--cyan-core), 0 0 34px var(--cyan-soft);
   --glow-pink-strong: 0 0 18px var(--pink-core), 0 0 34px var(--pink-soft);
 
-  --font-sans: 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
-  --font-serif: 'Noto Serif SC', serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-  --font-display: 'Orbitron', 'Noto Sans SC', sans-serif;
+  --font-sans: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+  --font-serif: 'Noto Serif SC', 'Songti SC', 'STSong', 'SimSun', serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', Consolas, 'Courier New', monospace;
+  --font-display: 'Orbitron', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 
   --radius-sm: 6px;
   --radius-md: 12px;

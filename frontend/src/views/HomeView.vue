@@ -42,6 +42,17 @@
       </div>
     </header>
 
+    <Transition name="banner-slide">
+      <div v-if="!backendAvailable && loadError" class="backend-banner">
+        <span class="banner-icon">⚠</span>
+        <div class="banner-text">
+          <strong>后端服务未连接</strong>
+          <span>{{ loadError }}，请启动后端 (端口 8000) 后刷新页面</span>
+        </div>
+        <button class="banner-retry" @click="retryLoad">重新连接</button>
+      </div>
+    </Transition>
+
     <main class="home-main">
       <div class="cosmic-section">
         <CosmicMap @select-event="goToEvent" />
@@ -161,7 +172,7 @@ import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import CosmicMap from '@/components/CosmicMap.vue'
-import { allEvents as historyEvents, searchEvents } from '@/data/events'
+import { allEvents as historyEvents, searchEvents, backendAvailable, loadError } from '@/data/events'
 import { ragApi } from '@/api/rag'
 
 interface RagSearchResult {
@@ -265,6 +276,11 @@ function handleClickOutside(e: MouseEvent) {
 
 function goToEvent(id: string) {
   router.push({ name: 'EventDetail', params: { id } })
+}
+
+async function retryLoad() {
+  const { loadEvents } = await import('@/data/events')
+  await loadEvents()
 }
 
 onMounted(() => {
@@ -495,6 +511,67 @@ onBeforeUnmount(() => {
 .dropdown-item:hover {
   background: rgba(139, 255, 225, 0.08);
   color: #ffffff;
+}
+
+.backend-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 24px;
+  background: linear-gradient(90deg, rgba(255, 100, 60, 0.16), rgba(212, 168, 75, 0.10));
+  border-bottom: 1px solid rgba(255, 100, 60, 0.42);
+  color: var(--text-light);
+  font-size: 13px;
+}
+
+.banner-icon {
+  font-size: 18px;
+  color: #ff8a4d;
+  text-shadow: 0 0 12px rgba(255, 138, 77, 0.5);
+}
+
+.banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.banner-text strong {
+  color: #ffba6b;
+  font-size: 13px;
+}
+
+.banner-text span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.banner-retry {
+  padding: 6px 16px;
+  background: rgba(255, 138, 77, 0.14);
+  border: 1px solid rgba(255, 138, 77, 0.5);
+  border-radius: var(--radius-full);
+  color: #ffba6b;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.banner-retry:hover {
+  background: rgba(255, 138, 77, 0.24);
+  color: #ffffff;
+}
+
+.banner-slide-enter-active,
+.banner-slide-leave-active {
+  transition: all 0.4s ease;
+}
+
+.banner-slide-enter-from,
+.banner-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-12px);
 }
 
 .home-main,

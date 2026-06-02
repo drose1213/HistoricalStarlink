@@ -69,6 +69,21 @@
         <div class="cy-loading"></div>
         <p>正在连接时空隧道...</p>
       </div>
+
+      <div v-if="dialogueStore.errorMessage && !dialogueStore.isLoading" class="dlg-error">
+        <div class="dlg-error-icon">◇</div>
+        <h3 class="dlg-error-title">
+          {{ dialogueStore.notFound ? '暂未解锁时空对话' : '对话启动失败' }}
+        </h3>
+        <p class="dlg-error-text">{{ dialogueStore.errorMessage }}</p>
+        <p v-if="dialogueStore.notFound" class="dlg-error-hint">
+          该历史事件尚未录入剧本，你可以先在星链图谱中浏览其他事件，或尝试「商鞅变法」「秦始皇统一六国」「罗马帝国建立」「法国大革命」「汉帝国建立」「亚历山大东征」「工业革命」等已解锁事件。
+        </p>
+        <div class="dlg-error-actions">
+          <button class="cy-btn" @click="goBack">返回上一页</button>
+          <button class="cy-btn cy-btn--ghost" @click="retryInit">重试</button>
+        </div>
+      </div>
     </div>
 
     <div class="dlg-footer">
@@ -210,8 +225,16 @@ function handleRestart() {
 }
 
 async function initDialogue() {
-  await dialogueStore.startDialogue(props.eventId)
+  try {
+    await dialogueStore.startDialogue(props.eventId)
+  } catch (e) {
+    // 错误已存入 dialogueStore.errorMessage，由模板渲染
+  }
   scrollToBottom()
+}
+
+function retryInit() {
+  initDialogue()
 }
 
 function goBack() {
@@ -523,6 +546,53 @@ onMounted(() => {
   gap: 16px;
   flex: 1;
   min-height: 200px;
+}
+
+.dlg-error {
+  margin: 32px 24px;
+  padding: 28px 24px;
+  border: 1px dashed var(--border-cyan);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.dlg-error-icon {
+  font-size: 36px;
+  color: var(--accent-gold);
+  text-shadow: 0 0 12px rgba(212, 168, 75, 0.5);
+  letter-spacing: 0.3em;
+}
+
+.dlg-error-title {
+  font-size: 17px;
+  color: var(--cyan-core);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+}
+
+.dlg-error-text {
+  font-size: 13px;
+  color: var(--text-light);
+  opacity: 0.85;
+}
+
+.dlg-error-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.7;
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+.dlg-error-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
 }
 
 .dlg-loading p {

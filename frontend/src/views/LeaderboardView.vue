@@ -156,20 +156,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-
-interface Explorer {
-  id: number
-  name: string
-  exploreCount: number
-  totalDuration: number
-  favoriteEvent: string
-}
-
-interface PeriodData {
-  ranking: Explorer[]
-  championEvents: { name: string; exploreCount: number }[]
-}
+import { ref, computed, onMounted, watch } from 'vue'
+import { leaderboardApi, type Explorer, type ChampionEvent } from '@/api/leaderboard'
 
 const periodTabs = [
   { value: 'daily' as const, label: '每日', icon: '◇' },
@@ -178,97 +166,32 @@ const periodTabs = [
   { value: 'yearly' as const, label: '每年', icon: '✦' }
 ]
 
-const activePeriod = ref<'daily' | 'weekly' | 'monthly' | 'yearly'>('weekly')
+type Period = 'daily' | 'weekly' | 'monthly' | 'yearly'
 
-const mockData: Record<string, PeriodData> = {
-  daily: {
-    ranking: [
-      { id: 1, name: '司马星辰', exploreCount: 28, totalDuration: 14400, favoriteEvent: '商鞅变法' },
-      { id: 2, name: '诸葛云霄', exploreCount: 22, totalDuration: 11200, favoriteEvent: '秦始皇统一六国' },
-      { id: 3, name: '李白银河', exploreCount: 19, totalDuration: 9800, favoriteEvent: '法国大革命' },
-      { id: 4, name: '曹操时空', exploreCount: 16, totalDuration: 8200, favoriteEvent: '罗马帝国建立' },
-      { id: 5, name: '卫青远征', exploreCount: 14, totalDuration: 7000, favoriteEvent: '亚历山大东征' },
-      { id: 6, name: '霍去病星', exploreCount: 12, totalDuration: 6100, favoriteEvent: '大汉帝国建立' },
-      { id: 7, name: '岳飞忠魂', exploreCount: 10, totalDuration: 5200, favoriteEvent: '工业革命' },
-      { id: 8, name: '韩信点兵', exploreCount: 8, totalDuration: 4000, favoriteEvent: '商鞅变法' },
-      { id: 9, name: '张骞丝路', exploreCount: 7, totalDuration: 3500, favoriteEvent: '大汉帝国建立' },
-      { id: 10, name: '郑和远航', exploreCount: 5, totalDuration: 2600, favoriteEvent: '秦始皇统一六国' }
-    ],
-    championEvents: [
-      { name: '商鞅变法', exploreCount: 342 },
-      { name: '秦始皇统一六国', exploreCount: 298 },
-      { name: '法国大革命', exploreCount: 256 },
-      { name: '大汉帝国建立', exploreCount: 231 },
-      { name: '工业革命', exploreCount: 198 }
-    ]
-  },
-  weekly: {
-    ranking: [
-      { id: 1, name: '诸葛云霄', exploreCount: 156, totalDuration: 78400, favoriteEvent: '秦始皇统一六国' },
-      { id: 2, name: '司马星辰', exploreCount: 143, totalDuration: 71200, favoriteEvent: '商鞅变法' },
-      { id: 3, name: '卫青远征', exploreCount: 128, totalDuration: 64800, favoriteEvent: '亚历山大东征' },
-      { id: 4, name: '李白银河', exploreCount: 112, totalDuration: 56000, favoriteEvent: '法国大革命' },
-      { id: 5, name: '岳飞忠魂', exploreCount: 98, totalDuration: 49000, favoriteEvent: '工业革命' },
-      { id: 6, name: '曹操时空', exploreCount: 87, totalDuration: 43500, favoriteEvent: '罗马帝国建立' },
-      { id: 7, name: '霍去病星', exploreCount: 76, totalDuration: 38000, favoriteEvent: '大汉帝国建立' },
-      { id: 8, name: '张骞丝路', exploreCount: 64, totalDuration: 32000, favoriteEvent: '大汉帝国建立' },
-      { id: 9, name: '韩信点兵', exploreCount: 53, totalDuration: 26500, favoriteEvent: '商鞅变法' },
-      { id: 10, name: '郑和远航', exploreCount: 41, totalDuration: 20500, favoriteEvent: '秦始皇统一六国' }
-    ],
-    championEvents: [
-      { name: '秦始皇统一六国', exploreCount: 1872 },
-      { name: '商鞅变法', exploreCount: 1654 },
-      { name: '法国大革命', exploreCount: 1423 },
-      { name: '大汉帝国建立', exploreCount: 1298 },
-      { name: '亚历山大东征', exploreCount: 1102 }
-    ]
-  },
-  monthly: {
-    ranking: [
-      { id: 1, name: '司马星辰', exploreCount: 612, totalDuration: 306000, favoriteEvent: '商鞅变法' },
-      { id: 2, name: '诸葛云霄', exploreCount: 589, totalDuration: 294500, favoriteEvent: '秦始皇统一六国' },
-      { id: 3, name: '李白银河', exploreCount: 534, totalDuration: 267000, favoriteEvent: '法国大革命' },
-      { id: 4, name: '卫青远征', exploreCount: 478, totalDuration: 239000, favoriteEvent: '亚历山大东征' },
-      { id: 5, name: '曹操时空', exploreCount: 421, totalDuration: 210500, favoriteEvent: '罗马帝国建立' },
-      { id: 6, name: '岳飞忠魂', exploreCount: 387, totalDuration: 193500, favoriteEvent: '工业革命' },
-      { id: 7, name: '霍去病星', exploreCount: 312, totalDuration: 156000, favoriteEvent: '大汉帝国建立' },
-      { id: 8, name: '张骞丝路', exploreCount: 276, totalDuration: 138000, favoriteEvent: '大汉帝国建立' },
-      { id: 9, name: '韩信点兵', exploreCount: 231, totalDuration: 115500, favoriteEvent: '商鞅变法' },
-      { id: 10, name: '郑和远航', exploreCount: 198, totalDuration: 99000, favoriteEvent: '秦始皇统一六国' }
-    ],
-    championEvents: [
-      { name: '商鞅变法', exploreCount: 7821 },
-      { name: '秦始皇统一六国', exploreCount: 7234 },
-      { name: '法国大革命', exploreCount: 6543 },
-      { name: '罗马帝国建立', exploreCount: 5987 },
-      { name: '工业革命', exploreCount: 5432 }
-    ]
-  },
-  yearly: {
-    ranking: [
-      { id: 1, name: '诸葛云霄', exploreCount: 7234, totalDuration: 3617000, favoriteEvent: '秦始皇统一六国' },
-      { id: 2, name: '司马星辰', exploreCount: 6987, totalDuration: 3493500, favoriteEvent: '商鞅变法' },
-      { id: 3, name: '曹操时空', exploreCount: 5842, totalDuration: 2921000, favoriteEvent: '罗马帝国建立' },
-      { id: 4, name: '李白银河', exploreCount: 5431, totalDuration: 2715500, favoriteEvent: '法国大革命' },
-      { id: 5, name: '卫青远征', exploreCount: 4987, totalDuration: 2493500, favoriteEvent: '亚历山大东征' },
-      { id: 6, name: '岳飞忠魂', exploreCount: 4523, totalDuration: 2261500, favoriteEvent: '工业革命' },
-      { id: 7, name: '霍去病星', exploreCount: 3876, totalDuration: 1938000, favoriteEvent: '大汉帝国建立' },
-      { id: 8, name: '张骞丝路', exploreCount: 3214, totalDuration: 1607000, favoriteEvent: '大汉帝国建立' },
-      { id: 9, name: '韩信点兵', exploreCount: 2789, totalDuration: 1394500, favoriteEvent: '商鞅变法' },
-      { id: 10, name: '郑和远航', exploreCount: 2156, totalDuration: 1078000, favoriteEvent: '秦始皇统一六国' }
-    ],
-    championEvents: [
-      { name: '秦始皇统一六国', exploreCount: 89234 },
-      { name: '商鞅变法', exploreCount: 82156 },
-      { name: '法国大革命', exploreCount: 76543 },
-      { name: '罗马帝国建立', exploreCount: 71234 },
-      { name: '亚历山大东征', exploreCount: 65432 }
-    ]
+const activePeriod = ref<Period>('weekly')
+const ranking = ref<Explorer[]>([])
+const championEventsRaw = ref<ChampionEvent[]>([])
+const loading = ref(false)
+
+async function loadLeaderboard(period: Period) {
+  loading.value = true
+  try {
+    const res = await leaderboardApi.get(period, 10)
+    ranking.value = res.data?.ranking || []
+    championEventsRaw.value = res.data?.championEvents || []
+  } catch (e) {
+    ranking.value = []
+    championEventsRaw.value = []
+  } finally {
+    loading.value = false
   }
 }
 
+onMounted(() => loadLeaderboard(activePeriod.value))
+watch(activePeriod, (p) => loadLeaderboard(p))
+
 const periodLabel = computed(() => {
-  const labels: Record<string, string> = {
+  const labels: Record<Period, string> = {
     daily: '每日',
     weekly: '每周',
     monthly: '每月',
@@ -277,12 +200,11 @@ const periodLabel = computed(() => {
   return labels[activePeriod.value]
 })
 
-const currentRanking = computed(() => mockData[activePeriod.value].ranking)
-
+const currentRanking = computed(() => ranking.value)
 const topThree = computed(() => currentRanking.value.slice(0, 3))
 
 const championEvents = computed(() => {
-  const events = mockData[activePeriod.value].championEvents
+  const events = championEventsRaw.value
   const maxCount = events[0]?.exploreCount || 1
   return events.map(e => ({
     ...e,

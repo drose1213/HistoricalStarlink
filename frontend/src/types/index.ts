@@ -85,6 +85,40 @@ export interface PaginatedResponse<T> {
   page_size: number
 }
 
+export interface BackendExplorationRecord {
+  id: number
+  session_id: string
+  event_id: string
+  event_name: string
+  event_year: number | null
+  event_region: string | null
+  parent_event_id: string | null
+  depth: number
+  explore_path: Record<string, unknown> | null
+  stay_duration: number
+  from_direction: string | null
+  created_at: string | null
+}
+
+export interface BackendChampionCard {
+  id: number
+  session_id: string
+  nickname: string | null
+  event_id: string
+  event_name: string
+  event_year: number | null
+  event_region: string | null
+  event_description: string | null
+  card_level: number
+  explore_count: number
+  total_stay_duration: number
+  related_events: Record<string, unknown> | null
+  achievements: string[] | null
+  is_favorite: boolean
+  created_at: string | null
+  updated_at: string | null
+}
+
 export interface ExploreStartRequest {
   event_id: string
   session_id?: string

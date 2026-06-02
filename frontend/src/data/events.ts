@@ -1,4 +1,4 @@
-import { reactive } from 'vue'
+import { reactive, ref } from 'vue'
 import type { HistoryEvent } from '@/types'
 import { eventsApi } from '@/api/events'
 
@@ -55,12 +55,15 @@ const EVENT_RELATIONS: Record<string, { causes: { id: string; weight: number }[]
   abolition_feudalism_japan: { causes: [], consequences: [{ id: 'meiji_restoration', weight: 8 }] },
 }
 
-export const allEvents: HistoryEvent[] = []
+export const allEvents: HistoryEvent[] = reactive([])
+
+export const backendAvailable = ref(false)
+export const loadError = ref<string>('')
 
 let _loaded = false
 
 export async function loadEvents(): Promise<void> {
-  if (_loaded && allEvents.length > 0) return
+  if (_loaded) return
   try {
     const res = await eventsApi.getAll()
     const list = res.data?.list || []
@@ -72,8 +75,19 @@ export async function loadEvents(): Promise<void> {
         related: rel,
       })
     }
+    backendAvailable.value = true
+    loadError.value = ''
     _loaded = true
-  } catch {
+  } catch (e: any) {
+    backendAvailable.value = false
+    if (e?.code === 'ERR_NETWORK' || e?.message?.includes('Network Error')) {
+      loadError.value = '后端服务未启动（localhost:8000）'
+    } else if (e?.code === 'ECONNABORTED') {
+      loadError.value = '后端响应超时'
+    } else {
+      loadError.value = e?.message || '加载历史事件失败'
+    }
+    console.warn('[HistoricalStarlink] 后端事件加载失败：', loadError.value, '— 页面将以降级模式运行')
     _loaded = true
   }
 }

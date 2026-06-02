@@ -49,3 +49,13 @@ docs/superpowers/
 .trae/
 .ports
 *.pid
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+backend/htmlcov/
+backend/.pytest_cache/
+backend/_tmp_check.py
+backend/frontend/dist/
+frontend/coverage/

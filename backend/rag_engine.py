@@ -58,13 +58,18 @@ def _keyword_fallback_scores(query: str, events: list[dict]) -> list[tuple[int, 
         score = 0.0
         if event["name"] in query or event["name"].lower() in query_lower:
             score += 5.0
+        # 双向子串匹配（支持部分 name 命中）
+        for q_token in [query, query_lower]:
+            if q_token and q_token in event["name"]:
+                score += 3.0
         for cause in event.get("causes", []):
             if any(kw in query_lower for kw in cause.split("，")):
                 score += 1.0
         for consequence in event.get("consequences", []):
             if any(kw in query_lower for kw in consequence.split("，")):
                 score += 1.0
-        tokens = [ch for ch in query_lower if len(ch) > 1]
+        # 按字符级别的 token（中文单字、英文整词都算）
+        tokens = [ch for ch in query_lower if ch.strip()]
         for token in tokens:
             if token in text:
                 score += 0.3
