@@ -303,9 +303,10 @@ async def _ensure_default_sources(db) -> int:
         inserted += 1
     if inserted or repaired:
         try:
-            await db.flush()
-        except Exception:
-            pass
+            await db.commit()
+        except Exception as exc:
+            logger.warning(f"Failed to commit crawl source changes: {exc}")
+            await db.rollback()
     return inserted
 
 

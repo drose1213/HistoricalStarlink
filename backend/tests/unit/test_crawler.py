@@ -185,3 +185,65 @@ def test_sync_recommended_source_row_repairs_mismatched_metadata():
     assert _Row.recommended == 1
     assert _Row.enabled == 1
     assert _Row.priority == 5
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_ensure_default_sources_persists_updates_after_rollback(monkeypatch):
+    """Regression test: 推荐源更新后必须 commit, 否则数据丢失.
+
+    复现:
+      1. mock 让 len(recommended_rows) == len(RECOMMENDED_SOURCES) 成立
+      2. 预插入 N 行, name 故意是脏的, 但 url/url_hash 与真源一致
+      3. _ensure_default_sources 会走 update 分支, 修复 name
+      4. 用新 session 查询: 修复后看到新 name; bug 存在时仍看到旧 name
+    """
+    from backend.models.knowledge_base import CrawlSource, Base
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from sqlalchemy import select
+    import hashlib
+
+    test_engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    SessionLocal = async_sessionmaker(test_engine, expire_on_commit=False)
+
+    # 预插入 N 行 (N = len(RECOMMENDED_SOURCES)), name 故意是脏的
+    sources = crawler.RECOMMENDED_SOURCES
+    for i, src in enumerate(sources):
+        url_hash = hashlib.sha256(src["url"].encode("utf-8")).hexdigest()
+        async with SessionLocal() as db:
+            db.add(CrawlSource(
+                name=f"旧名-{i}",
+                url=src["url"],
+                url_hash=url_hash,
+                category="旧分类",
+                region="foreign",
+                tags=[],
+                description="旧描述",
+                recommended=1,
+                enabled=1,
+                priority=1,
+                last_status="pending",
+            ))
+            await db.commit()
+
+    # 调 _ensure_default_sources 走 update 分支 (因数量匹配)
+    async with SessionLocal() as db:
+        await crawler._ensure_default_sources(db)
+
+    # 用新 session 验证: 所有行的 name 应该是真源的 name, 不是旧名
+    async with SessionLocal() as db:
+        result = await db.execute(
+            select(CrawlSource).order_by(CrawlSource.id)
+        )
+        rows = result.scalars().all()
+        assert len(rows) == len(sources)
+        for i, (row, src) in enumerate(zip(rows, sources)):
+            assert row.name == src["name"], (
+                f"行 {i} 修复丢失: name 期望 {src['name']!r} 实际 {row.name!r}. "
+                "Bug: _ensure_default_sources 只 flush 未 commit"
+            )
+
+    await test_engine.dispose()
+
