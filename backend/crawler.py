@@ -13,6 +13,7 @@ import asyncio
 import hashlib
 import logging
 import re
+import urllib.request
 from datetime import datetime, timedelta
 from typing import Optional
 from html.parser import HTMLParser
@@ -20,7 +21,7 @@ from html.parser import HTMLParser
 import httpx
 
 logger = logging.getLogger("historical_starlink.crawler")
-
+_crawl_execution_lock = asyncio.Lock()
 
 RECOMMENDED_SOURCES = [
     {
@@ -104,15 +105,15 @@ RECOMMENDED_SOURCES = [
         "tags": ["二战", "全球", "反法西斯"],
     },
     {
-        "url": "https://zh.wikipedia.org/wiki/%E4%BA%BA%E7%B1%BB%E7%99%BB%E6%9C%88",
-        "name": "人类登月 - 维基百科",
+        "url": "https://zh.wikipedia.org/wiki/%E9%98%BF%E6%B3%A2%E7%BD%9711%E5%8F%B7",
+        "name": "阿波罗11号 - 维基百科",
         "description": "1969 年阿波罗 11 号登月任务",
         "category": "科技",
         "region": "foreign",
         "tags": ["航天", "美国", "登月"],
     },
     {
-        "url": "https://zh.wikipedia.org/wiki/%E5%8D%97%E5%8D%97%E5%8C%97%E5%8C%97%E5%92%8C%E8%A7%84",
+        "url": "https://zh.wikipedia.org/wiki/%E5%8D%97%E5%8C%97%E6%9C%9D",
         "name": "南北朝 - 维基百科",
         "description": "中国 4-6 世纪南北分裂时期",
         "category": "政治",
@@ -128,7 +129,7 @@ RECOMMENDED_SOURCES = [
         "tags": ["唐朝", "盛世", "国际"],
     },
     {
-        "url": "https://zh.wikipedia.org/wiki/%E7%BB%8F%E6%B5%8E%E5%A4%A7%E9%99%A8%E5%9D%A1",
+        "url": "https://zh.wikipedia.org/wiki/%E5%A4%A7%E8%90%A7%E6%9D%A1",
         "name": "经济大萧条 - 维基百科",
         "description": "1929-1933 年全球性经济危机",
         "category": "经济",
@@ -136,8 +137,8 @@ RECOMMENDED_SOURCES = [
         "tags": ["危机", "美国", "全球"],
     },
     {
-        "url": "https://zh.wikipedia.org/wiki/%E5%85%A8%E6%B0%91%E4%B8%BB%E4%B8%BB%E4%B9%89%E9%9D%A9%E5%91%BD",
-        "name": "民主主义革命 - 维基百科",
+        "url": "https://zh.wikipedia.org/wiki/%E6%B0%91%E4%B8%BB%E9%9D%A9%E5%91%BD",
+        "name": "民主革命 - 维基百科",
         "description": "近代中国反帝反封建革命",
         "category": "政治",
         "region": "china",
@@ -212,9 +213,55 @@ async def crawl_page(url: str, timeout: float = 30.0) -> Optional[str]:
             resp.raise_for_status()
             return resp.text
     except Exception as e:
+        if _should_fallback_to_urllib(e):
+            logger.info(f"httpx blocked for {url}, retrying with urllib fallback")
+            fallback_html = await _crawl_page_with_urllib(url, headers, timeout)
+            if fallback_html:
+                return fallback_html
         logger.warning(f"Failed to crawl {url}: {e}")
         return None
 
+
+def _should_fallback_to_urllib(exc: Exception) -> bool:
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in {401, 403}
+    return False
+
+
+async def _crawl_page_with_urllib(url: str, headers: dict[str, str], timeout: float) -> Optional[str]:
+    def _fetch() -> Optional[str]:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            charset = resp.headers.get_content_charset() or "utf-8"
+            return resp.read().decode(charset, errors="ignore")
+
+    try:
+        return await asyncio.to_thread(_fetch)
+    except Exception as exc:
+        logger.warning(f"urllib fallback failed for {url}: {exc}")
+        return None
+
+
+def _sync_recommended_source_row(row, source_def: dict) -> bool:
+    expected_url_hash = hashlib.sha256(source_def["url"].encode("utf-8")).hexdigest()
+    updates = {
+        "name": source_def["name"],
+        "url": source_def["url"],
+        "url_hash": expected_url_hash,
+        "category": source_def.get("category"),
+        "region": source_def.get("region"),
+        "tags": source_def.get("tags", []),
+        "description": source_def.get("description", ""),
+        "recommended": 1,
+        "enabled": 1,
+        "priority": 5,
+    }
+    changed = False
+    for field_name, expected_value in updates.items():
+        if getattr(row, field_name, None) != expected_value:
+            setattr(row, field_name, expected_value)
+            changed = True
+    return changed
 
 async def _ensure_default_sources(db) -> int:
     """Ensure recommended sources are present in the CrawlSource table. Returns count inserted."""
@@ -222,6 +269,19 @@ async def _ensure_default_sources(db) -> int:
     from sqlalchemy import select
 
     inserted = 0
+    repaired = 0
+    recommended_rows = (
+        await db.execute(
+            select(CrawlSource)
+            .where(CrawlSource.recommended == 1)
+            .order_by(CrawlSource.id)
+        )
+    ).scalars().all()
+    if len(recommended_rows) == len(RECOMMENDED_SOURCES):
+        for row, source_def in zip(recommended_rows, RECOMMENDED_SOURCES):
+            if _sync_recommended_source_row(row, source_def):
+                repaired += 1
+
     for src in RECOMMENDED_SOURCES:
         url_hash = hashlib.sha256(src["url"].encode("utf-8")).hexdigest()
         existing = await db.execute(select(CrawlSource).where(CrawlSource.url_hash == url_hash))
@@ -241,7 +301,7 @@ async def _ensure_default_sources(db) -> int:
             last_status="pending",
         ))
         inserted += 1
-    if inserted:
+    if inserted or repaired:
         try:
             await db.flush()
         except Exception:
@@ -308,14 +368,9 @@ async def _get_todays_event_names(db, day: datetime) -> set[str]:
     return result
 
 
-async def crawl_and_store() -> dict:
-    """Crawl all active sources, dedup by event_name+source_url, write new entries to DB."""
-    from .database import AsyncSessionLocal
-    from .models.knowledge_base import KnowledgeEntry, KnowledgeVersion, CrawlSource
-    from sqlalchemy import select, update
 
-    logger.info("Starting knowledge base crawl job...")
-    stats = {
+def _build_crawl_stats() -> dict:
+    return {
         "imported": 0,
         "updated": 0,
         "skipped_duplicates": 0,
@@ -328,21 +383,250 @@ async def crawl_and_store() -> dict:
         "todays_unique_count": 0,
     }
 
-    async with AsyncSessionLocal() as db:
+
+def _get_session_factory():
+    from .database import AsyncSessionLocal
+
+    return AsyncSessionLocal
+
+
+async def _commit_session(db, *, context: str) -> bool:
+    try:
+        await db.commit()
+        return True
+    except Exception as exc:
+        logger.error(f"Failed to commit {context}: {exc}")
+        await db.rollback()
+        return False
+
+
+async def _set_source_status(db, crawl_source_model, source_id: Optional[int], *,
+                             status: str, crawled_at: datetime, imported: int) -> None:
+    from sqlalchemy import update
+
+    if source_id is None:
+        return
+
+    await db.execute(
+        update(crawl_source_model)
+        .where(crawl_source_model.id == source_id)
+        .values(
+            last_status=status,
+            last_crawled_at=crawled_at,
+            last_imported=imported,
+        )
+    )
+
+
+async def _mark_source_failed(db, crawl_source_model, source: dict, now: datetime) -> None:
+    source_id = source.get("id")
+    if source_id is None:
+        return
+
+    try:
+        await _set_source_status(
+            db,
+            crawl_source_model,
+            source_id,
+            status="failed",
+            crawled_at=now,
+            imported=0,
+        )
+        await _commit_session(db, context=f"failed status for source {source_id}")
+    except Exception as exc:
+        logger.warning(f"Failed to persist failed status for source {source_id}: {exc}")
+        await db.rollback()
+
+
+async def _process_single_source(db, source: dict, today_events: set[str], stats: dict) -> None:
+    from .models.knowledge_base import KnowledgeEntry, KnowledgeVersion, CrawlSource
+    from sqlalchemy import select
+
+    url = source["url"]
+    source_name = source["name"]
+    source_now = datetime.utcnow()
+    source_stats = {
+        "imported": 0,
+        "updated": 0,
+        "skipped_duplicates": 0,
+        "skipped_short": 0,
+        "filtered_empty_event_name": 0,
+        "skipped_daily_duplicate": 0,
+    }
+
+    try:
+        html = await crawl_page(url)
+        if not html:
+            stats["sources_failed"] += 1
+            stats["failed"] += 1
+            await _mark_source_failed(db, CrawlSource, source, source_now)
+            return
+
+        text = extract_text_from_html(html)
+        if len(text) < 100:
+            stats["sources_failed"] += 1
+            stats["skipped_short"] += 1
+            await _mark_source_failed(db, CrawlSource, source, source_now)
+            return
+
+        chunks = chunk_text(text)
+        event_name_base = source_name.split(" - ")[0] if " - " in source_name else source_name
+        if not event_name_base or not event_name_base.strip():
+            logger.warning(
+                f"Skip crawl source due to empty event_name_base: source_name={source_name!r}, "
+                f"url={url!r}, chunks={len(chunks)}"
+            )
+            stats["sources_failed"] += 1
+            stats["failed"] += 1
+            stats["filtered_empty_event_name"] += len(chunks)
+            await _mark_source_failed(db, CrawlSource, source, source_now)
+            return
+
+        for idx, chunk in enumerate(chunks):
+            if event_name_base in today_events:
+                source_stats["skipped_daily_duplicate"] += 1
+                logger.debug(
+                    f"Skip daily duplicate: event_name={event_name_base!r}, "
+                    f"chunk={idx}, url={url!r}"
+                )
+                continue
+
+            content_hash = KnowledgeEntry.compute_hash(chunk)
+            existing = await db.execute(
+                select(KnowledgeEntry).where(
+                    KnowledgeEntry.event_name == event_name_base,
+                    KnowledgeEntry.chunk_index == idx,
+                    KnowledgeEntry.source_url == url,
+                )
+            )
+            found = existing.scalar_one_or_none()
+            if found:
+                if found.content_hash == content_hash:
+                    source_stats["skipped_duplicates"] += 1
+                    continue
+                found.content = chunk
+                found.content_hash = content_hash
+                found.version += 1
+                found.version_count = (found.version_count or 1) + 1
+                found.updated_at = source_now
+                found.last_indexed_at = source_now
+                db.add(KnowledgeVersion(
+                    entry_id=found.id,
+                    version=found.version,
+                    title=found.title,
+                    content=chunk,
+                    content_hash=content_hash,
+                    change_summary=f"Web crawl update from {url}",
+                    change_source="web_crawl",
+                    operator="crawler",
+                    snapshot_meta={
+                        "source_url": url,
+                        "chunk_index": idx,
+                        "chunk_total": len(chunks),
+                    },
+                    created_at=source_now,
+                ))
+                source_stats["updated"] += 1
+                continue
+
+            entry = KnowledgeEntry(
+                title=source_name if idx == 0 else f"{source_name} (part {idx + 1})",
+                content=chunk,
+                content_hash=content_hash,
+                source_type="web_crawl",
+                source_url=url,
+                file_name=None,
+                file_type="html",
+                event_name=event_name_base,
+                year=None,
+                region=source.get("region"),
+                importance=5,
+                category=source.get("category"),
+                tags=source.get("tags", []),
+                figures=[],
+                keywords=[],
+                language="zh-CN",
+                source_reliability=7,
+                chunk_index=idx,
+                chunk_total=len(chunks),
+                version=1,
+                version_count=1,
+                parent_event_id=None,
+                status="active",
+                is_locked=0,
+                created_at=source_now,
+                updated_at=source_now,
+                last_indexed_at=source_now,
+            )
+            db.add(entry)
+            await db.flush()
+            db.add(KnowledgeVersion(
+                entry_id=entry.id,
+                version=1,
+                title=entry.title,
+                content=chunk,
+                content_hash=content_hash,
+                change_summary=f"Initial crawl from {url}",
+                change_source="web_crawl",
+                operator="crawler",
+                snapshot_meta={
+                    "source_url": url,
+                    "chunk_index": idx,
+                    "chunk_total": len(chunks),
+                },
+                created_at=source_now,
+            ))
+            await db.flush()
+            source_stats["imported"] += 1
+
+        await _set_source_status(
+            db,
+            CrawlSource,
+            source.get("id"),
+            status="success",
+            crawled_at=source_now,
+            imported=source_stats["imported"],
+        )
+        if not await _commit_session(db, context=f"crawl source {source_name}"):
+            stats["sources_failed"] += 1
+            stats["failed"] += 1
+            await _mark_source_failed(db, CrawlSource, source, source_now)
+            return
+
+        for key, value in source_stats.items():
+            stats[key] += value
+
+        if source_stats["imported"] > 0:
+            today_events.add(event_name_base)
+
+        logger.info(
+            f"Crawl source {source_name}: imported={source_stats['imported']}, "
+            f"updated={source_stats['updated']}, skipped={source_stats['skipped_duplicates']}"
+        )
+    except Exception as exc:
+        logger.error(f"Failed to process crawl source {source_name}: {exc}")
+        await db.rollback()
+        stats["sources_failed"] += 1
+        stats["failed"] += 1
+        await _mark_source_failed(db, CrawlSource, source, source_now)
+
+
+async def _crawl_and_store_unlocked() -> dict:
+    """Crawl all active sources, dedup by event_name+source_url, write new entries to DB."""
+    logger.info("Starting knowledge base crawl job...")
+    stats = _build_crawl_stats()
+
+    async with _get_session_factory()() as db:
         try:
             await _ensure_default_sources(db)
         except Exception as e:
             logger.warning(f"Failed to seed default crawl sources: {e}")
 
-        try:
-            await db.commit()
-        except Exception:
-            await db.rollback()
+        await _commit_session(db, context="default crawl source seed")
 
         sources = await _gather_active_sources(db)
         logger.info(f"Crawl job: {len(sources)} active sources")
 
-        # 一次性加载今日已存在的 event_name 集合, 用于每日去重
         try:
             today_events = await _get_todays_event_names(db, datetime.utcnow())
             stats["todays_unique_count"] = len(today_events)
@@ -352,198 +636,8 @@ async def crawl_and_store() -> dict:
             today_events = set()
 
         for source in sources:
-            url = source["url"]
-            source_name = source["name"]
             stats["sources_processed"] += 1
-
-            html = await crawl_page(url)
-            if not html:
-                stats["sources_failed"] += 1
-                stats["failed"] += 1
-                if source.get("id") is not None:
-                    try:
-                        await db.execute(
-                            update(CrawlSource)
-                            .where(CrawlSource.id == source["id"])
-                            .values(last_status="failed", last_crawled_at=datetime.utcnow(), last_imported=0)
-                        )
-                    except Exception:
-                        pass
-                continue
-
-            text = extract_text_from_html(html)
-            if len(text) < 100:
-                stats["sources_failed"] += 1
-                stats["skipped_short"] += 1
-                if source.get("id") is not None:
-                    try:
-                        await db.execute(
-                            update(CrawlSource)
-                            .where(CrawlSource.id == source["id"])
-                            .values(last_status="failed", last_crawled_at=datetime.utcnow(), last_imported=0)
-                        )
-                    except Exception:
-                        pass
-                continue
-
-            chunks = chunk_text(text)
-            now = datetime.utcnow()
-            event_name_base = source_name.split(" - ")[0] if " - " in source_name else source_name
-            # event_name_base 为空或仅含空白字符时, 整批 chunk 跳过写入, 但仍计入 sources_processed
-            if not event_name_base or not event_name_base.strip():
-                logger.warning(
-                    f"Skip crawl source due to empty event_name_base: source_name={source_name!r}, "
-                    f"url={url!r}, chunks={len(chunks)}"
-                )
-                stats["filtered_empty_event_name"] = stats.get("filtered_empty_event_name", 0) + len(chunks)
-                stats["sources_processed"] += 0  # 仍计入 source
-                if source.get("id") is not None:
-                    try:
-                        await db.execute(
-                            update(CrawlSource)
-                            .where(CrawlSource.id == source["id"])
-                            .values(last_status="failed", last_crawled_at=now, last_imported=0)
-                        )
-                    except Exception:
-                        pass
-                continue
-            imported_this_source = 0
-            skipped_this_source = 0
-            updated_this_source = 0
-
-            for idx, chunk in enumerate(chunks):
-                # 每日去重: 同一 event_name 当日已存在则跳过整个 chunk
-                if event_name_base in today_events:
-                    stats["skipped_daily_duplicate"] += 1
-                    logger.debug(
-                        f"Skip daily duplicate: event_name={event_name_base!r}, "
-                        f"chunk={idx}, url={url!r}"
-                    )
-                    continue
-
-                content_hash = KnowledgeEntry.compute_hash(chunk)
-
-                existing = await db.execute(
-                    select(KnowledgeEntry).where(
-                        KnowledgeEntry.event_name == event_name_base,
-                        KnowledgeEntry.chunk_index == idx,
-                        KnowledgeEntry.source_url == url,
-                    )
-                )
-                found = existing.scalar_one_or_none()
-                if found:
-                    if found.content_hash == content_hash:
-                        skipped_this_source += 1
-                        stats["skipped_duplicates"] += 1
-                        continue
-                    # Content changed -> version bump
-                    found.content = chunk
-                    found.content_hash = content_hash
-                    found.version += 1
-                    found.version_count = (found.version_count or 1) + 1
-                    found.updated_at = now
-                    found.last_indexed_at = now
-                    db.add(KnowledgeVersion(
-                        entry_id=found.id,
-                        version=found.version,
-                        title=found.title,
-                        content=chunk,
-                        content_hash=content_hash,
-                        change_summary=f"Web crawl update from {url}",
-                        change_source="web_crawl",
-                        operator="crawler",
-                        snapshot_meta={
-                            "source_url": url,
-                            "chunk_index": idx,
-                            "chunk_total": len(chunks),
-                        },
-                        created_at=now,
-                    ))
-                    updated_this_source += 1
-                    stats["updated"] += 1
-                    continue
-
-                entry = KnowledgeEntry(
-                    title=source_name if idx == 0 else f"{source_name} (part {idx + 1})",
-                    content=chunk,
-                    content_hash=content_hash,
-                    source_type="web_crawl",
-                    source_url=url,
-                    file_name=None,
-                    file_type="html",
-                    event_name=event_name_base,
-                    year=None,
-                    region=source.get("region"),
-                    importance=5,
-                    category=source.get("category"),
-                    tags=source.get("tags", []),
-                    figures=[],
-                    keywords=[],
-                    language="zh-CN",
-                    source_reliability=7,
-                    chunk_index=idx,
-                    chunk_total=len(chunks),
-                    version=1,
-                    version_count=1,
-                    parent_event_id=None,
-                    status="active",
-                    is_locked=0,
-                    created_at=now,
-                    updated_at=now,
-                    last_indexed_at=now,
-                )
-                db.add(entry)
-                try:
-                    await db.flush()
-                except Exception:
-                    pass
-                try:
-                    db.add(KnowledgeVersion(
-                        entry_id=entry.id,
-                        version=1,
-                        title=entry.title,
-                        content=chunk,
-                        content_hash=content_hash,
-                        change_summary=f"Initial crawl from {url}",
-                        change_source="web_crawl",
-                        operator="crawler",
-                        snapshot_meta={
-                            "source_url": url,
-                            "chunk_index": idx,
-                            "chunk_total": len(chunks),
-                        },
-                        created_at=now,
-                    ))
-                    await db.flush()
-                except Exception:
-                    pass
-                imported_this_source += 1
-                stats["imported"] += 1
-
-            if source.get("id") is not None:
-                try:
-                    await db.execute(
-                        update(CrawlSource)
-                        .where(CrawlSource.id == source["id"])
-                        .values(
-                            last_status="success",
-                            last_crawled_at=now,
-                            last_imported=imported_this_source,
-                        )
-                    )
-                except Exception:
-                    pass
-
-            logger.info(
-                f"Crawl source {source_name}: imported={imported_this_source}, "
-                f"updated={updated_this_source}, skipped={skipped_this_source}"
-            )
-
-        try:
-            await db.commit()
-        except Exception as e:
-            logger.error(f"Failed to commit crawled data: {e}")
-            await db.rollback()
+            await _process_single_source(db, source, today_events, stats)
 
     logger.info(
         f"Crawl job finished. imported={stats['imported']}, updated={stats['updated']}, "
@@ -555,6 +649,14 @@ async def crawl_and_store() -> dict:
     )
     return stats
 
+
+async def crawl_and_store() -> dict:
+    """Serialize crawl execution to avoid overlapping jobs and long-lived write locks."""
+    if _crawl_execution_lock.locked():
+        logger.info("Another crawl job is already running, waiting for the active job to finish")
+
+    async with _crawl_execution_lock:
+        return await _crawl_and_store_unlocked()
 
 _crawl_task: Optional[asyncio.Task] = None
 _crawl_interval_seconds = 86400  # 1 day
@@ -590,3 +692,6 @@ def stop_crawl_scheduler():
     if _crawl_task is not None:
         _crawl_task.cancel()
         _crawl_task = None
+
+
+

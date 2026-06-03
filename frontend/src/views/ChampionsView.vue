@@ -246,10 +246,10 @@ async function loadCards() {
   try {
     const sid = getSessionId()
     const res = await championApi.getChampionCards(1, 100)
-    const items = res.data?.items || []
+    const items = (res.data?.items || []) as unknown as BackendChampionCard[]
     cards.value = items.map(mapCard)
-  } catch (e: any) {
-    loadError.value = e?.message || '网络异常, 请稍后重试'
+  } catch (e: unknown) {
+    loadError.value = e instanceof Error ? e.message : '网络异常, 请稍后重试'
     cards.value = []
   } finally {
     loading.value = false

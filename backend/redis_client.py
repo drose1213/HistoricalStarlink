@@ -17,6 +17,9 @@ try:
         password=settings.REDIS_PASSWORD,
         decode_responses=True,
         max_connections=20,
+        # 关键: 防止 Redis 不可用时永久 hang
+        socket_connect_timeout=1.0,
+        socket_timeout=1.0,
     )
     redis_client = aioredis.Redis(connection_pool=redis_pool)
     _REDIS_AVAILABLE = True

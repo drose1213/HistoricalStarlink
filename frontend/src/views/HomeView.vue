@@ -94,6 +94,7 @@
                 />
                 <button class="search-btn" aria-label="搜索" @mousedown.prevent="handleSearchEnter">
                   <span class="search-icon" aria-hidden="true"></span>
+                  <span class="search-btn-label">检索</span>
                 </button>
               </div>
               <div class="search-loading-bar" :class="{ active: searchLoading }">
@@ -181,7 +182,7 @@ interface LocalSearchResult {
   id: string
   name: string
   year: number | null
-  region: string
+  region: 'china' | 'foreign'
   importance: number
   description?: string
   score: number
@@ -209,6 +210,99 @@ const homeFeed = ref<HomeFeedResponse>({
 })
 
 const exploredIdSet = computed(() => new Set(homeFeed.value.explored.map(e => e.id)))
+const eventById = computed(() => new Map(historyEvents.map(event => [event.id, event])))
+const eventIdByName = computed(() => {
+  const pairs = historyEvents.map(event => [normalizeSearchText(event.name), event.id] as const)
+  return new Map(pairs)
+})
+
+function normalizeSearchText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, '')
+}
+
+function buildSearchResult(
+  event: HistoryEvent,
+  score: number,
+  source: string,
+  description?: string,
+): LocalSearchResult {
+  return {
+    id: event.id,
+    name: event.name,
+    year: event.year,
+    region: event.region,
+    importance: event.importance,
+    description: description || event.description,
+    score,
+    source,
+  }
+}
+
+function resolveEventFromSearchCandidate(candidate: Partial<LocalSearchResult> & { title?: string }): HistoryEvent | null {
+  if (candidate.id) {
+    const byId = eventById.value.get(candidate.id)
+    if (byId) return byId
+  }
+  const nameKey = normalizeSearchText(candidate.name || candidate.title || '')
+  if (!nameKey) return null
+  const eventId = eventIdByName.value.get(nameKey)
+  if (!eventId) return null
+  return eventById.value.get(eventId) || null
+}
+
+function isSearchRelevant(candidate: Partial<LocalSearchResult> & { title?: string }, query: string): boolean {
+  const normalizedQuery = normalizeSearchText(query)
+  if (!normalizedQuery) return true
+  const haystacks = [
+    candidate.name,
+    candidate.title,
+    candidate.description,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .map(value => normalizeSearchText(value))
+  return haystacks.some(value => value.includes(normalizedQuery))
+}
+
+function dedupeSearchResults(results: LocalSearchResult[]): LocalSearchResult[] {
+  const deduped = new Map<string, LocalSearchResult>()
+  for (const result of results) {
+    const existing = deduped.get(result.id)
+    if (!existing || result.score > existing.score) {
+      deduped.set(result.id, result)
+    }
+  }
+  return [...deduped.values()]
+}
+
+function sortSearchResults(results: LocalSearchResult[], query: string): LocalSearchResult[] {
+  const normalizedQuery = normalizeSearchText(query)
+  return [...results].sort((a, b) => {
+    const aName = normalizeSearchText(a.name)
+    const bName = normalizeSearchText(b.name)
+    const aExact = aName === normalizedQuery ? 3 : aName.startsWith(normalizedQuery) ? 2 : aName.includes(normalizedQuery) ? 1 : 0
+    const bExact = bName === normalizedQuery ? 3 : bName.startsWith(normalizedQuery) ? 2 : bName.includes(normalizedQuery) ? 1 : 0
+    if (aExact !== bExact) return bExact - aExact
+    if (a.score !== b.score) return b.score - a.score
+    if (a.importance !== b.importance) return b.importance - a.importance
+    return a.year === b.year ? a.name.localeCompare(b.name, 'zh-CN') : (b.year || 0) - (a.year || 0)
+  })
+}
+
+function sanitizeRagSearchResults(query: string, items: LocalSearchResult[]): LocalSearchResult[] {
+  const out: LocalSearchResult[] = []
+  for (const item of items) {
+    if (!isSearchRelevant(item, query)) continue
+    const event = resolveEventFromSearchCandidate(item)
+    if (!event) continue
+    out.push(buildSearchResult(
+      event,
+      Math.max(item.score || 0, event.importance),
+      item.source || 'rag',
+      item.description,
+    ))
+  }
+  return out
+}
 
 function onSearchInput() {
   showSearchDropdown.value = true
@@ -225,10 +319,10 @@ function onSearchInput() {
       // 优先调用混合搜索 (事件表 + RAG 知识库), 失败时降级到纯 RAG
       try {
         const res = await ragApi.hybridSearch({ query: q, top_k: 5 })
-        ragSearchResults.value = (res.data || []) as LocalSearchResult[]
+        ragSearchResults.value = sanitizeRagSearchResults(q, (res.data || []) as LocalSearchResult[])
       } catch {
         const res = await ragApi.search({ query: q, top_k: 5 })
-        ragSearchResults.value = (res.data || []) as LocalSearchResult[]
+        ragSearchResults.value = sanitizeRagSearchResults(q, (res.data || []) as LocalSearchResult[])
       }
     } catch {
       ragSearchResults.value = []
@@ -237,9 +331,15 @@ function onSearchInput() {
 }
 
 const searchResults = computed(() => {
-  if (!searchQuery.value.trim()) return []
-  if (ragSearchResults.value.length > 0) return ragSearchResults.value
-  return searchEvents(searchQuery.value.trim()).slice(0, 5) as LocalSearchResult[]
+  const query = searchQuery.value.trim()
+  if (!query) return []
+
+  const localResults = searchEvents(query)
+    .slice(0, 8)
+    .map(event => buildSearchResult(event, event.importance + 20, 'event_table'))
+
+  const merged = dedupeSearchResults([...localResults, ...ragSearchResults.value])
+  return sortSearchResults(merged, query).slice(0, 6)
 })
 
 const filters = [
@@ -283,8 +383,10 @@ function formatEventYear(year: number | null): string {
 }
 
 function handleSearchSelect(id: string) {
+  if (!eventById.value.has(id)) return
   searchQuery.value = ''
   showSearchDropdown.value = false
+  ragSearchResults.value = []
   goToEvent(id)
 }
 
@@ -687,8 +789,8 @@ onBeforeUnmount(() => {
 
 .search-input {
   width: 100%;
-  height: 38px;
-  padding: 0 48px 0 16px;
+  height: 40px;
+  padding: 0 76px 0 16px;
   background: rgba(2, 5, 11, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.24);
   border-radius: 0;
@@ -710,28 +812,44 @@ onBeforeUnmount(() => {
 
 .search-btn {
   position: absolute;
+  top: 4px;
   right: 5px;
-  width: 28px;
-  height: 28px;
-  border: 1px solid rgba(139, 255, 225, 0.7);
-  border-radius: 50%;
-  background: rgba(139, 255, 225, 0.18);
-  transition: transform 0.18s ease, background 0.18s ease;
+  min-width: 56px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid rgba(139, 255, 225, 0.78);
+  border-radius: 0;
+  background: linear-gradient(180deg, rgba(139, 255, 225, 0.2), rgba(139, 255, 225, 0.08));
+  color: #dffff6;
+  box-shadow: 0 0 14px rgba(139, 255, 225, 0.12);
+  transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
 .search-btn:hover {
   transform: scale(1.06);
-  background: rgba(139, 255, 225, 0.26);
+  background: linear-gradient(180deg, rgba(139, 255, 225, 0.34), rgba(139, 255, 225, 0.12));
+  border-color: rgba(139, 255, 225, 0.96);
+  box-shadow: 0 0 20px rgba(139, 255, 225, 0.24);
 }
 
 .search-icon {
   display: block;
-  width: 9px;
-  height: 9px;
-  margin: 7px auto 0;
-  border-right: 2px solid #8bffe1;
-  border-bottom: 2px solid #8bffe1;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
   transform: rotate(-45deg);
+}
+
+.search-btn-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .search-loading-bar {
@@ -783,9 +901,19 @@ onBeforeUnmount(() => {
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
+.search-item.search-empty {
+  justify-content: center;
+  cursor: default;
+}
+
 .search-item:hover {
   background: rgba(139, 255, 225, 0.08);
   border-left-color: #8bffe1;
+}
+
+.search-item.search-empty:hover {
+  background: transparent;
+  border-left-color: transparent;
 }
 
 .search-item-name {

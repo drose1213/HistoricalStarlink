@@ -250,6 +250,13 @@
   box-shadow: var(--glow-pink);
 }
 
+.cy-toast--warning {
+  background: rgba(212, 168, 75, 0.15);
+  border: 1px solid var(--accent-gold);
+  color: var(--accent-gold);
+  box-shadow: 0 0 18px rgba(212, 168, 75, 0.28);
+}
+
 @keyframes cy-toast-in {
   from {
     opacity: 0;

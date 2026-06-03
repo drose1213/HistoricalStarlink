@@ -2,11 +2,11 @@
   <div class="kb-view">
     <header class="kb-header">
       <router-link to="/" class="back-link">
-        <span>←</span> 返回首页
+        <span><</span> Home
       </router-link>
       <h2 class="page-title">
-        <span class="title-icon">◈</span>
-        RAG 知识库管理
+        <span class="title-icon">*</span>
+        RAG Knowledge Base
       </h2>
       <div class="header-accent"></div>
     </header>
@@ -29,26 +29,26 @@
         <div class="stats-grid">
           <div class="stat-card cy-card">
             <span class="stat-value">{{ stats.total }}</span>
-            <span class="stat-label">总条目数</span>
+            <span class="stat-label">Total Entries</span>
           </div>
           <div class="stat-card cy-card">
             <span class="stat-value">{{ stats.active }}</span>
-            <span class="stat-label">活跃条目</span>
+            <span class="stat-label">Active Entries</span>
           </div>
           <div class="stat-card cy-card">
             <span class="stat-value">{{ stats.by_source?.file_import || 0 }}</span>
-            <span class="stat-label">文件导入</span>
+            <span class="stat-label">File Imports</span>
           </div>
           <div class="stat-card cy-card">
             <span class="stat-value">{{ stats.by_source?.web_crawl || 0 }}</span>
-            <span class="stat-label">网页爬取</span>
+            <span class="stat-label">Web Crawls</span>
           </div>
         </div>
 
         <div class="section-block cy-card">
           <h3 class="section-title">
-            <span class="section-icon">◈</span>
-            数据来源分布
+            <span class="section-icon">*</span>
+            Source Distribution
           </h3>
           <div class="source-bars">
             <div v-for="(count, source) in stats.by_source" :key="source" class="source-bar-item">
@@ -66,286 +66,323 @@
 
         <div class="section-block cy-card">
           <h3 class="section-title">
-            <span class="section-icon">◈</span>
-            区域分布
+            <span class="section-icon">*</span>
+            Region Distribution
           </h3>
           <div class="region-grid">
             <div class="region-item">
               <span class="region-dot cn"></span>
-              <span class="region-label">中国历史</span>
+              <span class="region-label">China</span>
               <span class="region-count">{{ stats.by_region?.china || 0 }}</span>
             </div>
             <div class="region-item">
               <span class="region-dot foreign"></span>
-              <span class="region-label">外国历史</span>
+              <span class="region-label">Foreign</span>
               <span class="region-count">{{ stats.by_region?.foreign || 0 }}</span>
             </div>
           </div>
           <div v-if="stats.latest_update" class="last-update">
-            最近更新: {{ stats.latest_update }}
+            Latest update: {{ stats.latest_update }}
           </div>
         </div>
 
         <div class="action-row">
           <button class="cy-btn cy-btn--cyan" :disabled="crawling" @click="triggerCrawl">
-            {{ crawling ? '爬取中...' : '🔄 立即爬取网页' }}
+            {{ crawling ? 'Crawling...' : 'Run Crawl Now' }}
           </button>
           <button class="cy-btn cy-btn--gold" :disabled="rebuilding" @click="rebuildIndex">
-            {{ rebuilding ? '重建中...' : '⚡ 重建 RAG 索引' }}
+            {{ rebuilding ? 'Rebuilding...' : 'Rebuild RAG Index' }}
           </button>
           <button class="cy-btn cy-btn--ghost" :disabled="seeding" @click="triggerSeed">
-            {{ seeding ? '导入中...' : '🌱 从种子库导入' }}
+            {{ seeding ? 'Importing...' : 'Import Seeds' }}
           </button>
         </div>
       </div>
 
       <div v-if="activeTab === 'import'" class="tab-content">
-        <div class="section-block cy-card">
-          <h3 class="section-title">
-            <span class="section-icon">◈</span>
-            文件导入
-          </h3>
-          <p class="import-hint">支持 txt / md / csv / json 格式文件，大文件会自动分片存储（每片 2000 字符，重叠 200 字符）</p>
-
-          <div class="file-drop-zone" @dragover.prevent @drop.prevent="handleDrop" @click="triggerFileInput">
-            <input ref="fileInputRef" type="file" accept=".txt,.md,.csv,.json,.html" class="file-input-hidden" @change="handleFileSelect" />
-            <div v-if="!selectedFile" class="drop-placeholder">
-              <span class="drop-icon">📄</span>
-              <span>拖拽文件到此处，或点击选择文件</span>
+        <div class="import-layout">
+          <div class="section-block cy-card import-primary-card">
+            <div class="panel-header-row">
+              <div>
+                <h3 class="section-title">
+                  <span class="section-icon">+</span>
+                  File Import
+                </h3>
+                <p class="import-hint">Upload txt, md, csv, json, or html files. Large files are chunked automatically for later retrieval.</p>
+              </div>
+              <div class="import-chip-row">
+                <span class="import-chip">Drag & Drop</span>
+                <span class="import-chip">Auto Chunk</span>
+                <span class="import-chip">Metadata Ready</span>
+              </div>
             </div>
-            <div v-else class="selected-file">
-              <span class="file-icon">📎</span>
-              <span class="file-name">{{ selectedFile.name }}</span>
-              <span class="file-size">{{ formatFileSize(selectedFile.size) }}</span>
-              <button class="remove-btn" @click.stop="selectedFile = null">✕</button>
+
+            <div class="file-drop-zone" @dragover.prevent @drop.prevent="handleDrop" @click="triggerFileInput">
+              <input ref="fileInputRef" type="file" accept=".txt,.md,.csv,.json,.html" class="file-input-hidden" @change="handleFileSelect" />
+              <div v-if="!selectedFile" class="drop-placeholder">
+                <span class="drop-icon">v</span>
+                <span>Drop a file here or click to choose one</span>
+              </div>
+              <div v-else class="selected-file selected-file--wide">
+                <span class="file-icon">[]</span>
+                <div class="selected-file-meta">
+                  <span class="file-name">{{ selectedFile.name }}</span>
+                  <span class="file-size">{{ formatFileSize(selectedFile.size) }}</span>
+                </div>
+                <button class="remove-btn" @click.stop="selectedFile = null">x</button>
+              </div>
+            </div>
+
+            <div class="import-meta-form">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Event Name</label>
+                  <input v-model="importMeta.event_name" type="text" placeholder="Linked event name" class="cy-input" />
+                </div>
+                <div class="form-group">
+                  <label>Year</label>
+                  <input v-model.number="importMeta.year" type="number" placeholder="e.g. -221 / 1911" class="cy-input" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Region</label>
+                  <select v-model="importMeta.region" class="cy-input">
+                    <option value="">Any</option>
+                    <option value="china">China</option>
+                    <option value="foreign">Foreign</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Category</label>
+                  <select v-model="importMeta.category" class="cy-input">
+                    <option value="">Any</option>
+                    <option value="&#25919;&#27835;">Politics</option>
+                    <option value="&#20891;&#20107;">Military</option>
+                    <option value="&#31185;&#25216;">Technology</option>
+                    <option value="&#25991;&#21270;">Culture</option>
+                    <option value="&#32463;&#27982;">Economy</option>
+                    <option value="&#31038;&#20250;">Society</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Tags</label>
+                  <input v-model="importMeta.tags" type="text" placeholder="tag1, tag2, tag3" class="cy-input" />
+                </div>
+                <div class="form-group">
+                  <label>Importance (1-10)</label>
+                  <input v-model.number="importMeta.importance" type="number" min="1" max="10" placeholder="5" class="cy-input" />
+                </div>
+              </div>
+            </div>
+
+            <div class="import-action-row">
+              <button class="cy-btn cy-btn--gold" :disabled="!selectedFile || importing" @click="doImport">
+                {{ importing ? 'Importing...' : 'Start Import' }}
+              </button>
+              <span class="import-inline-tip">Tip: set event and category first so later search feels cleaner.</span>
+            </div>
+
+            <div v-if="importResult" class="import-result" :class="importResult.imported > 0 ? 'success' : 'info'">
+              <span>{{ importResult.imported > 0 ? 'OK' : 'i' }}</span>
+              <span>Imported {{ importResult.imported }} chunks, skipped {{ importResult.skipped }} duplicates</span>
             </div>
           </div>
 
-          <div class="import-meta-form">
-            <div class="form-row">
-              <div class="form-group">
-                <label>事件名称</label>
-                <input v-model="importMeta.event_name" type="text" placeholder="关联事件名称" class="cy-input" />
+          <div class="section-block cy-card import-secondary-card">
+            <div class="panel-header-row panel-header-row--stacked">
+              <div>
+                <h3 class="section-title">
+                  <span class="section-icon">+</span>
+                  Manual Entry
+                </h3>
+                <p class="import-hint">Use this panel for one-off notes, corrections, or small additions that do not come from files.</p>
               </div>
-              <div class="form-group">
-                <label>年份</label>
-                <input v-model.number="importMeta.year" type="number" placeholder="如: -221, 105" class="cy-input" />
-              </div>
+              <span class="manual-pill">Quick Add</span>
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>区域</label>
-                <select v-model="importMeta.region" class="cy-input">
-                  <option value="">不指定</option>
-                  <option value="china">中国</option>
-                  <option value="foreign">外国</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>分类</label>
-                <select v-model="importMeta.category" class="cy-input">
-                  <option value="">不指定</option>
-                  <option value="政治">政治</option>
-                  <option value="军事">军事</option>
-                  <option value="科技">科技</option>
-                  <option value="文化">文化</option>
-                  <option value="经济">经济</option>
-                  <option value="社会">社会</option>
-                </select>
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>标签（逗号分隔）</label>
-                <input v-model="importMeta.tags" type="text" placeholder="标签1,标签2,标签3" class="cy-input" />
-              </div>
-              <div class="form-group">
-                <label>重要性 (1-10)</label>
-                <input v-model.number="importMeta.importance" type="number" min="1" max="10" placeholder="5" class="cy-input" />
-              </div>
-            </div>
-          </div>
 
-          <button class="cy-btn cy-btn--gold" :disabled="!selectedFile || importing" @click="doImport">
-            {{ importing ? '导入中...' : '🚀 开始导入' }}
-          </button>
-
-          <div v-if="importResult" class="import-result" :class="importResult.imported > 0 ? 'success' : 'info'">
-            <span>{{ importResult.imported > 0 ? '✅' : 'ℹ️' }}</span>
-            <span>导入 {{ importResult.imported }} 个分片，跳过 {{ importResult.skipped }} 个重复</span>
-          </div>
-        </div>
-
-        <div class="section-block cy-card">
-          <h3 class="section-title">
-            <span class="section-icon">◈</span>
-            手动添加
-          </h3>
-          <div class="manual-form">
-            <div class="form-group">
-              <label>标题 *</label>
-              <input v-model="manualForm.title" type="text" placeholder="条目标题" class="cy-input" />
-            </div>
-            <div class="form-group">
-              <label>内容 *</label>
-              <textarea v-model="manualForm.content" rows="6" placeholder="条目内容" class="cy-textarea" />
-            </div>
-            <div class="form-row">
+            <div class="manual-form">
               <div class="form-group">
-                <label>事件名称</label>
-                <input v-model="manualForm.event_name" type="text" placeholder="关联事件" class="cy-input" />
+                <label>Title *</label>
+                <input v-model="manualForm.title" type="text" placeholder="Entry title" class="cy-input" />
               </div>
               <div class="form-group">
-                <label>年份</label>
-                <input v-model.number="manualForm.year" type="number" placeholder="年份" class="cy-input" />
+                <label>Content *</label>
+                <textarea v-model="manualForm.content" rows="7" placeholder="Entry content" class="cy-textarea" />
               </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Event Name</label>
+                  <input v-model="manualForm.event_name" type="text" placeholder="Linked event" class="cy-input" />
+                </div>
+                <div class="form-group">
+                  <label>Year</label>
+                  <input v-model.number="manualForm.year" type="number" placeholder="Year" class="cy-input" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Region</label>
+                  <select v-model="manualForm.region" class="cy-input">
+                    <option value="">Any</option>
+                    <option value="china">China</option>
+                    <option value="foreign">Foreign</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Category</label>
+                  <select v-model="manualForm.category" class="cy-input">
+                    <option value="">Any</option>
+                    <option value="&#25919;&#27835;">Politics</option>
+                    <option value="&#20891;&#20107;">Military</option>
+                    <option value="&#31185;&#25216;">Technology</option>
+                    <option value="&#25991;&#21270;">Culture</option>
+                    <option value="&#32463;&#27982;">Economy</option>
+                    <option value="&#31038;&#20250;">Society</option>
+                  </select>
+                </div>
+              </div>
+              <button class="cy-btn cy-btn--cyan" :disabled="!manualForm.title || !manualForm.content || submitting" @click="doManualAdd">
+                {{ submitting ? 'Submitting...' : 'Add Entry' }}
+              </button>
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>区域</label>
-                <select v-model="manualForm.region" class="cy-input">
-                  <option value="">不指定</option>
-                  <option value="china">中国</option>
-                  <option value="foreign">外国</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>分类</label>
-                <select v-model="manualForm.category" class="cy-input">
-                  <option value="">不指定</option>
-                  <option value="政治">政治</option>
-                  <option value="军事">军事</option>
-                  <option value="科技">科技</option>
-                  <option value="文化">文化</option>
-                  <option value="经济">经济</option>
-                  <option value="社会">社会</option>
-                </select>
-              </div>
-            </div>
-            <button class="cy-btn cy-btn--cyan" :disabled="!manualForm.title || !manualForm.content || submitting" @click="doManualAdd">
-              {{ submitting ? '提交中...' : '➕ 添加条目' }}
-            </button>
           </div>
         </div>
       </div>
 
       <div v-if="activeTab === 'browse'" class="tab-content">
-        <div class="section-block cy-card">
-          <h3 class="section-title">
-            <span class="section-icon">◈</span>
-            条件检索
-          </h3>
-          <p class="import-hint">按需组合筛选条件, 支持区域/分类/年份/重要性/事件名称/标签/来源, 未来页面可直接调用此接口</p>
-          <div class="conditional-filters">
-            <div class="form-row">
-              <div class="form-group">
-                <label>关键词</label>
-                <input v-model="condFilters.text" type="text" placeholder="标题/事件/内容关键词" class="cy-input" />
-              </div>
-              <div class="form-group">
-                <label>事件名称(模糊)</label>
-                <input v-model="condFilters.event_name_like" type="text" placeholder="如: 丝绸" class="cy-input" />
-              </div>
+        <div class="section-block cy-card search-drawer-card">
+          <div class="drawer-head">
+            <div class="drawer-head-copy">
+              <h3 class="section-title">
+                <span class="section-icon">*</span>
+                Advanced Search
+              </h3>
+              <p class="import-hint">Open the drawer to combine region, category, year, importance, source, and status filters. Results stay visible below in every state.</p>
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>区域</label>
-                <select v-model="condFilters.region" class="cy-input">
-                  <option value="">不指定</option>
-                  <option value="china">中国</option>
-                  <option value="foreign">外国</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>分类</label>
-                <select v-model="condFilters.category" class="cy-input">
-                  <option value="">不指定</option>
-                  <option v-for="c in availableCategories" :key="c" :value="c">{{ c }}</option>
-                </select>
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>起始年份</label>
-                <input v-model.number="condFilters.year_min" type="number" placeholder="如: 0" class="cy-input" />
-              </div>
-              <div class="form-group">
-                <label>结束年份</label>
-                <input v-model.number="condFilters.year_max" type="number" placeholder="如: 2000" class="cy-input" />
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>最低重要性</label>
-                <input v-model.number="condFilters.importance_min" type="number" min="1" max="10" placeholder="1-10" class="cy-input" />
-              </div>
-              <div class="form-group">
-                <label>标签(可选)</label>
-                <input v-model="condFilters.tag" type="text" placeholder="如: 战争" class="cy-input" />
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>排序方式</label>
-                <select v-model="condFilters.order_by" class="cy-input">
-                  <option value="relevance">按相关性/重要性</option>
-                  <option value="importance">按重要性</option>
-                  <option value="year">按年份</option>
-                  <option value="updated_at">按更新时间</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>每页条数</label>
-                <input v-model.number="condFilters.page_size" type="number" min="1" max="100" placeholder="20" class="cy-input" />
-              </div>
-            </div>
-            <div class="action-row">
-              <button class="cy-btn cy-btn--cyan" @click="doConditionalSearch">🔍 条件检索</button>
-              <button class="cy-btn cy-btn--ghost" @click="resetConditional">重置</button>
-            </div>
-            <div v-if="conditionalResult" class="import-result info">
-              <span>ℹ️</span>
-              <span>匹配 {{ conditionalResult.total }} 条 · 显示 {{ conditionalResult.items?.length || 0 }} 条 · 第 {{ conditionalResult.page || 1 }} / {{ Math.max(1, Math.ceil(conditionalResult.total / (conditionalResult.page_size || 20))) }} 页</span>
-            </div>
+            <button class="drawer-toggle" :class="{ open: searchDrawerOpen }" @click="toggleSearchDrawer">
+              <span>{{ searchDrawerOpen ? 'Collapse filters' : 'Expand filters' }}</span>
+              <strong>{{ activeBrowseFilterCount }} on</strong>
+            </button>
           </div>
+
+          <Transition name="drawer-slide">
+            <div v-show="searchDrawerOpen" class="drawer-panel">
+              <div class="conditional-filters conditional-filters--drawer">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Keyword</label>
+                    <input v-model="condFilters.text" type="text" placeholder="Title / event / content keyword" class="cy-input" />
+                  </div>
+                  <div class="form-group">
+                    <label>Event Name (fuzzy)</label>
+                    <input v-model="condFilters.event_name_like" type="text" placeholder="e.g. Silk Road" class="cy-input" />
+                  </div>
+                </div>
+                <div class="form-row form-row--triple">
+                  <div class="form-group">
+                    <label>Region</label>
+                    <select v-model="condFilters.region" class="cy-input">
+                      <option value="">Any</option>
+                      <option value="china">China</option>
+                      <option value="foreign">Foreign</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Category</label>
+                    <select v-model="condFilters.category" class="cy-input">
+                      <option value="">Any</option>
+                      <option v-for="c in availableCategories" :key="c" :value="c">{{ c }}</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Source</label>
+                    <select v-model="condFilters.source_type" class="cy-input">
+                      <option value="">All sources</option>
+                      <option value="file_import">File Import</option>
+                      <option value="web_crawl">Web Crawl</option>
+                      <option value="manual">Manual</option>
+                      <option value="seed_data">Seed Data</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-row form-row--triple">
+                  <div class="form-group">
+                    <label>Year From</label>
+                    <input v-model.number="condFilters.year_min" type="number" placeholder="e.g. 0" class="cy-input" />
+                  </div>
+                  <div class="form-group">
+                    <label>Year To</label>
+                    <input v-model.number="condFilters.year_max" type="number" placeholder="e.g. 2000" class="cy-input" />
+                  </div>
+                  <div class="form-group">
+                    <label>Min Importance</label>
+                    <input v-model.number="condFilters.importance_min" type="number" min="1" max="10" placeholder="1-10" class="cy-input" />
+                  </div>
+                </div>
+                <div class="form-row form-row--triple">
+                  <div class="form-group">
+                    <label>Tag</label>
+                    <input v-model="condFilters.tag" type="text" placeholder="e.g. war" class="cy-input" />
+                  </div>
+                  <div class="form-group">
+                    <label>Status</label>
+                    <select v-model="condFilters.status" class="cy-input">
+                      <option value="">All status</option>
+                      <option value="active">Active</option>
+                      <option value="archived">Archived</option>
+                      <option value="pending_review">Pending</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Sort</label>
+                    <select v-model="condFilters.order_by" class="cy-input">
+                      <option value="relevance">Relevance / Importance</option>
+                      <option value="importance">Importance</option>
+                      <option value="year">Year</option>
+                      <option value="updated_at">Updated Time</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="drawer-actions">
+                  <button class="cy-btn cy-btn--cyan" @click="fetchEntries(1)">Run Search</button>
+                  <button class="cy-btn cy-btn--ghost" @click="resetConditional">Reset</button>
+                </div>
+              </div>
+            </div>
+          </Transition>
         </div>
 
-        <div class="section-block cy-card">
-          <h3 class="section-title">
-            <span class="section-icon">◈</span>
-            知识库条目
-          </h3>
-
-          <div class="filter-bar">
-            <input v-model="filters.keyword" type="text" placeholder="搜索标题/事件/内容" class="cy-input filter-input" @input="debounceFetch" />
-            <select v-model="filters.source_type" class="cy-input filter-select" @change="fetchEntries">
-              <option value="">全部来源</option>
-              <option value="file_import">文件导入</option>
-              <option value="web_crawl">网页爬取</option>
-              <option value="manual">手动添加</option>
-              <option value="seed_data">种子数据</option>
-            </select>
-            <select v-model="filters.region" class="cy-input filter-select" @change="fetchEntries">
-              <option value="">全部区域</option>
-              <option value="china">中国</option>
-              <option value="foreign">外国</option>
-            </select>
-            <select v-model="filters.status" class="cy-input filter-select" @change="fetchEntries">
-              <option value="">全部状态</option>
-              <option value="active">活跃</option>
-              <option value="archived">已归档</option>
-              <option value="pending_review">待审核</option>
-            </select>
+        <div class="section-block cy-card results-panel-card">
+          <div class="results-panel-head">
+            <div>
+              <h3 class="section-title">
+                <span class="section-icon">*</span>
+                Knowledge Entries
+              </h3>
+              <p class="results-summary">{{ browseSummary }}</p>
+            </div>
+            <div class="results-panel-tools">
+              <label class="inline-field">
+                <span>Page Size</span>
+                <select v-model.number="entriesPageSize" class="cy-input compact-select" @change="handleBrowsePageSizeChange">
+                  <option v-for="size in browsePageSizeOptions" :key="size" :value="size">{{ size }}</option>
+                </select>
+              </label>
+              <div v-if="conditionalResult" class="result-badge">{{ conditionalResult.total }} total</div>
+            </div>
           </div>
 
           <div v-if="entriesLoading" class="loading-state">
             <div class="cy-loading"></div>
-            <p>加载中...</p>
+            <p>Loading...</p>
           </div>
 
           <div v-else-if="entries.length === 0" class="empty-state">
-            <div class="empty-icon">◇</div>
-            <p>暂无条目</p>
+            <div class="empty-icon">o</div>
+            <p>No entries found</p>
           </div>
 
           <div v-else class="entries-list">
@@ -356,7 +393,7 @@
                 </span>
                 <span class="entry-version">v{{ entry.version }}</span>
                 <span v-if="entry.version_count && entry.version_count > 1" class="entry-version-total">
-                  ({{ entry.version_count }} 个历史版本)
+                  ({{ entry.version_count }} versions)
                 </span>
                 <span class="entry-status-badge" :class="entry.status">
                   {{ statusLabels[entry.status] || entry.status }}
@@ -365,59 +402,93 @@
               <h4 class="entry-title">{{ entry.title }}</h4>
               <p class="entry-preview">{{ entry.content_preview }}</p>
               <div class="entry-meta">
-                <span v-if="entry.event_name" class="meta-item">📌 {{ entry.event_name }}</span>
-                <span v-if="entry.year" class="meta-item">📅 {{ entry.year < 0 ? '前' + Math.abs(entry.year) : entry.year }}年</span>
-                <span v-if="entry.region" class="meta-item">{{ entry.region === 'china' ? '🇨🇳' : '🌍' }} {{ entry.region === 'china' ? '中国' : '外国' }}</span>
-                <span v-if="entry.category" class="meta-item">📁 {{ entry.category }}</span>
-                <span v-if="entry.tags && entry.tags.length" class="meta-item">🏷 {{ entry.tags.slice(0, 3).join(', ') }}</span>
-                <span v-if="entry.importance" class="meta-item">⭐ {{ entry.importance }}/10</span>
+                <span v-if="entry.event_name" class="meta-item">Event {{ entry.event_name }}</span>
+                <span v-if="entry.year" class="meta-item">Year {{ entry.year }}</span>
+                <span v-if="entry.region" class="meta-item">{{ entry.region === 'china' ? 'China' : 'Foreign' }}</span>
+                <span v-if="entry.category" class="meta-item">{{ entry.category }}</span>
+                <span v-if="entry.tags && entry.tags.length" class="meta-item">{{ entry.tags.slice(0, 3).join(' / ') }}</span>
+                <span v-if="entry.importance" class="meta-item">{{ entry.importance }}/10</span>
               </div>
               <div class="entry-footer">
-                <span class="chunk-info">分片 {{ entry.chunk_index + 1 }}/{{ entry.chunk_total }}</span>
+                <span class="chunk-info">Chunk {{ entry.chunk_index + 1 }}/{{ entry.chunk_total }}</span>
                 <span class="entry-date">{{ entry.created_at?.split('T')[0] || entry.created_at?.split(' ')[0] || '' }}</span>
-                <button class="delete-btn" @click.stop="deleteEntry(entry.id)" title="删除">🗑</button>
+                <button class="delete-btn" @click.stop="deleteEntry(entry.id)" title="Delete">x</button>
               </div>
             </div>
           </div>
 
-          <div v-if="entriesTotal > pageSize" class="pagination">
-            <button class="page-btn" :disabled="currentPage <= 1" @click="currentPage--; fetchEntries()">上一页</button>
-            <span class="page-info">{{ currentPage }} / {{ Math.ceil(entriesTotal / pageSize) }}</span>
-            <button class="page-btn" :disabled="currentPage >= Math.ceil(entriesTotal / pageSize)" @click="currentPage++; fetchEntries()">下一页</button>
+          <div v-if="entriesTotal > 0" class="pagination pagination--panel">
+            <div class="pagination-summary">
+              <strong>{{ entriesTotal }}</strong>
+              <span>results</span>
+              <span>?</span>
+              <span>{{ totalEntryPages }} pages</span>
+            </div>
+            <div class="pagination-controls">
+              <button class="page-btn" :disabled="currentPage <= 1" @click="changeBrowsePage(currentPage - 1)">Previous</button>
+              <span class="page-info">Page {{ currentPage }} / {{ totalEntryPages }}</span>
+              <button class="page-btn" :disabled="currentPage >= totalEntryPages" @click="changeBrowsePage(currentPage + 1)">Next</button>
+            </div>
           </div>
         </div>
       </div>
 
       <div v-if="activeTab === 'sources'" class="tab-content">
         <div class="section-block cy-card">
-          <h3 class="section-title">
-            <span class="section-icon">◈</span>
-            推荐爬虫来源
-          </h3>
-          <p class="import-hint">系统每日自动遍历以下推荐来源, 按 event_name 去重后写入知识库</p>
+          <div class="results-panel-head results-panel-head--sources">
+            <div>
+              <h3 class="section-title">
+                <span class="section-icon">@</span>
+                Crawl Sources
+              </h3>
+              <p class="import-hint">Long source lists are paged so the status panel stays compact and easier to scan.</p>
+            </div>
+            <div class="results-panel-tools">
+              <label class="inline-field">
+                <span>Page Size</span>
+                <select v-model.number="sourcePageSize" class="cy-input compact-select" @change="handleSourcePageSizeChange">
+                  <option v-for="size in sourcePageSizeOptions" :key="size" :value="size">{{ size }}</option>
+                </select>
+              </label>
+              <div class="result-badge">{{ crawlSources.length }} total</div>
+            </div>
+          </div>
           <div v-if="crawlSources.length === 0" class="empty-state">
-            <p>暂无推荐来源</p>
+            <p>No sources available</p>
           </div>
           <div v-else class="crawl-sources-list">
-            <div v-for="src in crawlSources" :key="src.id" class="crawl-source-card">
+            <div v-for="src in pagedCrawlSources" :key="src.id" class="crawl-source-card">
               <div class="crawl-source-head">
                 <span class="crawl-source-name">{{ src.name }}</span>
                 <span class="entry-status-badge" :class="src.last_status === 'success' ? 'active' : src.last_status === 'failed' ? 'archived' : 'pending_review'">
-                  {{ src.last_status === 'success' ? '✅ 成功' : src.last_status === 'failed' ? '❌ 失败' : '⏳ 待爬' }}
+                  {{ src.last_status === 'success' ? 'Success' : src.last_status === 'failed' ? 'Failed' : 'Pending' }}
                 </span>
-                <span v-if="src.recommended" class="entry-source-badge seed_data">推荐</span>
+                <span v-if="src.recommended" class="entry-source-badge seed_data">Recommended</span>
               </div>
               <a class="crawl-source-url" :href="src.url" target="_blank" rel="noopener">{{ src.url }}</a>
               <p v-if="src.description" class="crawl-source-desc">{{ src.description }}</p>
               <div class="crawl-source-meta">
-                <span v-if="src.category">📁 {{ src.category }}</span>
-                <span v-if="src.region">🌍 {{ src.region === 'china' ? '中国' : src.region === 'foreign' ? '外国' : src.region }}</span>
-                <span v-if="src.last_imported !== null">📥 上次导入 {{ src.last_imported }} 条</span>
-                <span v-if="src.last_crawled_at">🕐 {{ src.last_crawled_at }}</span>
+                <span v-if="src.category">Category {{ src.category }}</span>
+                <span v-if="src.region">Region {{ src.region === 'china' ? 'China' : src.region === 'foreign' ? 'Foreign' : src.region }}</span>
+                <span v-if="src.last_imported !== null">Last import {{ src.last_imported }}</span>
+                <span v-if="src.last_crawled_at">{{ src.last_crawled_at }}</span>
               </div>
               <div v-if="src.tags && src.tags.length" class="tag-list">
                 <span v-for="tag in src.tags" :key="tag" class="tag-chip">{{ tag }}</span>
               </div>
+            </div>
+          </div>
+          <div v-if="crawlSources.length > 0" class="pagination pagination--panel pagination--sources">
+            <div class="pagination-summary">
+              <strong>{{ crawlSources.length }}</strong>
+              <span>sources</span>
+              <span>?</span>
+              <span>{{ totalSourcePages }} pages</span>
+            </div>
+            <div class="pagination-controls">
+              <button class="page-btn" :disabled="sourceCurrentPage <= 1" @click="changeSourcePage(sourceCurrentPage - 1)">Previous</button>
+              <span class="page-info">Page {{ sourceCurrentPage }} / {{ totalSourcePages }}</span>
+              <button class="page-btn" :disabled="sourceCurrentPage >= totalSourcePages" @click="changeSourcePage(sourceCurrentPage + 1)">Next</button>
             </div>
           </div>
         </div>
@@ -426,17 +497,17 @@
       <div v-if="activeTab === 'detail' && selectedEntry" class="tab-content">
         <div class="section-block cy-card">
           <div class="detail-header">
-            <button class="cy-btn cy-btn--ghost" @click="activeTab = 'browse'">← 返回列表</button>
+            <button class="cy-btn cy-btn--ghost" @click="activeTab = 'browse'">Back to list</button>
             <div class="detail-actions">
               <button class="cy-btn cy-btn--ghost" :disabled="versionsLoading" @click="fetchVersions(selectedEntry.id)">
-                {{ versionsLoading ? '加载中...' : '📚 版本历史' }}
+                {{ versionsLoading ? 'Loading...' : 'Version History' }}
               </button>
-              <button class="cy-btn cy-btn--ghost" @click="deleteEntry(selectedEntry.id)">🗑 删除</button>
+              <button class="cy-btn cy-btn--ghost" @click="deleteEntry(selectedEntry.id)">Delete</button>
             </div>
           </div>
 
           <div v-if="showVersions && entryVersions.length" class="version-history">
-            <h4 class="version-history-title">版本历史 (共 {{ entryVersions.length }} 个版本)</h4>
+            <h4 class="version-history-title">Version History ({{ entryVersions.length }})</h4>
             <div class="version-list">
               <div v-for="v in entryVersions" :key="v.id" class="version-item">
                 <div class="version-item-head">
@@ -444,14 +515,14 @@
                   <span class="version-source-badge">{{ v.change_source || 'system' }}</span>
                   <span class="version-date">{{ v.created_at }}</span>
                 </div>
-                <div class="version-summary">{{ v.change_summary || '无变更说明' }}</div>
+                <div class="version-summary">{{ v.change_summary || 'No summary' }}</div>
                 <div class="version-meta">
-                  <span v-if="v.operator">操作者: {{ v.operator }}</span>
+                  <span v-if="v.operator">Operator: {{ v.operator }}</span>
                   <span class="mono">hash: {{ v.content_hash?.substring(0, 12) }}...</span>
                 </div>
                 <div v-if="v.snapshot_meta" class="version-snapshot">
                   <details>
-                    <summary>查看元数据快照</summary>
+                    <summary>Snapshot metadata</summary>
                     <pre class="snapshot-pre">{{ JSON.stringify(v.snapshot_meta, null, 2) }}</pre>
                   </details>
                 </div>
@@ -463,61 +534,61 @@
 
           <div class="detail-meta-grid">
             <div class="meta-field">
-              <span class="meta-label">来源</span>
+              <span class="meta-label">Source</span>
               <span class="meta-value">{{ sourceLabels[selectedEntry.source_type] || selectedEntry.source_type }}</span>
             </div>
             <div class="meta-field">
-              <span class="meta-label">版本</span>
+              <span class="meta-label">Version</span>
               <span class="meta-value">v{{ selectedEntry.version }}</span>
             </div>
             <div class="meta-field">
-              <span class="meta-label">状态</span>
+              <span class="meta-label">Status</span>
               <span class="meta-value">{{ statusLabels[selectedEntry.status] || selectedEntry.status }}</span>
             </div>
             <div class="meta-field">
-              <span class="meta-label">分片</span>
+              <span class="meta-label">Chunk</span>
               <span class="meta-value">{{ selectedEntry.chunk_index + 1 }} / {{ selectedEntry.chunk_total }}</span>
             </div>
             <div v-if="selectedEntry.event_name" class="meta-field">
-              <span class="meta-label">事件</span>
+              <span class="meta-label">Event</span>
               <span class="meta-value">{{ selectedEntry.event_name }}</span>
             </div>
             <div v-if="selectedEntry.year" class="meta-field">
-              <span class="meta-label">年份</span>
-              <span class="meta-value">{{ selectedEntry.year < 0 ? '公元前' + Math.abs(selectedEntry.year) : '公元' + selectedEntry.year + '年' }}</span>
+              <span class="meta-label">Year</span>
+              <span class="meta-value">{{ selectedEntry.year < 0 ? 'BCE ' + Math.abs(selectedEntry.year) : 'CE ' + selectedEntry.year }}</span>
             </div>
             <div v-if="selectedEntry.region" class="meta-field">
-              <span class="meta-label">区域</span>
-              <span class="meta-value">{{ selectedEntry.region === 'china' ? '中国' : '外国' }}</span>
+              <span class="meta-label">Region</span>
+              <span class="meta-value">{{ selectedEntry.region === 'china' ? 'China' : 'Foreign' }}</span>
             </div>
             <div v-if="selectedEntry.category" class="meta-field">
-              <span class="meta-label">分类</span>
+              <span class="meta-label">Category</span>
               <span class="meta-value">{{ selectedEntry.category }}</span>
             </div>
             <div v-if="selectedEntry.importance" class="meta-field">
-              <span class="meta-label">重要性</span>
+              <span class="meta-label">Importance</span>
               <span class="meta-value">{{ selectedEntry.importance }}/10</span>
             </div>
             <div v-if="selectedEntry.source_url" class="meta-field meta-field--wide">
-              <span class="meta-label">来源URL</span>
+              <span class="meta-label">Source URL</span>
               <a class="meta-value link" :href="selectedEntry.source_url" target="_blank">{{ selectedEntry.source_url }}</a>
             </div>
             <div v-if="selectedEntry.file_name" class="meta-field">
-              <span class="meta-label">文件名</span>
+              <span class="meta-label">File</span>
               <span class="meta-value">{{ selectedEntry.file_name }}</span>
             </div>
             <div v-if="selectedEntry.content_hash" class="meta-field meta-field--wide">
-              <span class="meta-label">内容哈希</span>
+              <span class="meta-label">Content Hash</span>
               <span class="meta-value mono">{{ selectedEntry.content_hash?.substring(0, 16) }}...</span>
             </div>
             <div v-if="selectedEntry.tags && selectedEntry.tags.length" class="meta-field meta-field--wide">
-              <span class="meta-label">标签</span>
+              <span class="meta-label">Tags</span>
               <div class="tag-list">
                 <span v-for="tag in selectedEntry.tags" :key="tag" class="tag-chip">{{ tag }}</span>
               </div>
             </div>
             <div v-if="selectedEntry.figures && selectedEntry.figures.length" class="meta-field meta-field--wide">
-              <span class="meta-label">人物</span>
+              <span class="meta-label">Figures</span>
               <div class="tag-list">
                 <span v-for="fig in selectedEntry.figures" :key="fig" class="tag-chip figure">{{ fig }}</span>
               </div>
@@ -525,13 +596,13 @@
           </div>
 
           <div class="detail-content">
-            <h4 class="content-label">正文内容</h4>
+            <h4 class="content-label">Content</h4>
             <div class="content-body">{{ selectedEntry.content }}</div>
           </div>
 
           <div class="detail-dates">
-            <span>创建: {{ selectedEntry.created_at }}</span>
-            <span>更新: {{ selectedEntry.updated_at }}</span>
+            <span>Created: {{ selectedEntry.created_at }}</span>
+            <span>Updated: {{ selectedEntry.updated_at }}</span>
           </div>
         </div>
       </div>
@@ -552,19 +623,19 @@ const router = useRouter()
 
 if (!authStore.user?.is_admin) {
   try {
-    appStore.showToast('warning', '无访问权限, 仅管理员可访问知识库')
+    appStore.showToast('warning', 'Admin access required for the knowledge base')
   } catch (_) {
-    // app store 不可用时静默
+    // app store unavailable
   }
   router.replace({ name: 'Home' })
 }
 
 const activeTab = ref('overview')
 const tabs = [
-  { key: 'overview', label: '概览', icon: '◈' },
-  { key: 'import', label: '导入', icon: '📄' },
-  { key: 'browse', label: '浏览', icon: '🔍' },
-  { key: 'sources', label: '爬虫源', icon: '🌐' },
+  { key: 'overview', label: 'Overview', icon: '[]' },
+  { key: 'import', label: 'Import', icon: '+' },
+  { key: 'browse', label: 'Browse', icon: '*' },
+  { key: 'sources', label: 'Sources', icon: '@' },
 ]
 
 const stats = reactive<KnowledgeStats>({
@@ -575,10 +646,10 @@ const stats = reactive<KnowledgeStats>({
 })
 
 const sourceLabels: Record<string, string> = {
-  file_import: '文件导入',
-  web_crawl: '网页爬取',
-  manual: '手动添加',
-  seed_data: '种子数据',
+  file_import: 'File Import',
+  web_crawl: 'Web Crawl',
+  manual: 'Manual',
+  seed_data: 'Seed Data',
 }
 
 const availableCategories = computed(() => {
@@ -589,21 +660,30 @@ const availableCategories = computed(() => {
 })
 
 const statusLabels: Record<string, string> = {
-  active: '活跃',
-  archived: '已归档',
-  pending_review: '待审核',
+  active: 'Active',
+  archived: 'Archived',
+  pending_review: 'Pending',
 }
 
 const crawling = ref(false)
 const rebuilding = ref(false)
 const seeding = ref(false)
 const crawlSources = ref<CrawlSource[]>([])
+const searchDrawerOpen = ref(true)
+const sourceCurrentPage = ref(1)
+const sourcePageSize = ref(6)
+const entriesPageSize = ref(20)
+const browsePageSizeOptions = [10, 20, 50, 100]
+const sourcePageSizeOptions = [4, 6, 8, 12]
+const BROWSE_DRAWER_STORAGE_KEY = 'kb_browse_drawer_open'
 
 const condFilters = reactive({
   text: '',
   event_name_like: '',
   region: '',
   category: '',
+  source_type: '',
+  status: '',
   year_min: undefined as number | undefined,
   year_max: undefined as number | undefined,
   importance_min: undefined as number | undefined,
@@ -636,15 +716,45 @@ const entries = ref<KnowledgeEntry[]>([])
 const entriesTotal = ref(0)
 const entriesLoading = ref(false)
 const currentPage = ref(1)
-const pageSize = 20
-const filters = reactive({ keyword: '', source_type: '', region: '', status: '' })
 
 const selectedEntry = ref<KnowledgeEntry | null>(null)
 
-let debounceTimer: ReturnType<typeof setTimeout> | null = null
-function debounceFetch() {
-  if (debounceTimer) clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(() => { currentPage.value = 1; fetchEntries() }, 400)
+const totalEntryPages = computed(() => Math.max(1, Math.ceil(entriesTotal.value / entriesPageSize.value)))
+const totalSourcePages = computed(() => Math.max(1, Math.ceil(crawlSources.value.length / sourcePageSize.value)))
+const pagedCrawlSources = computed(() => {
+  const start = (sourceCurrentPage.value - 1) * sourcePageSize.value
+  return crawlSources.value.slice(start, start + sourcePageSize.value)
+})
+const activeBrowseFilterCount = computed(() => {
+  const values = [
+    condFilters.text,
+    condFilters.event_name_like,
+    condFilters.region,
+    condFilters.category,
+    condFilters.source_type,
+    condFilters.status,
+    condFilters.year_min,
+    condFilters.year_max,
+    condFilters.importance_min,
+    condFilters.tag,
+  ]
+  return values.filter((value) => value !== '' && value !== undefined && value !== null).length
+})
+const browseSummary = computed(() => {
+  if (entriesLoading.value) return 'Loading search results...'
+  if (entriesTotal.value === 0) return 'No matching entries'
+  const start = (currentPage.value - 1) * entriesPageSize.value + 1
+  const end = Math.min(currentPage.value * entriesPageSize.value, entriesTotal.value)
+  return `Showing ${start}-${end} of ${entriesTotal.value} entries, page ${currentPage.value} / ${totalEntryPages.value}`
+})
+
+function toggleSearchDrawer() {
+  searchDrawerOpen.value = !searchDrawerOpen.value
+  try {
+    localStorage.setItem(BROWSE_DRAWER_STORAGE_KEY, String(searchDrawerOpen.value))
+  } catch (_) {
+    // ignore storage failure
+  }
 }
 
 async function fetchStats() {
@@ -661,12 +771,21 @@ async function triggerCrawl() {
   try {
     const res = await ragApi.triggerCrawl()
     if (res.code === 200) {
-      appStore.showToast('success', `爬取完成，导入 ${res.data?.imported || 0} 个条目`)
+      const imported = res.data?.imported || 0
+      const failed = res.data?.sources_failed || 0
+      const processed = res.data?.sources_processed || 0
+      if (processed > 0 && failed === processed) {
+        appStore.showToast('error', `Crawl failed: ${failed}/${processed} sources failed`)
+      } else if (failed > 0) {
+        appStore.showToast('warning', `Crawl partially completed: imported ${imported}, failed ${failed}/${processed}`)
+      } else {
+        appStore.showToast('success', `Crawl completed: imported ${imported} entries`)
+      }
       fetchStats()
       fetchCrawlSources()
     }
   } catch {
-    appStore.showToast('error', '爬取失败')
+    appStore.showToast('error', 'Crawl failed')
   } finally {
     crawling.value = false
   }
@@ -679,12 +798,12 @@ async function triggerSeed() {
     if (res.code === 200) {
       appStore.showToast(
         'success',
-        `种子导入完成: 新增 ${res.data?.imported || 0} 条, 跳过 ${res.data?.skipped || 0} 条, 共 ${res.data?.total_events || 0} 个事件`,
+        `Seed import completed: +${res.data?.imported || 0}, skipped ${res.data?.skipped || 0}, total ${res.data?.total_events || 0}`,
       )
       fetchStats()
     }
   } catch {
-    appStore.showToast('error', '种子导入失败')
+    appStore.showToast('error', 'Seed import failed')
   } finally {
     seeding.value = false
   }
@@ -695,31 +814,38 @@ async function fetchCrawlSources() {
     const res = await ragApi.listCrawlSources({ recommended: 1 })
     if (res.code === 200) {
       crawlSources.value = res.data?.items || []
+      if (sourceCurrentPage.value > totalSourcePages.value) {
+        sourceCurrentPage.value = totalSourcePages.value
+      }
     }
   } catch { /* ignore */ }
 }
 
-async function doConditionalSearch() {
+async function doConditionalSearch(page = 1) {
+  currentPage.value = page
   try {
     const res = await ragApi.conditionalSearch({
       text: condFilters.text || undefined,
       event_name_like: condFilters.event_name_like || undefined,
       region: condFilters.region || undefined,
       category: condFilters.category || undefined,
+      source_type: condFilters.source_type || undefined,
+      status: condFilters.status || undefined,
       year_min: condFilters.year_min,
       year_max: condFilters.year_max,
       importance_min: condFilters.importance_min,
       tag: condFilters.tag || undefined,
       order_by: condFilters.order_by,
-      page_size: condFilters.page_size,
-      page: 1,
+      page_size: entriesPageSize.value,
+      page: currentPage.value,
     })
     if (res.code === 200 && res.data) {
       conditionalResult.value = res.data
-      appStore.showToast('success', `匹配 ${res.data.total} 条结果`)
+      entries.value = res.data.items || []
+      entriesTotal.value = res.data.total || 0
     }
   } catch {
-    appStore.showToast('error', '条件检索失败')
+    appStore.showToast('error', 'Delete failed')
   }
 }
 
@@ -728,13 +854,17 @@ function resetConditional() {
   condFilters.event_name_like = ''
   condFilters.region = ''
   condFilters.category = ''
+  condFilters.source_type = ''
+  condFilters.status = ''
   condFilters.year_min = undefined
   condFilters.year_max = undefined
   condFilters.importance_min = undefined
   condFilters.tag = ''
   condFilters.order_by = 'relevance'
   condFilters.page_size = 20
+  entriesPageSize.value = 20
   conditionalResult.value = null
+  fetchEntries(1)
 }
 
 async function fetchVersions(entryId: number) {
@@ -755,10 +885,10 @@ async function rebuildIndex() {
   try {
     const res = await ragApi.rebuild()
     if (res.code === 200) {
-      appStore.showToast('success', `索引重建完成: ${res.data?.mode} 模式，${res.data?.count} 条`)
+      appStore.showToast('success', 'Deleted successfully')
     }
   } catch {
-    appStore.showToast('error', '索引重建失败')
+    appStore.showToast('error', 'Delete failed')
   } finally {
     rebuilding.value = false
   }
@@ -798,12 +928,12 @@ async function doImport() {
     const res = await ragApi.importFile(selectedFile.value, meta)
     if (res.code === 200) {
       importResult.value = res.data
-      appStore.showToast('success', `导入成功: ${res.data?.imported || 0} 个分片`)
+      appStore.showToast('success', 'Deleted successfully')
       fetchStats()
       selectedFile.value = null
     }
   } catch {
-    appStore.showToast('error', '导入失败')
+    appStore.showToast('error', 'Delete failed')
   } finally {
     importing.value = false
   }
@@ -822,37 +952,46 @@ async function doManualAdd() {
       category: manualForm.category || undefined,
     })
     if (res.code === 200) {
-      appStore.showToast('success', `添加成功: ${res.data?.imported || 0} 个分片`)
+      appStore.showToast('success', 'Deleted successfully')
       manualForm.title = ''
       manualForm.content = ''
       manualForm.event_name = ''
       fetchStats()
     }
   } catch {
-    appStore.showToast('error', '添加失败')
+    appStore.showToast('error', 'Delete failed')
   } finally {
     submitting.value = false
   }
 }
 
-async function fetchEntries() {
+async function fetchEntries(page = currentPage.value) {
+  currentPage.value = page
   entriesLoading.value = true
   try {
-    const res = await ragApi.getEntries({
-      source_type: filters.source_type || undefined,
-      region: filters.region || undefined,
-      status: filters.status || undefined,
-      keyword: filters.keyword || undefined,
-      page: currentPage.value,
-      page_size: pageSize,
-    })
-    if (res.code === 200 && res.data) {
-      entries.value = res.data.items
-      entriesTotal.value = res.data.total
-    }
-  } catch { /* ignore */ } finally {
+    await doConditionalSearch(currentPage.value)
+  } finally {
     entriesLoading.value = false
   }
+}
+
+function changeBrowsePage(page: number) {
+  const target = Math.min(Math.max(page, 1), totalEntryPages.value)
+  if (target === currentPage.value && entries.value.length > 0) return
+  fetchEntries(target)
+}
+
+function handleBrowsePageSizeChange() {
+  condFilters.page_size = entriesPageSize.value
+  fetchEntries(1)
+}
+
+function changeSourcePage(page: number) {
+  sourceCurrentPage.value = Math.min(Math.max(page, 1), totalSourcePages.value)
+}
+
+function handleSourcePageSizeChange() {
+  sourceCurrentPage.value = 1
 }
 
 async function viewEntry(entry: KnowledgeEntry) {
@@ -868,10 +1007,10 @@ async function viewEntry(entry: KnowledgeEntry) {
 }
 
 async function deleteEntry(id: number) {
-  if (!confirm('确定删除此条目？')) return
+  if (!confirm('Delete this entry?')) return
   try {
     await ragApi.deleteEntry(id)
-    appStore.showToast('success', '删除成功')
+    appStore.showToast('success', 'Deleted successfully')
     fetchEntries()
     fetchStats()
     if (selectedEntry.value?.id === id) {
@@ -879,7 +1018,7 @@ async function deleteEntry(id: number) {
       activeTab.value = 'browse'
     }
   } catch {
-    appStore.showToast('error', '删除失败')
+    appStore.showToast('error', 'Delete failed')
   }
 }
 
@@ -889,7 +1028,19 @@ watch(activeTab, (tab) => {
   if (tab === 'sources') fetchCrawlSources()
 })
 
-onMounted(() => { fetchStats(); fetchCrawlSources() })
+onMounted(() => {
+  try {
+    const savedDrawerState = localStorage.getItem(BROWSE_DRAWER_STORAGE_KEY)
+    if (savedDrawerState !== null) {
+      searchDrawerOpen.value = savedDrawerState === 'true'
+    }
+  } catch (_) {
+    // ignore storage failure
+  }
+  condFilters.page_size = entriesPageSize.value
+  fetchStats()
+  fetchCrawlSources()
+})
 </script>
 
 <style scoped>
@@ -1443,10 +1594,10 @@ onMounted(() => { fetchStats(); fetchCrawlSources() })
 
 .empty-icon { font-size: 32px; opacity: 0.3; }
 
-/* 新增: 条件检索 */
+/* 闂備礁鎼崐鐟邦熆濮椻偓璺? 闂備礁鎼ˇ顐﹀焵椤掆偓瀵爼顢曢懞銉ょ箚妞ゆ劗鍠庢禍鍓х磽?*/
 .conditional-filters { display: flex; flex-direction: column; gap: 8px; }
 
-/* 新增: 爬虫源 */
+/* 闂備礁鎼崐鐟邦熆濮椻偓璺? 闂備胶绮悧顒勫礈濠靛棌鏋嶉柡鍥╁亹閺€?*/
 .crawl-sources-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
 .crawl-source-card {
   padding: 14px;
@@ -1470,7 +1621,7 @@ onMounted(() => { fetchStats(); fetchCrawlSources() })
 .crawl-source-desc { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin: 0; }
 .crawl-source-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--text-muted); }
 
-/* 新增: 版本历史 */
+/* 闂備礁鎼崐鐟邦熆濮椻偓璺? 闂備胶绮〃鍛存偋婵犲偊鑰垮ù鍏兼綑閸屻劑鏌涢埄鍐炬當闁?*/
 .version-history { margin-bottom: 20px; padding: 16px; background: rgba(2, 5, 11, 0.4); border: 1px solid var(--border-subtle); border-radius: 10px; }
 .version-history-title { font-size: 14px; color: var(--text-light); margin: 0 0 12px; }
 .version-list { display: flex; flex-direction: column; gap: 8px; }
@@ -1504,15 +1655,271 @@ onMounted(() => { fetchStats(); fetchCrawlSources() })
 
 .entry-version-total { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); }
 
+
+.import-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
+  gap: 20px;
+}
+
+.import-primary-card,
+.import-secondary-card,
+.search-drawer-card,
+.results-panel-card {
+  position: relative;
+}
+
+.panel-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.panel-header-row--stacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.import-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.import-chip,
+.manual-pill,
+.result-badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(49, 247, 255, 0.22);
+  background: rgba(49, 247, 255, 0.08);
+  color: var(--cyan-core);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.selected-file--wide {
+  justify-content: space-between;
+}
+
+.selected-file-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.import-action-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.import-inline-tip,
+.results-summary {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.kb-tabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(116px, 1fr));
+  gap: 10px;
+  padding: 14px 28px;
+  background: rgba(8, 15, 28, 0.78);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.kb-tab {
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 16px;
+}
+
+.tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-drawer-card {
+  overflow: hidden;
+}
+
+.drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.drawer-head-copy {
+  min-width: 0;
+}
+
+.drawer-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(10, 18, 32, 0.9);
+  color: var(--text-light);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  white-space: nowrap;
+}
+
+.drawer-toggle strong {
+  color: var(--cyan-core);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.drawer-toggle.open {
+  border-color: var(--border-cyan);
+  box-shadow: 0 0 18px rgba(49, 247, 255, 0.12);
+}
+
+.drawer-panel {
+  margin-top: 18px;
+}
+
+.drawer-slide-enter-active,
+.drawer-slide-leave-active {
+  transition: all 0.28s ease;
+  transform-origin: top center;
+}
+
+.drawer-slide-enter-from,
+.drawer-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.conditional-filters--drawer {
+  gap: 12px;
+}
+
+.form-row--triple {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.drawer-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.results-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.results-panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.inline-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.compact-select {
+  min-width: 88px;
+}
+
+.pagination--panel {
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.pagination-summary,
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pagination-summary {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.pagination-summary strong {
+  color: var(--text-light);
+  font-family: var(--font-mono);
+}
+
+.crawl-sources-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.results-panel-head--sources {
+  margin-bottom: 18px;
+}
+
+@media (max-width: 960px) {
+  .import-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .kb-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 10px 16px;
+  }
+
+  .drawer-head,
+  .results-panel-head,
+  .panel-header-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .form-row--triple {
+    grid-template-columns: 1fr;
+  }
+
+  .pagination--panel {
+    justify-content: center;
+  }
+
+  .results-panel-tools {
+    justify-content: flex-start;
+  }
+}
+
+
 @media (max-width: 640px) {
   .kb-header { padding: 12px 16px; gap: 12px; }
   .page-title { font-size: 16px; letter-spacing: 2px; }
-  .kb-tabs { padding: 10px 16px; overflow-x: auto; }
-  .kb-tab { padding: 8px 14px; font-size: 13px; white-space: nowrap; }
   .kb-main { padding: 16px; }
   .form-row { grid-template-columns: 1fr; }
-  .filter-bar { flex-direction: column; }
-  .filter-select { width: 100%; }
   .detail-meta-grid { grid-template-columns: 1fr; }
+  .filter-select { width: 100%; }
 }
 </style>

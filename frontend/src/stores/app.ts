@@ -5,7 +5,7 @@ export const useAppStore = defineStore('app', () => {
   const currentFilter = ref<'all' | 'china' | 'foreign'>('all')
   const currentView = ref<'chart' | 'starlink'>('chart')
   const isLoading = ref(false)
-  const toasts = ref<{ id: number; type: 'success' | 'error'; message: string }[]>([])
+  const toasts = ref<{ id: number; type: 'success' | 'error' | 'warning'; message: string }[]>([])
 
   let toastId = 0
 
@@ -26,7 +26,7 @@ export const useAppStore = defineStore('app', () => {
     isLoading.value = value
   }
 
-  function showToast(type: 'success' | 'error', message: string, duration = 3000) {
+  function showToast(type: 'success' | 'error' | 'warning', message: string, duration = 3000) {
     const id = ++toastId
     toasts.value.push({ id, type, message })
     setTimeout(() => {

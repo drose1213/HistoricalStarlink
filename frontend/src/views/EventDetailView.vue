@@ -15,15 +15,10 @@
 
     <main class="detail-main" v-if="currentEvent">
       <div class="starlink-hero">
-        <StarlinkPlanets
-          :event-id="currentEvent.id"
-          :name="currentEvent.name"
-          :year="currentEvent.year"
-          :region="currentEvent.region"
-          :importance="currentEvent.importance"
-          :causes="causeEvents"
-          :consequences="consequenceEvents"
-          @navigate="handleNavigate"
+        <ConstellationMap
+          :graph="detailGraph"
+          mode="detail"
+          @select-event="handleNavigate"
         />
       </div>
 
@@ -188,11 +183,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import StarlinkPlanets from '@/components/StarlinkPlanets.vue'
+import ConstellationMap from '@/components/ConstellationMap.vue'
 import ExplorationRecord from '@/components/ExplorationRecord.vue'
 import VotingSystem from '@/components/VotingSystem.vue'
 import RatingSystem from '@/components/RatingSystem.vue'
 import { allEvents, getEventById, getRelatedEvents, loadEvents } from '@/data/events'
+import { buildDetailStarlinkGraph } from '@/utils/starlinkGraph'
 import { requireAuth } from '@/utils/auth'
 import { recordExploration } from '@/utils/exploration'
 
@@ -218,6 +214,7 @@ const expandedConsequences = ref<Set<number>>(new Set())
 
 const eventId = computed(() => route.params.id as string)
 const currentEvent = computed(() => getEventById(eventId.value))
+const detailGraph = computed(() => buildDetailStarlinkGraph(eventId.value, allEvents))
 
 const causeEvents = computed(() => {
   if (!currentEvent.value) return []
