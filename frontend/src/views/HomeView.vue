@@ -56,7 +56,11 @@
 
     <main class="home-main">
       <div class="cosmic-section">
-        <CosmicMap @select-event="goToEvent" />
+        <CosmicMap v-if="!loadingInitial" @select-event="goToEvent" />
+          <div v-else class="cosmic-loading">
+            <div class="cosmic-loading__spinner" aria-hidden="true"></div>
+            <p class="cosmic-loading__text">历史星图加载中…</p>
+          </div>
 
         <div class="cosmic-overlay" aria-hidden="true"></div>
       </div>
@@ -436,11 +440,17 @@ async function loadHomeFeed() {
   }
 }
 
+const loadingInitial = ref(true)
+
 onMounted(async () => {
   authStore.init()
   document.addEventListener('click', handleClickOutside)
   // 并行加载: 事件全集 + 首页 feed
-  await Promise.all([loadEvents(), loadHomeFeed()])
+  try {
+    await Promise.all([loadEvents(), loadHomeFeed()])
+  } finally {
+    loadingInitial.value = false
+  }
 })
 
 onBeforeUnmount(() => {
@@ -465,8 +475,8 @@ onBeforeUnmount(() => {
   right: 24px;
   z-index: var(--z-header);
   min-height: 48px;
-  display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 14px;
   padding: 10px 14px;
@@ -745,6 +755,40 @@ onBeforeUnmount(() => {
   z-index: 20;
   width: min(440px, calc(100vw - 56px));
   pointer-events: none;
+}
+
+.cosmic-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  z-index: 5;
+  color: rgba(255, 255, 255, 0.78);
+  background: radial-gradient(circle at 50% 50%, rgba(20, 30, 50, 0.35), transparent 70%);
+}
+
+.cosmic-loading__spinner {
+  width: 44px;
+  height: 44px;
+  border: 2px solid rgba(73, 247, 255, 0.25);
+  border-top-color: #49f7ff;
+  border-radius: 50%;
+  animation: cosmic-spin 0.9s linear infinite;
+  box-shadow: 0 0 18px rgba(73, 247, 255, 0.35);
+}
+
+.cosmic-loading__text {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+@keyframes cosmic-spin {
+  to { transform: rotate(360deg); }
 }
 
 .hero-copy {
