@@ -6,7 +6,7 @@
       </router-link>
       <h2 class="page-title">
         <span class="title-icon">*</span>
-        RAG Knowledge Base
+        {{ t('knowledge.pageTitle') }}
       </h2>
       <div class="header-accent"></div>
     </header>
@@ -29,26 +29,26 @@
         <div class="stats-grid">
           <div class="stat-card cy-card">
             <span class="stat-value">{{ stats.total }}</span>
-            <span class="stat-label">Total Entries</span>
+            <span class="stat-label">{{ t('knowledge.overview.total') }}</span>
           </div>
           <div class="stat-card cy-card">
             <span class="stat-value">{{ stats.active }}</span>
-            <span class="stat-label">Active Entries</span>
+            <span class="stat-label">{{ t('knowledge.overview.active') }}</span>
           </div>
           <div class="stat-card cy-card">
             <span class="stat-value">{{ stats.by_source?.file_import || 0 }}</span>
-            <span class="stat-label">File Imports</span>
+            <span class="stat-label">{{ t('knowledge.overview.fileImports') }}</span>
           </div>
           <div class="stat-card cy-card">
             <span class="stat-value">{{ stats.by_source?.web_crawl || 0 }}</span>
-            <span class="stat-label">Web Crawls</span>
+            <span class="stat-label">{{ t('knowledge.overview.webCrawls') }}</span>
           </div>
         </div>
 
         <div class="section-block cy-card">
           <h3 class="section-title">
             <span class="section-icon">*</span>
-            Source Distribution
+            {{ t('knowledge.overview.sourceDistribution') }}
           </h3>
           <div class="source-bars">
             <div v-for="(count, source) in stats.by_source" :key="source" class="source-bar-item">
@@ -67,34 +67,34 @@
         <div class="section-block cy-card">
           <h3 class="section-title">
             <span class="section-icon">*</span>
-            Region Distribution
+            {{ t('knowledge.overview.regionDistribution') }}
           </h3>
           <div class="region-grid">
             <div class="region-item">
               <span class="region-dot cn"></span>
-              <span class="region-label">China</span>
+              <span class="region-label">{{ t('knowledge.overview.regionChina') }}</span>
               <span class="region-count">{{ stats.by_region?.china || 0 }}</span>
             </div>
             <div class="region-item">
               <span class="region-dot foreign"></span>
-              <span class="region-label">Foreign</span>
+              <span class="region-label">{{ t('knowledge.overview.regionForeign') }}</span>
               <span class="region-count">{{ stats.by_region?.foreign || 0 }}</span>
             </div>
           </div>
           <div v-if="stats.latest_update" class="last-update">
-            Latest update: {{ stats.latest_update }}
+            {{ t('knowledge.overview.latestUpdate', { time: stats.latest_update }) }}
           </div>
         </div>
 
         <div class="action-row">
           <button class="cy-btn cy-btn--cyan" :disabled="crawling" @click="triggerCrawl">
-            {{ crawling ? 'Crawling...' : 'Run Crawl Now' }}
+            {{ crawling ? t('knowledge.overview.crawlRunning') : t('knowledge.overview.runCrawl') }}
           </button>
           <button class="cy-btn cy-btn--gold" :disabled="rebuilding" @click="rebuildIndex">
-            {{ rebuilding ? 'Rebuilding...' : 'Rebuild RAG Index' }}
+            {{ rebuilding ? t('knowledge.overview.rebuildRunning') : t('knowledge.overview.rebuild') }}
           </button>
           <button class="cy-btn cy-btn--ghost" :disabled="seeding" @click="triggerSeed">
-            {{ seeding ? 'Importing...' : 'Import Seeds' }}
+            {{ seeding ? t('knowledge.overview.seedsImporting') : t('knowledge.overview.importSeeds') }}
           </button>
         </div>
       </div>
@@ -106,14 +106,14 @@
               <div>
                 <h3 class="section-title">
                   <span class="section-icon">+</span>
-                  File Import
+                  {{ t('knowledge.importTab.fileImportTitle') }}
                 </h3>
-                <p class="import-hint">Upload txt, md, csv, json, or html files. Large files are chunked automatically for later retrieval.</p>
+                <p class="import-hint">{{ t('knowledge.importTab.fileImportHint') }}</p>
               </div>
               <div class="import-chip-row">
-                <span class="import-chip">Drag & Drop</span>
-                <span class="import-chip">Auto Chunk</span>
-                <span class="import-chip">Metadata Ready</span>
+                <span class="import-chip">{{ t('knowledge.importTab.chipDrag') }}</span>
+                <span class="import-chip">{{ t('knowledge.importTab.chipChunk') }}</span>
+                <span class="import-chip">{{ t('knowledge.importTab.chipMeta') }}</span>
               </div>
             </div>
 
@@ -121,7 +121,7 @@
               <input ref="fileInputRef" type="file" accept=".txt,.md,.csv,.json,.html" class="file-input-hidden" @change="handleFileSelect" />
               <div v-if="!selectedFile" class="drop-placeholder">
                 <span class="drop-icon">v</span>
-                <span>Drop a file here or click to choose one</span>
+                <span>{{ t('knowledge.importTab.dropHint') }}</span>
               </div>
               <div v-else class="selected-file selected-file--wide">
                 <span class="file-icon">[]</span>
@@ -136,58 +136,53 @@
             <div class="import-meta-form">
               <div class="form-row">
                 <div class="form-group">
-                  <label>Event Name</label>
-                  <input v-model="importMeta.event_name" type="text" placeholder="Linked event name" class="cy-input" />
+                  <label>{{ t('knowledge.importTab.eventName') }}</label>
+                  <input v-model="importMeta.event_name" type="text" :placeholder="t('knowledge.importTab.eventNamePh')" class="cy-input" />
                 </div>
                 <div class="form-group">
-                  <label>Year</label>
-                  <input v-model.number="importMeta.year" type="number" placeholder="e.g. -221 / 1911" class="cy-input" />
+                  <label>{{ t('knowledge.importTab.year') }}</label>
+                  <input v-model.number="importMeta.year" type="number" :placeholder="t('knowledge.importTab.yearPh')" class="cy-input" />
                 </div>
               </div>
               <div class="form-row">
                 <div class="form-group">
-                  <label>Region</label>
+                  <label>{{ t('knowledge.importTab.region') }}</label>
                   <select v-model="importMeta.region" class="cy-input">
-                    <option value="">Any</option>
-                    <option value="china">China</option>
-                    <option value="foreign">Foreign</option>
+                    <option value="">{{ t('knowledge.importTab.regionAny') }}</option>
+                    <option value="china">{{ t('knowledge.importTab.regionChina') }}</option>
+                    <option value="foreign">{{ t('knowledge.importTab.regionForeign') }}</option>
                   </select>
                 </div>
                 <div class="form-group">
-                  <label>Category</label>
+                  <label>{{ t('knowledge.importTab.category') }}</label>
                   <select v-model="importMeta.category" class="cy-input">
-                    <option value="">Any</option>
-                    <option value="&#25919;&#27835;">Politics</option>
-                    <option value="&#20891;&#20107;">Military</option>
-                    <option value="&#31185;&#25216;">Technology</option>
-                    <option value="&#25991;&#21270;">Culture</option>
-                    <option value="&#32463;&#27982;">Economy</option>
-                    <option value="&#31038;&#20250;">Society</option>
+                    <option value="">{{ t('knowledge.importTab.categoryAny') }}</option>
+                    <option v-for="c in availableCategories" :key="c" :value="c">{{ c }}</option>
                   </select>
                 </div>
               </div>
               <div class="form-row">
                 <div class="form-group">
-                  <label>Tags</label>
-                  <input v-model="importMeta.tags" type="text" placeholder="tag1, tag2, tag3" class="cy-input" />
+                  <label>{{ t('knowledge.importTab.tags') }}</label>
+                  <input v-model="importMeta.tags" type="text" :placeholder="t('knowledge.importTab.tagsPh')" class="cy-input" />
                 </div>
                 <div class="form-group">
-                  <label>Importance (1-10)</label>
-                  <input v-model.number="importMeta.importance" type="number" min="1" max="10" placeholder="5" class="cy-input" />
+                  <label>{{ t('knowledge.importTab.importance') }}</label>
+                  <input v-model.number="importMeta.importance" type="number" min="1" max="10" :placeholder="t('knowledge.importTab.importancePh')" class="cy-input" />
                 </div>
               </div>
             </div>
 
             <div class="import-action-row">
               <button class="cy-btn cy-btn--gold" :disabled="!selectedFile || importing" @click="doImport">
-                {{ importing ? 'Importing...' : 'Start Import' }}
+                {{ importing ? t('knowledge.importTab.importing') : t('knowledge.importTab.startImport') }}
               </button>
-              <span class="import-inline-tip">Tip: set event and category first so later search feels cleaner.</span>
+              <span class="import-inline-tip">{{ t('knowledge.importTab.tip') }}</span>
             </div>
 
             <div v-if="importResult" class="import-result" :class="importResult.imported > 0 ? 'success' : 'info'">
-              <span>{{ importResult.imported > 0 ? 'OK' : 'i' }}</span>
-              <span>Imported {{ importResult.imported }} chunks, skipped {{ importResult.skipped }} duplicates</span>
+              <span>{{ importResult.imported > 0 ? t('knowledge.importTab.ok') : t('knowledge.importTab.info') }}</span>
+              <span>{{ t('knowledge.importTab.imported', { n: importResult.imported, m: importResult.skipped }) }}</span>
             </div>
           </div>
 
@@ -196,56 +191,51 @@
               <div>
                 <h3 class="section-title">
                   <span class="section-icon">+</span>
-                  Manual Entry
+                  {{ t('knowledge.importTab.manualTitle') }}
                 </h3>
-                <p class="import-hint">Use this panel for one-off notes, corrections, or small additions that do not come from files.</p>
+                <p class="import-hint">{{ t('knowledge.importTab.manualHint') }}</p>
               </div>
-              <span class="manual-pill">Quick Add</span>
+              <span class="manual-pill">{{ t('knowledge.importTab.quickAdd') }}</span>
             </div>
 
             <div class="manual-form">
               <div class="form-group">
-                <label>Title *</label>
-                <input v-model="manualForm.title" type="text" placeholder="Entry title" class="cy-input" />
+                <label>{{ t('knowledge.importTab.titleLabel') }}</label>
+                <input v-model="manualForm.title" type="text" :placeholder="t('knowledge.importTab.titlePh')" class="cy-input" />
               </div>
               <div class="form-group">
-                <label>Content *</label>
-                <textarea v-model="manualForm.content" rows="7" placeholder="Entry content" class="cy-textarea" />
+                <label>{{ t('knowledge.importTab.contentLabel') }}</label>
+                <textarea v-model="manualForm.content" rows="7" :placeholder="t('knowledge.importTab.contentPh')" class="cy-textarea" />
               </div>
               <div class="form-row">
                 <div class="form-group">
-                  <label>Event Name</label>
-                  <input v-model="manualForm.event_name" type="text" placeholder="Linked event" class="cy-input" />
+                  <label>{{ t('knowledge.importTab.eventName') }}</label>
+                  <input v-model="manualForm.event_name" type="text" :placeholder="t('knowledge.importTab.eventNamePh')" class="cy-input" />
                 </div>
                 <div class="form-group">
-                  <label>Year</label>
-                  <input v-model.number="manualForm.year" type="number" placeholder="Year" class="cy-input" />
+                  <label>{{ t('knowledge.importTab.year') }}</label>
+                  <input v-model.number="manualForm.year" type="number" :placeholder="t('knowledge.importTab.yearPh')" class="cy-input" />
                 </div>
               </div>
               <div class="form-row">
                 <div class="form-group">
-                  <label>Region</label>
+                  <label>{{ t('knowledge.importTab.region') }}</label>
                   <select v-model="manualForm.region" class="cy-input">
-                    <option value="">Any</option>
-                    <option value="china">China</option>
-                    <option value="foreign">Foreign</option>
+                    <option value="">{{ t('knowledge.importTab.regionAny') }}</option>
+                    <option value="china">{{ t('knowledge.importTab.regionChina') }}</option>
+                    <option value="foreign">{{ t('knowledge.importTab.regionForeign') }}</option>
                   </select>
                 </div>
                 <div class="form-group">
-                  <label>Category</label>
+                  <label>{{ t('knowledge.importTab.category') }}</label>
                   <select v-model="manualForm.category" class="cy-input">
-                    <option value="">Any</option>
-                    <option value="&#25919;&#27835;">Politics</option>
-                    <option value="&#20891;&#20107;">Military</option>
-                    <option value="&#31185;&#25216;">Technology</option>
-                    <option value="&#25991;&#21270;">Culture</option>
-                    <option value="&#32463;&#27982;">Economy</option>
-                    <option value="&#31038;&#20250;">Society</option>
+                    <option value="">{{ t('knowledge.importTab.categoryAny') }}</option>
+                    <option v-for="c in availableCategories" :key="c" :value="c">{{ c }}</option>
                   </select>
                 </div>
               </div>
               <button class="cy-btn cy-btn--cyan" :disabled="!manualForm.title || !manualForm.content || submitting" @click="doManualAdd">
-                {{ submitting ? 'Submitting...' : 'Add Entry' }}
+                {{ submitting ? t('knowledge.importTab.submitting') : t('knowledge.importTab.add') }}
               </button>
             </div>
           </div>
@@ -258,13 +248,13 @@
             <div class="drawer-head-copy">
               <h3 class="section-title">
                 <span class="section-icon">*</span>
-                Advanced Search
+                {{ t('knowledge.browseTab.advancedSearch') }}
               </h3>
-              <p class="import-hint">Open the drawer to combine region, category, year, importance, source, and status filters. Results stay visible below in every state.</p>
+              <p class="import-hint">{{ t('knowledge.browseTab.advancedSearchHint') }}</p>
             </div>
             <button class="drawer-toggle" :class="{ open: searchDrawerOpen }" @click="toggleSearchDrawer">
-              <span>{{ searchDrawerOpen ? 'Collapse filters' : 'Expand filters' }}</span>
-              <strong>{{ activeBrowseFilterCount }} on</strong>
+              <span>{{ searchDrawerOpen ? t('knowledge.browseTab.collapse') : t('knowledge.browseTab.expand') }}</span>
+              <strong>{{ t('knowledge.browseTab.onFilters', { n: activeBrowseFilterCount }) }}</strong>
             </button>
           </div>
 
@@ -273,82 +263,82 @@
               <div class="conditional-filters conditional-filters--drawer">
                 <div class="form-row">
                   <div class="form-group">
-                    <label>Keyword</label>
-                    <input v-model="condFilters.text" type="text" placeholder="Title / event / content keyword" class="cy-input" />
+                    <label>{{ t('knowledge.browseTab.keyword') }}</label>
+                    <input v-model="condFilters.text" type="text" :placeholder="t('knowledge.browseTab.keywordPh')" class="cy-input" />
                   </div>
                   <div class="form-group">
-                    <label>Event Name (fuzzy)</label>
-                    <input v-model="condFilters.event_name_like" type="text" placeholder="e.g. Silk Road" class="cy-input" />
+                    <label>{{ t('knowledge.browseTab.eventNameFuzzy') }}</label>
+                    <input v-model="condFilters.event_name_like" type="text" :placeholder="t('knowledge.browseTab.eventNameFuzzyPh')" class="cy-input" />
                   </div>
                 </div>
                 <div class="form-row form-row--triple">
                   <div class="form-group">
-                    <label>Region</label>
+                    <label>{{ t('knowledge.browseTab.region') }}</label>
                     <select v-model="condFilters.region" class="cy-input">
-                      <option value="">Any</option>
-                      <option value="china">China</option>
-                      <option value="foreign">Foreign</option>
+                      <option value="">{{ t('knowledge.browseTab.regionAny') }}</option>
+                      <option value="china">{{ t('knowledge.browseTab.regionChina') }}</option>
+                      <option value="foreign">{{ t('knowledge.browseTab.regionForeign') }}</option>
                     </select>
                   </div>
                   <div class="form-group">
-                    <label>Category</label>
+                    <label>{{ t('knowledge.browseTab.category') }}</label>
                     <select v-model="condFilters.category" class="cy-input">
-                      <option value="">Any</option>
+                      <option value="">{{ t('knowledge.browseTab.categoryAny') }}</option>
                       <option v-for="c in availableCategories" :key="c" :value="c">{{ c }}</option>
                     </select>
                   </div>
                   <div class="form-group">
-                    <label>Source</label>
+                    <label>{{ t('knowledge.browseTab.source') }}</label>
                     <select v-model="condFilters.source_type" class="cy-input">
-                      <option value="">All sources</option>
-                      <option value="file_import">File Import</option>
-                      <option value="web_crawl">Web Crawl</option>
-                      <option value="manual">Manual</option>
-                      <option value="seed_data">Seed Data</option>
+                      <option value="">{{ t('knowledge.browseTab.sourceAll') }}</option>
+                      <option value="file_import">{{ t('knowledge.browseTab.sourceFile') }}</option>
+                      <option value="web_crawl">{{ t('knowledge.browseTab.sourceWeb') }}</option>
+                      <option value="manual">{{ t('knowledge.browseTab.sourceManual') }}</option>
+                      <option value="seed_data">{{ t('knowledge.browseTab.sourceSeed') }}</option>
                     </select>
                   </div>
                 </div>
                 <div class="form-row form-row--triple">
                   <div class="form-group">
-                    <label>Year From</label>
-                    <input v-model.number="condFilters.year_min" type="number" placeholder="e.g. 0" class="cy-input" />
+                    <label>{{ t('knowledge.browseTab.yearFrom') }}</label>
+                    <input v-model.number="condFilters.year_min" type="number" :placeholder="t('knowledge.browseTab.yearFromPh')" class="cy-input" />
                   </div>
                   <div class="form-group">
-                    <label>Year To</label>
-                    <input v-model.number="condFilters.year_max" type="number" placeholder="e.g. 2000" class="cy-input" />
+                    <label>{{ t('knowledge.browseTab.yearTo') }}</label>
+                    <input v-model.number="condFilters.year_max" type="number" :placeholder="t('knowledge.browseTab.yearToPh')" class="cy-input" />
                   </div>
                   <div class="form-group">
-                    <label>Min Importance</label>
-                    <input v-model.number="condFilters.importance_min" type="number" min="1" max="10" placeholder="1-10" class="cy-input" />
+                    <label>{{ t('knowledge.browseTab.minImportance') }}</label>
+                    <input v-model.number="condFilters.importance_min" type="number" min="1" max="10" :placeholder="t('knowledge.browseTab.minImportancePh')" class="cy-input" />
                   </div>
                 </div>
                 <div class="form-row form-row--triple">
                   <div class="form-group">
-                    <label>Tag</label>
-                    <input v-model="condFilters.tag" type="text" placeholder="e.g. war" class="cy-input" />
+                    <label>{{ t('knowledge.browseTab.tag') }}</label>
+                    <input v-model="condFilters.tag" type="text" :placeholder="t('knowledge.browseTab.tagPh')" class="cy-input" />
                   </div>
                   <div class="form-group">
-                    <label>Status</label>
+                    <label>{{ t('knowledge.browseTab.status') }}</label>
                     <select v-model="condFilters.status" class="cy-input">
-                      <option value="">All status</option>
-                      <option value="active">Active</option>
-                      <option value="archived">Archived</option>
-                      <option value="pending_review">Pending</option>
+                      <option value="">{{ t('knowledge.browseTab.statusAll') }}</option>
+                      <option value="active">{{ t('knowledge.browseTab.statusActive') }}</option>
+                      <option value="archived">{{ t('knowledge.browseTab.statusArchived') }}</option>
+                      <option value="pending_review">{{ t('knowledge.browseTab.statusPending') }}</option>
                     </select>
                   </div>
                   <div class="form-group">
-                    <label>Sort</label>
+                    <label>{{ t('knowledge.browseTab.sort') }}</label>
                     <select v-model="condFilters.order_by" class="cy-input">
-                      <option value="relevance">Relevance / Importance</option>
-                      <option value="importance">Importance</option>
-                      <option value="year">Year</option>
-                      <option value="updated_at">Updated Time</option>
+                      <option value="relevance">{{ t('knowledge.browseTab.sortRelevance') }}</option>
+                      <option value="importance">{{ t('knowledge.browseTab.sortImportance') }}</option>
+                      <option value="year">{{ t('knowledge.browseTab.sortYear') }}</option>
+                      <option value="updated_at">{{ t('knowledge.browseTab.sortUpdated') }}</option>
                     </select>
                   </div>
                 </div>
                 <div class="drawer-actions">
-                  <button class="cy-btn cy-btn--cyan" @click="fetchEntries(1)">Run Search</button>
-                  <button class="cy-btn cy-btn--ghost" @click="resetConditional">Reset</button>
+                  <button class="cy-btn cy-btn--cyan" @click="fetchEntries(1)">{{ t('knowledge.browseTab.runSearch') }}</button>
+                  <button class="cy-btn cy-btn--ghost" @click="resetConditional">{{ t('knowledge.browseTab.reset') }}</button>
                 </div>
               </div>
             </div>
@@ -360,29 +350,29 @@
             <div>
               <h3 class="section-title">
                 <span class="section-icon">*</span>
-                Knowledge Entries
+                {{ t('knowledge.browseTab.entriesTitle') }}
               </h3>
               <p class="results-summary">{{ browseSummary }}</p>
             </div>
             <div class="results-panel-tools">
               <label class="inline-field">
-                <span>Page Size</span>
+                <span>{{ t('knowledge.browseTab.pageSize') }}</span>
                 <select v-model.number="entriesPageSize" class="cy-input compact-select" @change="handleBrowsePageSizeChange">
                   <option v-for="size in browsePageSizeOptions" :key="size" :value="size">{{ size }}</option>
                 </select>
               </label>
-              <div v-if="conditionalResult" class="result-badge">{{ conditionalResult.total }} total</div>
+              <div v-if="conditionalResult" class="result-badge">{{ t('knowledge.browseTab.totalBadge', { n: conditionalResult.total }) }}</div>
             </div>
           </div>
 
           <div v-if="entriesLoading" class="loading-state">
             <div class="cy-loading"></div>
-            <p>Loading...</p>
+            <p>{{ t('knowledge.browseTab.loading') }}</p>
           </div>
 
           <div v-else-if="entries.length === 0" class="empty-state">
             <div class="empty-icon">o</div>
-            <p>No entries found</p>
+            <p>{{ t('knowledge.browseTab.empty') }}</p>
           </div>
 
           <div v-else class="entries-list">
@@ -393,7 +383,7 @@
                 </span>
                 <span class="entry-version">v{{ entry.version }}</span>
                 <span v-if="entry.version_count && entry.version_count > 1" class="entry-version-total">
-                  ({{ entry.version_count }} versions)
+                  {{ t('knowledge.browseTab.versions', { n: entry.version_count }) }}
                 </span>
                 <span class="entry-status-badge" :class="entry.status">
                   {{ statusLabels[entry.status] || entry.status }}
@@ -402,17 +392,17 @@
               <h4 class="entry-title">{{ entry.title }}</h4>
               <p class="entry-preview">{{ entry.content_preview }}</p>
               <div class="entry-meta">
-                <span v-if="entry.event_name" class="meta-item">Event {{ entry.event_name }}</span>
-                <span v-if="entry.year" class="meta-item">Year {{ entry.year }}</span>
-                <span v-if="entry.region" class="meta-item">{{ entry.region === 'china' ? 'China' : 'Foreign' }}</span>
+                <span v-if="entry.event_name" class="meta-item">{{ t('knowledge.browseTab.event', { name: entry.event_name }) }}</span>
+                <span v-if="entry.year" class="meta-item">{{ t('knowledge.browseTab.yearLabel', { n: entry.year }) }}</span>
+                <span v-if="entry.region" class="meta-item">{{ entry.region === 'china' ? t('knowledge.importTab.regionChina') : t('knowledge.importTab.regionForeign') }}</span>
                 <span v-if="entry.category" class="meta-item">{{ entry.category }}</span>
                 <span v-if="entry.tags && entry.tags.length" class="meta-item">{{ entry.tags.slice(0, 3).join(' / ') }}</span>
                 <span v-if="entry.importance" class="meta-item">{{ entry.importance }}/10</span>
               </div>
               <div class="entry-footer">
-                <span class="chunk-info">Chunk {{ entry.chunk_index + 1 }}/{{ entry.chunk_total }}</span>
+                <span class="chunk-info">{{ t('knowledge.browseTab.chunkLabel', { n: entry.chunk_index + 1, m: entry.chunk_total }) }}</span>
                 <span class="entry-date">{{ entry.created_at?.split('T')[0] || entry.created_at?.split(' ')[0] || '' }}</span>
-                <button class="delete-btn" @click.stop="deleteEntry(entry.id)" title="Delete">x</button>
+                <button class="delete-btn" @click.stop="deleteEntry(entry.id)" :title="t('knowledge.browseTab.delete')">x</button>
               </div>
             </div>
           </div>
@@ -420,14 +410,14 @@
           <div v-if="entriesTotal > 0" class="pagination pagination--panel">
             <div class="pagination-summary">
               <strong>{{ entriesTotal }}</strong>
-              <span>results</span>
+              <span>{{ t('knowledge.browseTab.results') }}</span>
               <span>?</span>
-              <span>{{ totalEntryPages }} pages</span>
+              <span>{{ t('knowledge.browseTab.pages', { n: totalEntryPages }) }}</span>
             </div>
             <div class="pagination-controls">
-              <button class="page-btn" :disabled="currentPage <= 1" @click="changeBrowsePage(currentPage - 1)">Previous</button>
-              <span class="page-info">Page {{ currentPage }} / {{ totalEntryPages }}</span>
-              <button class="page-btn" :disabled="currentPage >= totalEntryPages" @click="changeBrowsePage(currentPage + 1)">Next</button>
+              <button class="page-btn" :disabled="currentPage <= 1" @click="changeBrowsePage(currentPage - 1)">{{ t('knowledge.browseTab.previous') }}</button>
+              <span class="page-info">{{ t('knowledge.browseTab.pageInfo', { cur: currentPage, total: totalEntryPages }) }}</span>
+              <button class="page-btn" :disabled="currentPage >= totalEntryPages" @click="changeBrowsePage(currentPage + 1)">{{ t('knowledge.browseTab.next') }}</button>
             </div>
           </div>
         </div>
@@ -439,38 +429,38 @@
             <div>
               <h3 class="section-title">
                 <span class="section-icon">@</span>
-                Crawl Sources
+                {{ t('knowledge.sourcesTab.title') }}
               </h3>
-              <p class="import-hint">Long source lists are paged so the status panel stays compact and easier to scan.</p>
+              <p class="import-hint">{{ t('knowledge.sourcesTab.hint') }}</p>
             </div>
             <div class="results-panel-tools">
               <label class="inline-field">
-                <span>Page Size</span>
+                <span>{{ t('knowledge.sourcesTab.pageSize') }}</span>
                 <select v-model.number="sourcePageSize" class="cy-input compact-select" @change="handleSourcePageSizeChange">
                   <option v-for="size in sourcePageSizeOptions" :key="size" :value="size">{{ size }}</option>
                 </select>
               </label>
-              <div class="result-badge">{{ crawlSources.length }} total</div>
+              <div class="result-badge">{{ t('knowledge.sourcesTab.totalBadge', { n: crawlSources.length }) }}</div>
             </div>
           </div>
           <div v-if="crawlSources.length === 0" class="empty-state">
-            <p>No sources available</p>
+            <p>{{ t('knowledge.sourcesTab.empty') }}</p>
           </div>
           <div v-else class="crawl-sources-list">
             <div v-for="src in pagedCrawlSources" :key="src.id" class="crawl-source-card">
               <div class="crawl-source-head">
                 <span class="crawl-source-name">{{ src.name }}</span>
                 <span class="entry-status-badge" :class="src.last_status === 'success' ? 'active' : src.last_status === 'failed' ? 'archived' : 'pending_review'">
-                  {{ src.last_status === 'success' ? 'Success' : src.last_status === 'failed' ? 'Failed' : 'Pending' }}
+                  {{ src.last_status === 'success' ? t('knowledge.sourcesTab.success') : src.last_status === 'failed' ? t('knowledge.sourcesTab.failed') : t('knowledge.sourcesTab.pending') }}
                 </span>
-                <span v-if="src.recommended" class="entry-source-badge seed_data">Recommended</span>
+                <span v-if="src.recommended" class="entry-source-badge seed_data">{{ t('knowledge.sourcesTab.recommended') }}</span>
               </div>
               <a class="crawl-source-url" :href="src.url" target="_blank" rel="noopener">{{ src.url }}</a>
               <p v-if="src.description" class="crawl-source-desc">{{ src.description }}</p>
               <div class="crawl-source-meta">
-                <span v-if="src.category">Category {{ src.category }}</span>
-                <span v-if="src.region">Region {{ src.region === 'china' ? 'China' : src.region === 'foreign' ? 'Foreign' : src.region }}</span>
-                <span v-if="src.last_imported !== null">Last import {{ src.last_imported }}</span>
+                <span v-if="src.category">{{ t('knowledge.sourcesTab.category', { name: src.category }) }}</span>
+                <span v-if="src.region">{{ t('knowledge.sourcesTab.region', { name: src.region === 'china' ? t('knowledge.importTab.regionChina') : src.region === 'foreign' ? t('knowledge.importTab.regionForeign') : src.region }) }}</span>
+                <span v-if="src.last_imported != null">{{ t('knowledge.sourcesTab.lastImport', { time: String(src.last_imported) }) }}</span>
                 <span v-if="src.last_crawled_at">{{ src.last_crawled_at }}</span>
               </div>
               <div v-if="src.tags && src.tags.length" class="tag-list">
@@ -481,14 +471,14 @@
           <div v-if="crawlSources.length > 0" class="pagination pagination--panel pagination--sources">
             <div class="pagination-summary">
               <strong>{{ crawlSources.length }}</strong>
-              <span>sources</span>
+              <span>{{ t('knowledge.sourcesTab.sources') }}</span>
               <span>?</span>
-              <span>{{ totalSourcePages }} pages</span>
+              <span>{{ t('knowledge.browseTab.pages', { n: totalSourcePages }) }}</span>
             </div>
             <div class="pagination-controls">
-              <button class="page-btn" :disabled="sourceCurrentPage <= 1" @click="changeSourcePage(sourceCurrentPage - 1)">Previous</button>
-              <span class="page-info">Page {{ sourceCurrentPage }} / {{ totalSourcePages }}</span>
-              <button class="page-btn" :disabled="sourceCurrentPage >= totalSourcePages" @click="changeSourcePage(sourceCurrentPage + 1)">Next</button>
+              <button class="page-btn" :disabled="sourceCurrentPage <= 1" @click="changeSourcePage(sourceCurrentPage - 1)">{{ t('knowledge.sourcesTab.previous') }}</button>
+              <span class="page-info">{{ t('knowledge.sourcesTab.pageInfo', { cur: sourceCurrentPage, total: totalSourcePages }) }}</span>
+              <button class="page-btn" :disabled="sourceCurrentPage >= totalSourcePages" @click="changeSourcePage(sourceCurrentPage + 1)">{{ t('knowledge.sourcesTab.next') }}</button>
             </div>
           </div>
         </div>
@@ -497,17 +487,17 @@
       <div v-if="activeTab === 'detail' && selectedEntry" class="tab-content">
         <div class="section-block cy-card">
           <div class="detail-header">
-            <button class="cy-btn cy-btn--ghost" @click="activeTab = 'browse'">Back to list</button>
+            <button class="cy-btn cy-btn--ghost" @click="activeTab = 'browse'">{{ t('knowledge.detail.back') }}</button>
             <div class="detail-actions">
               <button class="cy-btn cy-btn--ghost" :disabled="versionsLoading" @click="fetchVersions(selectedEntry.id)">
-                {{ versionsLoading ? 'Loading...' : 'Version History' }}
+                {{ versionsLoading ? t('knowledge.detail.versionHistoryLoading') : t('knowledge.detail.versionHistory') }}
               </button>
-              <button class="cy-btn cy-btn--ghost" @click="deleteEntry(selectedEntry.id)">Delete</button>
+              <button class="cy-btn cy-btn--ghost" @click="deleteEntry(selectedEntry.id)">{{ t('knowledge.detail.delete') }}</button>
             </div>
           </div>
 
           <div v-if="showVersions && entryVersions.length" class="version-history">
-            <h4 class="version-history-title">Version History ({{ entryVersions.length }})</h4>
+            <h4 class="version-history-title">{{ t('knowledge.detail.versionHistoryTitle', { n: entryVersions.length }) }}</h4>
             <div class="version-list">
               <div v-for="v in entryVersions" :key="v.id" class="version-item">
                 <div class="version-item-head">
@@ -515,14 +505,14 @@
                   <span class="version-source-badge">{{ v.change_source || 'system' }}</span>
                   <span class="version-date">{{ v.created_at }}</span>
                 </div>
-                <div class="version-summary">{{ v.change_summary || 'No summary' }}</div>
+                <div class="version-summary">{{ v.change_summary || t('knowledge.detail.noSummary') }}</div>
                 <div class="version-meta">
-                  <span v-if="v.operator">Operator: {{ v.operator }}</span>
-                  <span class="mono">hash: {{ v.content_hash?.substring(0, 12) }}...</span>
+                  <span v-if="v.operator">{{ t('knowledge.detail.operator', { name: v.operator }) }}</span>
+                  <span class="mono">{{ t('knowledge.detail.hash', { hash: v.content_hash?.substring(0, 12) }) }}</span>
                 </div>
                 <div v-if="v.snapshot_meta" class="version-snapshot">
                   <details>
-                    <summary>Snapshot metadata</summary>
+                    <summary>{{ t('knowledge.detail.snapshotMeta') }}</summary>
                     <pre class="snapshot-pre">{{ JSON.stringify(v.snapshot_meta, null, 2) }}</pre>
                   </details>
                 </div>
@@ -534,61 +524,61 @@
 
           <div class="detail-meta-grid">
             <div class="meta-field">
-              <span class="meta-label">Source</span>
+              <span class="meta-label">{{ t('knowledge.detail.source') }}</span>
               <span class="meta-value">{{ sourceLabels[selectedEntry.source_type] || selectedEntry.source_type }}</span>
             </div>
             <div class="meta-field">
-              <span class="meta-label">Version</span>
+              <span class="meta-label">{{ t('knowledge.detail.version') }}</span>
               <span class="meta-value">v{{ selectedEntry.version }}</span>
             </div>
             <div class="meta-field">
-              <span class="meta-label">Status</span>
+              <span class="meta-label">{{ t('knowledge.detail.status') }}</span>
               <span class="meta-value">{{ statusLabels[selectedEntry.status] || selectedEntry.status }}</span>
             </div>
             <div class="meta-field">
-              <span class="meta-label">Chunk</span>
+              <span class="meta-label">{{ t('knowledge.detail.chunk') }}</span>
               <span class="meta-value">{{ selectedEntry.chunk_index + 1 }} / {{ selectedEntry.chunk_total }}</span>
             </div>
             <div v-if="selectedEntry.event_name" class="meta-field">
-              <span class="meta-label">Event</span>
+              <span class="meta-label">{{ t('knowledge.detail.event') }}</span>
               <span class="meta-value">{{ selectedEntry.event_name }}</span>
             </div>
             <div v-if="selectedEntry.year" class="meta-field">
-              <span class="meta-label">Year</span>
-              <span class="meta-value">{{ selectedEntry.year < 0 ? 'BCE ' + Math.abs(selectedEntry.year) : 'CE ' + selectedEntry.year }}</span>
+              <span class="meta-label">{{ t('knowledge.detail.year') }}</span>
+              <span class="meta-value">{{ selectedEntry.year < 0 ? t('knowledge.detail.yearValue', { n: Math.abs(selectedEntry.year) }) : t('knowledge.detail.yearCE', { n: selectedEntry.year }) }}</span>
             </div>
             <div v-if="selectedEntry.region" class="meta-field">
-              <span class="meta-label">Region</span>
-              <span class="meta-value">{{ selectedEntry.region === 'china' ? 'China' : 'Foreign' }}</span>
+              <span class="meta-label">{{ t('knowledge.detail.region') }}</span>
+              <span class="meta-value">{{ selectedEntry.region === 'china' ? t('knowledge.importTab.regionChina') : t('knowledge.importTab.regionForeign') }}</span>
             </div>
             <div v-if="selectedEntry.category" class="meta-field">
-              <span class="meta-label">Category</span>
+              <span class="meta-label">{{ t('knowledge.detail.category') }}</span>
               <span class="meta-value">{{ selectedEntry.category }}</span>
             </div>
             <div v-if="selectedEntry.importance" class="meta-field">
-              <span class="meta-label">Importance</span>
+              <span class="meta-label">{{ t('knowledge.detail.importance') }}</span>
               <span class="meta-value">{{ selectedEntry.importance }}/10</span>
             </div>
             <div v-if="selectedEntry.source_url" class="meta-field meta-field--wide">
-              <span class="meta-label">Source URL</span>
+              <span class="meta-label">{{ t('knowledge.detail.sourceUrl') }}</span>
               <a class="meta-value link" :href="selectedEntry.source_url" target="_blank">{{ selectedEntry.source_url }}</a>
             </div>
             <div v-if="selectedEntry.file_name" class="meta-field">
-              <span class="meta-label">File</span>
+              <span class="meta-label">{{ t('knowledge.detail.file') }}</span>
               <span class="meta-value">{{ selectedEntry.file_name }}</span>
             </div>
             <div v-if="selectedEntry.content_hash" class="meta-field meta-field--wide">
-              <span class="meta-label">Content Hash</span>
+              <span class="meta-label">{{ t('knowledge.detail.contentHash') }}</span>
               <span class="meta-value mono">{{ selectedEntry.content_hash?.substring(0, 16) }}...</span>
             </div>
             <div v-if="selectedEntry.tags && selectedEntry.tags.length" class="meta-field meta-field--wide">
-              <span class="meta-label">Tags</span>
+              <span class="meta-label">{{ t('knowledge.detail.tags') }}</span>
               <div class="tag-list">
                 <span v-for="tag in selectedEntry.tags" :key="tag" class="tag-chip">{{ tag }}</span>
               </div>
             </div>
             <div v-if="selectedEntry.figures && selectedEntry.figures.length" class="meta-field meta-field--wide">
-              <span class="meta-label">Figures</span>
+              <span class="meta-label">{{ t('knowledge.detail.figures') }}</span>
               <div class="tag-list">
                 <span v-for="fig in selectedEntry.figures" :key="fig" class="tag-chip figure">{{ fig }}</span>
               </div>
@@ -596,13 +586,13 @@
           </div>
 
           <div class="detail-content">
-            <h4 class="content-label">Content</h4>
+            <h4 class="content-label">{{ t('knowledge.detail.content') }}</h4>
             <div class="content-body">{{ selectedEntry.content }}</div>
           </div>
 
           <div class="detail-dates">
-            <span>Created: {{ selectedEntry.created_at }}</span>
-            <span>Updated: {{ selectedEntry.updated_at }}</span>
+            <span>{{ t('knowledge.detail.created', { time: selectedEntry.created_at ?? '' }) }}</span>
+            <span>{{ t('knowledge.detail.updated', { time: selectedEntry.updated_at ?? '' }) }}</span>
           </div>
         </div>
       </div>
@@ -616,14 +606,16 @@ import { useRouter } from 'vue-router'
 import { ragApi, type KnowledgeEntry, type KnowledgeStats, type KnowledgeVersion, type CrawlSource } from '@/api/rag'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+import { useI18n } from '@/composables/useI18n'
 
 const appStore = useAppStore()
 const authStore = useAuthStore()
 const router = useRouter()
+const { t } = useI18n()
 
 if (!authStore.user?.is_admin) {
   try {
-    appStore.showToast('warning', 'Admin access required for the knowledge base')
+    appStore.showToast('warning', t('auth.adminOnly'))
   } catch (_) {
     // app store unavailable
   }
@@ -631,12 +623,12 @@ if (!authStore.user?.is_admin) {
 }
 
 const activeTab = ref('overview')
-const tabs = [
-  { key: 'overview', label: 'Overview', icon: '[]' },
-  { key: 'import', label: 'Import', icon: '+' },
-  { key: 'browse', label: 'Browse', icon: '*' },
-  { key: 'sources', label: 'Sources', icon: '@' },
-]
+const tabs = computed(() => [
+  { key: 'overview', label: t('knowledge.tabs.overview'), icon: '[]' },
+  { key: 'import', label: t('knowledge.tabs.import'), icon: '+' },
+  { key: 'browse', label: t('knowledge.tabs.browse'), icon: '*' },
+  { key: 'sources', label: t('knowledge.tabs.sources'), icon: '@' },
+])
 
 const stats = reactive<KnowledgeStats>({
   total: 0, active: 0,
@@ -645,12 +637,12 @@ const stats = reactive<KnowledgeStats>({
   latest_update: null,
 })
 
-const sourceLabels: Record<string, string> = {
-  file_import: 'File Import',
-  web_crawl: 'Web Crawl',
-  manual: 'Manual',
-  seed_data: 'Seed Data',
-}
+const sourceLabels = computed<Record<string, string>>(() => ({
+  file_import: t('knowledge.fileImport'),
+  web_crawl: t('knowledge.webCrawl'),
+  manual: t('knowledge.manual'),
+  seed_data: t('knowledge.seedData'),
+}))
 
 const availableCategories = computed(() => {
   const cats = new Set<string>()
@@ -659,11 +651,11 @@ const availableCategories = computed(() => {
   return Array.from(cats).sort()
 })
 
-const statusLabels: Record<string, string> = {
-  active: 'Active',
-  archived: 'Archived',
-  pending_review: 'Pending',
-}
+const statusLabels = computed<Record<string, string>>(() => ({
+  active: t('knowledge.browseTab.statusActive'),
+  archived: t('knowledge.browseTab.statusArchived'),
+  pending_review: t('knowledge.browseTab.statusPending'),
+}))
 
 const crawling = ref(false)
 const rebuilding = ref(false)
@@ -741,11 +733,11 @@ const activeBrowseFilterCount = computed(() => {
   return values.filter((value) => value !== '' && value !== undefined && value !== null).length
 })
 const browseSummary = computed(() => {
-  if (entriesLoading.value) return 'Loading search results...'
-  if (entriesTotal.value === 0) return 'No matching entries'
+  if (entriesLoading.value) return t('knowledge.browseTab.loadingSearch')
+  if (entriesTotal.value === 0) return t('knowledge.browseTab.noMatching')
   const start = (currentPage.value - 1) * entriesPageSize.value + 1
   const end = Math.min(currentPage.value * entriesPageSize.value, entriesTotal.value)
-  return `Showing ${start}-${end} of ${entriesTotal.value} entries, page ${currentPage.value} / ${totalEntryPages.value}`
+  return t('knowledge.browseTab.summary', { start, end, total: entriesTotal.value, cur: currentPage.value, pages: totalEntryPages.value })
 })
 
 function toggleSearchDrawer() {
@@ -775,17 +767,17 @@ async function triggerCrawl() {
       const failed = res.data?.sources_failed || 0
       const processed = res.data?.sources_processed || 0
       if (processed > 0 && failed === processed) {
-        appStore.showToast('error', `Crawl failed: ${failed}/${processed} sources failed`)
+        appStore.showToast('error', t('knowledge.toast.crawlFailedAll', { failed, total: processed }))
       } else if (failed > 0) {
-        appStore.showToast('warning', `Crawl partially completed: imported ${imported}, failed ${failed}/${processed}`)
+        appStore.showToast('warning', t('knowledge.toast.crawlPartial', { ok: imported, failed, total: processed }))
       } else {
-        appStore.showToast('success', `Crawl completed: imported ${imported} entries`)
+        appStore.showToast('success', t('knowledge.toast.crawlDone', { n: imported }))
       }
       fetchStats()
       fetchCrawlSources()
     }
   } catch {
-    appStore.showToast('error', 'Crawl failed')
+    appStore.showToast('error', t('knowledge.toast.crawlError'))
   } finally {
     crawling.value = false
   }
@@ -798,12 +790,12 @@ async function triggerSeed() {
     if (res.code === 200) {
       appStore.showToast(
         'success',
-        `Seed import completed: +${res.data?.imported || 0}, skipped ${res.data?.skipped || 0}, total ${res.data?.total_events || 0}`,
+        t('knowledge.toast.seedDone', { n: res.data?.imported || 0, m: res.data?.skipped || 0, t: res.data?.total_events || 0 }),
       )
       fetchStats()
     }
   } catch {
-    appStore.showToast('error', 'Seed import failed')
+    appStore.showToast('error', t('knowledge.toast.seedError'))
   } finally {
     seeding.value = false
   }
@@ -845,7 +837,7 @@ async function doConditionalSearch(page = 1) {
       entriesTotal.value = res.data.total || 0
     }
   } catch {
-    appStore.showToast('error', 'Delete failed')
+    appStore.showToast('error', t('knowledge.toast.deleteError'))
   }
 }
 
@@ -885,10 +877,10 @@ async function rebuildIndex() {
   try {
     const res = await ragApi.rebuild()
     if (res.code === 200) {
-      appStore.showToast('success', 'Deleted successfully')
+      appStore.showToast('success', t('knowledge.toast.deleteOk'))
     }
   } catch {
-    appStore.showToast('error', 'Delete failed')
+    appStore.showToast('error', t('knowledge.toast.deleteError'))
   } finally {
     rebuilding.value = false
   }
@@ -928,12 +920,12 @@ async function doImport() {
     const res = await ragApi.importFile(selectedFile.value, meta)
     if (res.code === 200) {
       importResult.value = res.data
-      appStore.showToast('success', 'Deleted successfully')
+      appStore.showToast('success', t('knowledge.toast.deleteOk'))
       fetchStats()
       selectedFile.value = null
     }
   } catch {
-    appStore.showToast('error', 'Delete failed')
+    appStore.showToast('error', t('knowledge.toast.deleteError'))
   } finally {
     importing.value = false
   }
@@ -952,14 +944,14 @@ async function doManualAdd() {
       category: manualForm.category || undefined,
     })
     if (res.code === 200) {
-      appStore.showToast('success', 'Deleted successfully')
+      appStore.showToast('success', t('knowledge.toast.deleteOk'))
       manualForm.title = ''
       manualForm.content = ''
       manualForm.event_name = ''
       fetchStats()
     }
   } catch {
-    appStore.showToast('error', 'Delete failed')
+    appStore.showToast('error', t('knowledge.toast.deleteError'))
   } finally {
     submitting.value = false
   }
@@ -1007,10 +999,10 @@ async function viewEntry(entry: KnowledgeEntry) {
 }
 
 async function deleteEntry(id: number) {
-  if (!confirm('Delete this entry?')) return
+  if (!confirm(t('knowledge.toast.deleteConfirm'))) return
   try {
     await ragApi.deleteEntry(id)
-    appStore.showToast('success', 'Deleted successfully')
+    appStore.showToast('success', t('knowledge.toast.deleteOk'))
     fetchEntries()
     fetchStats()
     if (selectedEntry.value?.id === id) {
@@ -1018,7 +1010,7 @@ async function deleteEntry(id: number) {
       activeTab.value = 'browse'
     }
   } catch {
-    appStore.showToast('error', 'Delete failed')
+    appStore.showToast('error', t('knowledge.toast.deleteError'))
   }
 }
 
@@ -1095,6 +1087,13 @@ onMounted(() => {
 .title-icon { margin-right: 8px; }
 
 .header-accent { width: 40px; flex-shrink: 0; }
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
 
 .kb-tabs {
   display: flex;

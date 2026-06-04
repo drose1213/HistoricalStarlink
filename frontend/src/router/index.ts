@@ -2,6 +2,8 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
+import zh from '@/locales/zh'
+import en from '@/locales/en'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -74,7 +76,8 @@ router.beforeEach((to, _from, next) => {
     if (!auth.user?.is_admin) {
       try {
         const app = useAppStore()
-        app.showToast('warning', '无访问权限, 仅管理员可访问知识库')
+        const messages = app.locale === 'en' ? en : zh
+        app.showToast('warning', messages.auth.adminOnly)
       } catch (_) {
         // app store 不可用时静默
       }

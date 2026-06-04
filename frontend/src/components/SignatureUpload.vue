@@ -3,7 +3,7 @@
     <div class="upload-header">
       <h3 class="cy-subtitle">
         <span class="header-icon">✎</span>
-        签名上传
+        {{ t('signature.title') }}
       </h3>
     </div>
 
@@ -17,8 +17,8 @@
         @click="triggerFileInput"
       >
         <div class="dropzone-icon">⬡</div>
-        <p class="dropzone-text">拖拽图片到此处</p>
-        <p class="dropzone-hint">或点击选择文件 · 支持 JPG/PNG · 最大 5MB</p>
+        <p class="dropzone-text">{{ t('signature.dropText') }}</p>
+        <p class="dropzone-hint">{{ t('signature.dropHint') }}</p>
       </div>
       <input
         ref="fileInput"
@@ -31,7 +31,7 @@
 
     <div class="preview-area" v-else>
       <div class="preview-image-wrapper">
-        <img :src="previewUrl" alt="签名预览" class="preview-image" />
+        <img :src="previewUrl" :alt="t('signature.preview')" class="preview-image" />
         <button class="remove-btn" @click="clearFile">✕</button>
       </div>
 
@@ -39,13 +39,13 @@
         <input
           v-model="title"
           class="cy-input"
-          placeholder="签名标题（可选）"
+          :placeholder="t('signature.titlePh')"
           maxlength="50"
         />
         <textarea
           v-model="description"
           class="cy-textarea"
-          placeholder="描述说明（可选）"
+          :placeholder="t('signature.descPh')"
           rows="2"
           maxlength="200"
         ></textarea>
@@ -57,9 +57,9 @@
           :disabled="isUploading"
           @click="handleUpload"
         >
-          {{ isUploading ? '上传中...' : '确认上传' }}
+          {{ isUploading ? t('signature.uploading') : t('signature.confirm') }}
         </button>
-        <button class="cy-btn" @click="clearFile">取消</button>
+        <button class="cy-btn" @click="clearFile">{{ t('signature.cancel') }}</button>
       </div>
     </div>
 
@@ -72,7 +72,7 @@
 
     <div class="signatures-section" v-if="userSignatures.length > 0">
       <div class="cy-divider"></div>
-      <h4 class="signatures-title">我的签名</h4>
+      <h4 class="signatures-title">{{ t('signature.mySignatures') }}</h4>
       <div class="signatures-grid">
         <div
           v-for="sig in userSignatures"
@@ -81,7 +81,7 @@
         >
           <img :src="sig.image_url" :alt="sig.title" class="signature-thumb" />
           <div class="signature-info">
-            <span class="signature-title">{{ sig.title || '未命名' }}</span>
+            <span class="signature-title">{{ sig.title || t('signature.unnamed') }}</span>
             <span class="signature-time">{{ formatDate(sig.created_at) }}</span>
           </div>
           <button class="delete-btn" @click="handleDelete(sig.id)">✕</button>
@@ -95,9 +95,11 @@
 import { ref, computed, onMounted } from 'vue'
 import { useSignatureStore } from '@/stores/signature'
 import { useAppStore } from '@/stores/app'
+import { useI18n } from '@/composables/useI18n'
 
 const signatureStore = useSignatureStore()
 const appStore = useAppStore()
+const { t } = useI18n()
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
@@ -130,11 +132,11 @@ function handleDrop(e: DragEvent) {
 
 function validateAndSetFile(file: File) {
   if (!['image/jpeg', 'image/png'].includes(file.type)) {
-    appStore.showToast('error', '仅支持 JPG 和 PNG 格式')
+    appStore.showToast('error', t('toast.sigOnlyJpgPng'))
     return
   }
   if (file.size > 5 * 1024 * 1024) {
-    appStore.showToast('error', '文件大小不能超过 5MB')
+    appStore.showToast('error', t('toast.sigTooLarge'))
     return
   }
   selectedFile.value = file
@@ -174,10 +176,10 @@ async function handleUpload() {
   try {
     await signatureStore.uploadSignature(formData)
     uploadProgress.value = 100
-    appStore.showToast('success', '签名上传成功')
+    appStore.showToast('success', t('toast.sigUploadOk'))
     clearFile()
   } catch {
-    appStore.showToast('error', '签名上传失败')
+    appStore.showToast('error', t('toast.sigUploadFail'))
   } finally {
     clearInterval(progressInterval)
     isUploading.value = false
@@ -188,9 +190,9 @@ async function handleUpload() {
 async function handleDelete(id: number) {
   try {
     await signatureStore.deleteSignature(id)
-    appStore.showToast('success', '签名已删除')
+    appStore.showToast('success', t('toast.sigDeleted'))
   } catch {
-    appStore.showToast('error', '删除失败')
+    appStore.showToast('error', t('toast.deleteFail'))
   }
 }
 

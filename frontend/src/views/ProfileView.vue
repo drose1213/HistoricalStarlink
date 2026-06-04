@@ -2,11 +2,11 @@
   <div class="profile-view">
     <header class="profile-header">
       <router-link to="/" class="back-link">
-        <span>←</span> 返回首页
+        <span>←</span> {{ t('common.backToPrev') }}
       </router-link>
       <h2 class="page-title">
         <span class="title-icon">◈</span>
-        个人中心
+        {{ t('profile.pageTitle') }}
       </h2>
       <div class="header-accent"></div>
     </header>
@@ -29,35 +29,35 @@
         <div class="stats-grid">
           <div class="stat-card cy-card">
             <span class="stat-value">{{ stats.totalExplorations }}</span>
-            <span class="stat-label">总探索次数</span>
+            <span class="stat-label">{{ t('profile.statTotalExplorations') }}</span>
           </div>
           <div class="stat-card cy-card">
             <span class="stat-value">{{ stats.uniqueEvents }}</span>
-            <span class="stat-label">涉及事件</span>
+            <span class="stat-label">{{ t('profile.statUniqueEvents') }}</span>
           </div>
           <div class="stat-card cy-card">
             <span class="stat-value">{{ stats.totalDuration }}</span>
-            <span class="stat-label">累计时长</span>
+            <span class="stat-label">{{ t('profile.statTotalDuration') }}</span>
           </div>
           <div class="stat-card cy-card">
             <span class="stat-value">{{ stats.streakDays }}</span>
-            <span class="stat-label">连续探索</span>
+            <span class="stat-label">{{ t('profile.statStreakDays') }}</span>
           </div>
         </div>
 
         <div class="section-block cy-card">
           <h3 class="section-title">
             <span class="section-icon">◈</span>
-            探索时间线
+            {{ t('profile.timeline') }}
           </h3>
           <div v-if="loading" class="loading-state">
             <div class="cy-loading"></div>
-            <p>正在加载探索记录…</p>
+            <p>{{ t('profile.loadingRecords') }}</p>
           </div>
           <div v-else-if="exploreTimeline.length === 0" class="empty-state">
             <div class="empty-icon">◇</div>
-            <p>暂无探索记录</p>
-            <router-link to="/" class="cy-btn cy-btn--gold">开始探索</router-link>
+            <p>{{ t('profile.emptyRecords') }}</p>
+            <router-link to="/" class="cy-btn cy-btn--gold">{{ t('profile.startExplore') }}</router-link>
           </div>
           <div v-else class="timeline">
             <div v-for="(item, idx) in exploreTimeline" :key="item.id" class="timeline-item">
@@ -79,28 +79,28 @@
         <div class="section-block cy-card">
           <h3 class="section-title">
             <span class="section-icon">⬡</span>
-            区域分布
+            {{ t('profile.regionDistribution') }}
           </h3>
           <div v-if="regionChinaPercent + regionForeignPercent === 0" class="empty-state">
-            <p>暂无区域数据</p>
+            <p>{{ t('profile.regionEmpty') }}</p>
           </div>
           <div v-else class="region-bar-container">
             <div class="region-bar">
               <div class="region-segment region-cyan" :style="{ width: regionChinaPercent + '%' }">
-                <span v-if="regionChinaPercent >= 12" class="region-segment-label">东方 {{ regionChinaPercent }}%</span>
+                <span v-if="regionChinaPercent >= 12" class="region-segment-label">{{ t('profile.regionChina', { percent: regionChinaPercent }) }}</span>
               </div>
               <div class="region-segment region-pink" :style="{ width: regionForeignPercent + '%' }">
-                <span v-if="regionForeignPercent >= 12" class="region-segment-label">西方 {{ regionForeignPercent }}%</span>
+                <span v-if="regionForeignPercent >= 12" class="region-segment-label">{{ t('profile.regionForeign', { percent: regionForeignPercent }) }}</span>
               </div>
             </div>
             <div class="region-legend">
               <div class="legend-item">
                 <span class="legend-dot legend-dot--cyan"></span>
-                <span class="legend-text">东方 {{ regionChinaPercent }}%</span>
+                <span class="legend-text">{{ t('profile.regionChina', { percent: regionChinaPercent }) }}</span>
               </div>
               <div class="legend-item">
                 <span class="legend-dot legend-dot--pink"></span>
-                <span class="legend-text">西方 {{ regionForeignPercent }}%</span>
+                <span class="legend-text">{{ t('profile.regionForeign', { percent: regionForeignPercent }) }}</span>
               </div>
             </div>
           </div>
@@ -109,10 +109,10 @@
         <div class="section-block cy-card">
           <h3 class="section-title">
             <span class="section-icon">◇</span>
-            兴趣维度
+            {{ t('profile.interestDimensions') }}
           </h3>
           <div v-if="interestDimensions.length === 0" class="empty-state">
-            <p>探索事件后再来查看兴趣分布吧</p>
+            <p>{{ t('profile.interestEmpty') }}</p>
           </div>
           <div v-else class="dimensions-list">
             <div v-for="dim in interestDimensions" :key="dim.name" class="dimension-row">
@@ -128,10 +128,10 @@
         <div class="section-block cy-card">
           <h3 class="section-title">
             <span class="section-icon">◈</span>
-            近期活动
+            {{ t('profile.recentActivities') }}
           </h3>
           <div v-if="recentActivities.length === 0" class="empty-state">
-            <p>暂无活动</p>
+            <p>{{ t('profile.activityEmpty') }}</p>
           </div>
           <div v-else class="activity-list">
             <div v-for="act in recentActivities" :key="act.id" class="activity-row">
@@ -146,7 +146,7 @@
       <div v-if="activeTab === 'cards'" class="tab-content">
         <div v-if="loading" class="loading-state">
           <div class="cy-loading"></div>
-          <p>正在加载卡牌…</p>
+          <p>{{ t('profile.loadingCards') }}</p>
         </div>
         <div v-else-if="myCards.length > 0" class="cards-grid">
           <div
@@ -164,15 +164,15 @@
             <div class="card-event">{{ card.event }}</div>
             <div class="card-footer">
               <span class="card-date">{{ card.unlockDate }}</span>
-              <span v-if="card.exploreCount > 1" class="card-count">探索 {{ card.exploreCount }} 次</span>
+              <span v-if="card.exploreCount > 1" class="card-count">{{ t('profile.cardExploreTimes', { n: card.exploreCount }) }}</span>
             </div>
           </div>
         </div>
         <div v-else class="cards-empty">
           <div class="empty-icon">⬡</div>
-          <h3>暂无卡牌</h3>
-          <p>探索历史事件可解锁冠军卡牌</p>
-          <router-link to="/" class="cy-btn cy-btn--gold">开始探索</router-link>
+          <h3>{{ t('profile.noCards') }}</h3>
+          <p>{{ t('profile.noCardsHint') }}</p>
+          <router-link to="/" class="cy-btn cy-btn--gold">{{ t('profile.startExplore') }}</router-link>
         </div>
       </div>
     </main>
@@ -185,6 +185,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useI18n } from '@/composables/useI18n'
 import {
   profileApi,
   cardLevelToRarity,
@@ -200,14 +201,15 @@ import {
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const { t } = useI18n()
 
 type TabKey = 'explore' | 'trends' | 'cards'
 
-const tabs = [
-  { key: 'explore' as TabKey, label: '探索记录', icon: '◇' },
-  { key: 'trends' as TabKey, label: '趋势分析', icon: '◈' },
-  { key: 'cards' as TabKey, label: '我的卡牌', icon: '⬡' }
-]
+const tabs = computed(() => [
+  { key: 'explore' as TabKey, label: t('profile.tabs.explore'), icon: '◇' },
+  { key: 'trends' as TabKey, label: t('trends.pageTitle'), icon: '◈' },
+  { key: 'cards' as TabKey, label: t('profile.cardsTab'), icon: '⬡' }
+])
 
 function resolveTab(query: unknown): TabKey {
   if (query === 'trends' || query === 'cards' || query === 'explore') return query
@@ -239,13 +241,13 @@ const stats = computed(() => ({
 }))
 
 function computeStreakDays(): string {
-  if (records.value.length === 0) return '0天'
+  if (records.value.length === 0) return t('profile.streakDaysZero')
   const days = new Set<string>()
   for (const r of records.value) {
     if (r.created_at) days.add(r.created_at.slice(0, 10))
   }
   const sortedDays = Array.from(days).sort().reverse()
-  if (sortedDays.length === 0) return '0天'
+  if (sortedDays.length === 0) return t('profile.streakDaysZero')
 
   const today = new Date()
   const todayStr = today.toISOString().slice(0, 10)
@@ -254,7 +256,7 @@ function computeStreakDays(): string {
     const yesterday = new Date(today)
     yesterday.setDate(today.getDate() - 1)
     if (sortedDays[0] !== yesterday.toISOString().slice(0, 10)) {
-      return '0天'
+      return t('profile.streakDaysZero')
     }
     cursor = yesterday
   }
@@ -272,7 +274,7 @@ function computeStreakDays(): string {
       break
     }
   }
-  return `${streak}天`
+  return t('profile.streakDays', { n: streak })
 }
 
 const exploreTimeline = computed(() => {
@@ -309,12 +311,12 @@ const regionForeignPercent = computed(() => regionStats.value.foreignPercent)
 const interestDimensions = computed(() => {
   if (records.value.length === 0) return []
   const buckets: Record<string, string[]> = {
-    '政治变革': ['改革', '统一', '革命', '帝国', '政治', '议会', '民主', '共和', '立宪', '制度'],
-    '军事征伐': ['军事', '征伐', '战争', '远征', '东征', '东渡', '北伐', '南征', '抗战', '十字军'],
-    '文化交流': ['文化', '宗教', '艺术', '文学', '思想', '哲学', '儒', '佛', '禅', '启蒙'],
-    '经济发展': ['经济', '贸易', '商业', '市场', '资本', '工业', '金融', '货币', '工业革命'],
-    '科技进步': ['科技', '技术', '发明', '科学', '医学', '工程', '天文', '数学', '网络', '蒸汽'],
-    '社会生活': ['社会', '生活', '家庭', '教育', '医疗', '人口', '城市', '建筑'],
+    [t('profile.dimension.politics')]: ['改革', '统一', '革命', '帝国', '政治', '议会', '民主', '共和', '立宪', '制度'],
+    [t('profile.dimension.military')]: ['军事', '征伐', '战争', '远征', '东征', '东渡', '北伐', '南征', '抗战', '十字军'],
+    [t('profile.dimension.culture')]: ['文化', '宗教', '艺术', '文学', '思想', '哲学', '儒', '佛', '禅', '启蒙'],
+    [t('profile.dimension.economy')]: ['经济', '贸易', '商业', '市场', '资本', '工业', '金融', '货币', '工业革命'],
+    [t('profile.dimension.science')]: ['科技', '技术', '发明', '科学', '医学', '工程', '天文', '数学', '网络', '蒸汽'],
+    [t('profile.dimension.society')]: ['社会', '生活', '家庭', '教育', '医疗', '人口', '城市', '建筑'],
   }
   const scores: Record<string, number> = {}
   for (const name of Object.keys(buckets)) scores[name] = 0
@@ -329,7 +331,8 @@ const interestDimensions = computed(() => {
       }
     }
     if (!matched) {
-      scores['政治变革'] = (scores['政治变革'] || 0) + 0.4
+      const fallback = t('profile.dimension.politics')
+      scores[fallback] = (scores[fallback] || 0) + 0.4
     }
   }
   const max = Math.max(...Object.values(scores), 1)
@@ -352,10 +355,10 @@ const recentActivities = computed(() => {
 })
 
 const rarityLabels: Record<string, string> = {
-  legendary: '传说',
-  epic: '史诗',
-  rare: '稀有',
-  common: '普通',
+  legendary: t('champions.rarity.legendary'),
+  epic: t('champions.rarity.epic'),
+  rare: t('champions.rarity.rare'),
+  common: t('champions.rarity.common'),
 }
 
 interface CardItem {
@@ -380,10 +383,10 @@ const myCards = computed<CardItem[]>(() =>
 
 function generateCardTitle(c: BackendChampionCard): string {
   const name = c.event_name
-  if (c.card_level >= 4) return `${name}·史诗回响`
-  if (c.card_level >= 3) return `${name}·命运之钥`
-  if (c.card_level >= 2) return `${name}·时空印记`
-  return `${name}·初次发现`
+  if (c.card_level >= 4) return `${name}${t('profile.cardTitleSuffix.legendary')}`
+  if (c.card_level >= 3) return `${name}${t('profile.cardTitleSuffix.epic')}`
+  if (c.card_level >= 2) return `${name}${t('profile.cardTitleSuffix.rare')}`
+  return `${name}${t('profile.cardTitleSuffix.common')}`
 }
 
 async function loadAll() {
@@ -486,6 +489,13 @@ onMounted(async () => {
   height: 1px;
   background: linear-gradient(90deg, var(--border-cyan), transparent);
   margin-left: 8px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .profile-main {

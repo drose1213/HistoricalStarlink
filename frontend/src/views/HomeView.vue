@@ -3,15 +3,15 @@
     <header class="app-header">
       <div class="logo">
         <span class="logo-icon" aria-hidden="true"></span>
-        <h1>历史星链</h1>
+        <h1>{{ t('home.title') }}</h1>
       </div>
 
-      <nav class="page-nav" aria-label="页面导航">
-        <router-link to="/" class="nav-link nav-link--active">首页</router-link>
-        <router-link to="/champions" class="nav-link">卡牌</router-link>
-        <router-link to="/leaderboard" class="nav-link">排行</router-link>
-        <router-link v-if="authStore.user?.is_admin" to="/knowledge-base" class="nav-link">知识库</router-link>
-        <router-link v-if="authStore.isLoggedIn" to="/profile" class="nav-link">个人中心</router-link>
+      <nav class="page-nav" :aria-label="t('nav.home')">
+        <router-link to="/" class="nav-link nav-link--active">{{ t('nav.home') }}</router-link>
+        <router-link to="/champions" class="nav-link">{{ t('nav.champions') }}</router-link>
+        <router-link to="/leaderboard" class="nav-link">{{ t('nav.leaderboard') }}</router-link>
+        <router-link v-if="authStore.user?.is_admin" to="/knowledge-base" class="nav-link">{{ t('nav.knowledge') }}</router-link>
+        <router-link v-if="authStore.isLoggedIn" to="/profile" class="nav-link">{{ t('nav.profile') }}</router-link>
       </nav>
 
       <div class="user-area">
@@ -32,14 +32,18 @@
               <div class="dropdown-divider"></div>
               <button class="dropdown-item" @click="handleLogout">
                 <span class="item-icon" aria-hidden="true"></span>
-                退出登录
+                {{ t('home.logout') }}
               </button>
             </div>
           </Transition>
         </template>
         <template v-else>
-          <router-link to="/login" class="login-btn">登录 / 注册</router-link>
+          <router-link to="/login" class="login-btn">{{ t('nav.loginOrRegister') }}</router-link>
         </template>
+      </div>
+
+      <div class="locale-area">
+        <LanguageSwitcher />
       </div>
     </header>
 
@@ -47,10 +51,10 @@
       <div v-if="!backendAvailable && loadError" class="backend-banner">
         <span class="banner-icon">⚠</span>
         <div class="banner-text">
-          <strong>后端服务未连接</strong>
-          <span>{{ loadError }}，请启动后端 (端口 8000) 后刷新页面</span>
+          <strong>{{ t('home.backendDisconnected') }}</strong>
+          <span>{{ loadError }}, {{ t('common.retry') }} {{ t('home.backendHint') }}</span>
         </div>
-        <button class="banner-retry" @click="retryLoad">重新连接</button>
+        <button class="banner-retry" @click="retryLoad">{{ t('home.backendRetry') }}</button>
       </div>
     </Transition>
 
@@ -59,7 +63,7 @@
         <CosmicMap v-if="!loadingInitial" @select-event="goToEvent" />
           <div v-else class="cosmic-loading">
             <div class="cosmic-loading__spinner" aria-hidden="true"></div>
-            <p class="cosmic-loading__text">历史星图加载中…</p>
+            <p class="cosmic-loading__text">{{ t('home.cosmicLoading') }}</p>
           </div>
 
         <div class="cosmic-overlay" aria-hidden="true"></div>
@@ -76,13 +80,13 @@
 
       <button class="drawer-trigger" :class="{ open: drawerOpen }" @click="drawerOpen = !drawerOpen">
         <span class="trigger-icon" aria-hidden="true">{{ drawerOpen ? '×' : '‹' }}</span>
-        <span class="trigger-label">事件</span>
+        <span class="trigger-label">{{ t('home.eventsButton') }}</span>
       </button>
 
       <Transition name="drawer-slide">
         <div v-if="drawerOpen" class="event-drawer">
           <div class="drawer-header">
-            <h2 class="drawer-hero-title">探索时空之旅</h2>
+            <h2 class="drawer-hero-title">{{ t('home.drawerHeroTitle') }}</h2>
 
             <div class="search-bar">
               <div class="search-input-wrap">
@@ -90,15 +94,15 @@
                   v-model="searchQuery"
                   type="text"
                   class="search-input"
-                  placeholder="搜索历史事件"
+                  :placeholder="t('home.searchPlaceholder')"
                   @input="onSearchInput"
                   @focus="showSearchDropdown = true"
                   @blur="handleSearchBlur"
                   @keydown.enter="handleSearchEnter"
                 />
-                <button class="search-btn" aria-label="搜索" @mousedown.prevent="handleSearchEnter">
+                <button class="search-btn" :aria-label="t('common.search')" @mousedown.prevent="handleSearchEnter">
                   <span class="search-icon" aria-hidden="true"></span>
-                  <span class="search-btn-label">检索</span>
+                  <span class="search-btn-label">{{ t('home.search') }}</span>
                 </button>
               </div>
               <div class="search-loading-bar" :class="{ active: searchLoading }">
@@ -113,14 +117,14 @@
                       class="search-item"
                       @mousedown.prevent="handleSearchSelect(item.id)"
                     >
-                      <span class="search-item-name">{{ item.name }}</span>
+                      <span class="search-item-name">{{ tf(`events.${item.id}.name`, item.name) }}</span>
                       <span class="search-item-meta">
-                        {{ formatEventYear(item.year) }} · {{ item.region === 'china' ? '东方' : '西方' }}
+                        {{ formatEventYear(item.year) }} · {{ item.region === 'china' ? t('home.regionChina') : t('home.regionForeign') }}
                       </span>
                     </div>
                   </template>
                   <div v-else class="search-item search-empty">
-                    <span class="search-item-name" style="opacity:0.4">未找到匹配事件</span>
+                    <span class="search-item-name" style="opacity:0.4">{{ t('home.noMatch') }}</span>
                   </div>
                 </div>
               </Transition>
@@ -128,7 +132,7 @@
 
             <h3 class="drawer-title">
               <span class="title-icon" aria-hidden="true"></span>
-              历史事件
+              {{ t('home.drawerTitle') }}
             </h3>
             <div class="drawer-filters">
               <button
@@ -158,7 +162,7 @@
               </div>
               <div class="drawer-item-right">
                 <span class="drawer-item-region" :class="`drawer-item-region--${event.region}`">
-                  {{ event.region === 'china' ? '东方' : '西方' }}
+                  {{ event.region === 'china' ? t('home.regionChina') : t('home.regionForeign') }}
                 </span>
                 <span class="drawer-item-score">{{ event.importance }}/10</span>
               </div>
@@ -175,7 +179,9 @@ import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+import { useI18n } from '@/composables/useI18n'
 import CosmicMap from '@/components/CosmicMap.vue'
+import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 import { allEvents as historyEvents, searchEvents, backendAvailable, loadError, loadEvents } from '@/data/events'
 import { ragApi } from '@/api/rag'
 import { eventsApi, type HomeFeedResponse } from '@/api/events'
@@ -196,6 +202,7 @@ interface LocalSearchResult {
 const router = useRouter()
 const appStore = useAppStore()
 const authStore = useAuthStore()
+const { t, tf } = useI18n()
 const showUserMenu = ref(false)
 const drawerOpen = ref(false)
 const searchQuery = ref('')
@@ -346,11 +353,11 @@ const searchResults = computed(() => {
   return sortSearchResults(merged, query).slice(0, 6)
 })
 
-const filters = [
-  { value: 'all' as const, label: '全部' },
-  { value: 'china' as const, label: '东方' },
-  { value: 'foreign' as const, label: '西方' }
-]
+const filters = computed(() => [
+  { value: 'all' as const, label: t('home.quickFilter.all') },
+  { value: 'china' as const, label: t('home.quickFilter.china') },
+  { value: 'foreign' as const, label: t('home.quickFilter.foreign') }
+])
 
 // 抽屉事件列表: 探索过的优先, 再用推荐补足, 再去重
 const drawerEvents = computed<HistoryEvent[]>(() => {
@@ -382,8 +389,7 @@ const filteredEvents = computed(() => drawerEvents.value)
 
 function formatEventYear(year: number | null): string {
   if (year === null || year === undefined) return '-'
-  if (year < 0) return `公元前${Math.abs(year)}年`
-  return `${year}年`
+  return year < 0 ? t('event.bc', { n: Math.abs(year) }) : t('event.year', { n: year })
 }
 
 function handleSearchSelect(id: string) {
@@ -409,7 +415,7 @@ function handleSearchBlur() {
 function handleLogout() {
   authStore.logout()
   showUserMenu.value = false
-  appStore.showToast('success', '已退出登录')
+  appStore.showToast('success', t('toast.signedOut'))
 }
 
 function handleClickOutside(e: MouseEvent) {
@@ -566,6 +572,15 @@ onBeforeUnmount(() => {
   position: relative;
   justify-self: end;
   min-width: 0;
+  margin-left: auto;
+}
+
+.locale-area {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+  margin-left: 14px;
 }
 
 .user-menu {
@@ -1222,6 +1237,11 @@ onBeforeUnmount(() => {
   .user-area {
     order: 2;
   }
+
+  .locale-area {
+    order: 1;
+    margin-left: 0;
+  }
 }
 
 @media (max-width: 680px) {
@@ -1242,6 +1262,11 @@ onBeforeUnmount(() => {
 
   .user-area {
     justify-self: start;
+  }
+
+  .locale-area {
+    justify-self: end;
+    margin-left: 0;
   }
 
   .cosmic-overlay {

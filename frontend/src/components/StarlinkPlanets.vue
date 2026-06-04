@@ -7,28 +7,28 @@
       <div v-if="hoveredNode" class="hover-tip" :class="`hover-tip--${hoveredNode.role}`" :style="{ left: tipX + 'px', top: tipY + 'px' }">
         <div class="tip-header">
           <span class="tip-year">{{ formatYear(hoveredNode.year) }}</span>
-          <span v-if="hoveredNode.weight != null" class="tip-weight">权重 {{ hoveredNode.weight }}/10</span>
+          <span v-if="hoveredNode.weight != null" class="tip-weight">{{ t('map.weight', { n: hoveredNode.weight }) }}</span>
         </div>
-        <div class="tip-name">{{ hoveredNode.label }}</div>
+        <div class="tip-name">{{ nodeLabel(hoveredNode) }}</div>
         <div v-if="hoveredNode.description" class="tip-desc">{{ hoveredNode.description }}</div>
-        <div v-if="hoveredNode.role === 'cause'" class="tip-hint tip-hint--cyan">◆ 历史原因 · 点击探索</div>
-        <div v-else-if="hoveredNode.role === 'consequence'" class="tip-hint tip-hint--pink">◆ 历史影响 · 点击探索</div>
-        <div v-else class="tip-hint">当前事件</div>
+        <div v-if="hoveredNode.role === 'cause'" class="tip-hint tip-hint--cyan">{{ t('map.hintCause') }}</div>
+        <div v-else-if="hoveredNode.role === 'consequence'" class="tip-hint tip-hint--pink">{{ t('map.hintConsequence') }}</div>
+        <div v-else class="tip-hint">{{ t('map.hintCurrent') }}</div>
       </div>
     </Transition>
 
     <div class="starlink-legend">
       <div class="legend-item">
         <span class="legend-dot legend-dot--cyan"></span>
-        <span>历史原因</span>
+        <span>{{ t('map.legendCause') }}</span>
       </div>
       <div class="legend-item">
         <span class="legend-dot legend-dot--pink"></span>
-        <span>历史影响</span>
+        <span>{{ t('map.legendConsequence') }}</span>
       </div>
       <div class="legend-item">
         <span class="legend-dot legend-dot--center"></span>
-        <span>当前事件</span>
+        <span>{{ t('map.legendCurrent') }}</span>
       </div>
     </div>
   </div>
@@ -36,6 +36,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useI18n } from '@/composables/useI18n'
+
+const { t, tf } = useI18n()
 
 interface RelatedEvent {
   id: string
@@ -379,7 +382,7 @@ function drawGraph(time: number) {
     ctx.textBaseline = 'top'
     ctx.fillStyle = isHover ? '#ffffff' : (isCenter ? node.color : 'rgba(255,255,255,0.55)')
     ctx.globalAlpha = isHover ? 1 : (isCenter ? 0.9 : 0.65)
-    ctx.fillText(node.label, node.x, node.y + drawR + 5)
+    ctx.fillText(nodeLabel(node), node.x, node.y + drawR + 5)
     ctx.globalAlpha = 1
   }
 }
@@ -431,8 +434,12 @@ function onClick() {
 }
 
 function formatYear(year: number): string {
-  if (year < 0) return `公元前${Math.abs(year)}年`
-  return `${year}年`
+  if (year < 0) return t('map.bc', { n: Math.abs(year) })
+  return t('map.year', { n: year })
+}
+
+function nodeLabel(node: GNode): string {
+  return tf(`events.${node.id}.name`, node.label)
 }
 
 function onResize() {

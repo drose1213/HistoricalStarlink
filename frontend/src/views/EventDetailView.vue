@@ -2,13 +2,13 @@
   <div class="event-detail-view">
     <header class="detail-header">
       <button class="back-btn" @click="goBack">
-        <span>←</span> 返回
+        <span>←</span> {{ t('event.back') }}
       </button>
       <div class="detail-nav">
         <span class="breadcrumb">
-          <span class="breadcrumb-item" @click="goHome">首页</span>
+          <span class="breadcrumb-item" @click="goHome">{{ t('event.breadcrumbHome') }}</span>
           <span class="breadcrumb-sep">›</span>
-          <span class="breadcrumb-item active">{{ currentEvent?.name || '事件详情' }}</span>
+          <span class="breadcrumb-item active">{{ currentEvent ? tf(`events.${currentEvent.id}.name`, currentEvent.name) : t('event.detail') }}</span>
         </span>
       </div>
     </header>
@@ -27,7 +27,7 @@
           <div class="causes-section">
             <h3 class="section-heading section-heading--cyan">
               <span class="heading-icon">◆</span>
-              历史原因
+              {{ t('event.causeTitle') }}
             </h3>
             <div v-if="causeEvents.length" class="cause-list">
               <div
@@ -38,37 +38,37 @@
               >
                 <div class="card-top" @click="toggleCause(idx)">
                   <span class="card-index">{{ String(idx + 1).padStart(2, '0') }}</span>
-                  <span class="card-name">{{ ev.name }}</span>
+                  <span class="card-name">{{ tf(`events.${ev.id}.name`, ev.name) }}</span>
                   <span class="card-year">{{ formatYear(ev.year) }}</span>
-                  <span class="card-weight card-weight--cyan">权重 {{ ev.weight }}</span>
+                  <span class="card-weight card-weight--cyan">{{ t('event.weight', { n: ev.weight }) }}</span>
                   <span class="card-expand">{{ expandedCauses.has(idx) ? '−' : '+' }}</span>
                 </div>
                 <Transition name="desc-expand">
                   <div v-if="expandedCauses.has(idx)" class="card-desc">
-                    <p v-if="currentEvent.causes[idx]" class="desc-content">{{ currentEvent.causes[idx] }}</p>
-                    <p class="desc-event">{{ ev.name }} · {{ formatYear(ev.year) }}</p>
+                    <p v-if="localizedCauses[idx]" class="desc-content">{{ localizedCauses[idx] }}</p>
+                    <p class="desc-event">{{ tf(`events.${ev.id}.name`, ev.name) }} · {{ formatYear(ev.year) }}</p>
                     <button class="card-navigate" @click.stop="handleNavigate(ev.id)">
-                      前往探索 →
+                      {{ t('event.navigate') }}
                     </button>
                   </div>
                 </Transition>
               </div>
             </div>
             <ul v-if="causeEvents.length === 0 && currentEvent.causes.length" class="cause-list">
-              <li v-for="(cause, idx) in currentEvent.causes" :key="idx" class="cause-item">
+              <li v-for="(cause, idx) in localizedCauses" :key="idx" class="cause-item">
                 <span class="cause-index">{{ String(idx + 1).padStart(2, '0') }}</span>
                 <span class="cause-text">{{ cause }}</span>
               </li>
             </ul>
             <div v-if="causeEvents.length === 0 && currentEvent.causes.length === 0" class="empty-hint">
-              暂无历史原因记录
+              {{ t('event.emptyCause') }}
             </div>
           </div>
 
           <div class="consequences-section">
             <h3 class="section-heading section-heading--pink">
               <span class="heading-icon">◆</span>
-              历史影响
+              {{ t('event.consequenceTitle') }}
             </h3>
             <div v-if="consequenceEvents.length" class="consequence-list">
               <div
@@ -79,17 +79,17 @@
               >
                 <div class="card-top" @click="toggleConsequence(idx)">
                   <span class="card-index card-index--pink">{{ String(idx + 1).padStart(2, '0') }}</span>
-                  <span class="card-name">{{ ev.name }}</span>
+                  <span class="card-name">{{ tf(`events.${ev.id}.name`, ev.name) }}</span>
                   <span class="card-year">{{ formatYear(ev.year) }}</span>
-                  <span class="card-weight card-weight--pink">权重 {{ ev.weight }}</span>
+                  <span class="card-weight card-weight--pink">{{ t('event.weight', { n: ev.weight }) }}</span>
                   <span class="card-expand card-expand--pink">{{ expandedConsequences.has(idx) ? '−' : '+' }}</span>
                 </div>
                 <Transition name="desc-expand">
                   <div v-if="expandedConsequences.has(idx)" class="card-desc card-desc--pink">
                     <p v-if="currentEvent.consequences[idx]" class="desc-content">{{ currentEvent.consequences[idx] }}</p>
-                    <p class="desc-event">{{ ev.name }} · {{ formatYear(ev.year) }}</p>
+                    <p class="desc-event">{{ tf(`events.${ev.id}.name`, ev.name) }} · {{ formatYear(ev.year) }}</p>
                     <button class="card-navigate card-navigate--pink" @click.stop="handleNavigate(ev.id)">
-                      前往探索 →
+                      {{ t('event.navigate') }}
                     </button>
                   </div>
                 </Transition>
@@ -102,7 +102,7 @@
               </li>
             </ul>
             <div v-if="consequenceEvents.length === 0 && currentEvent.consequences.length === 0" class="empty-hint">
-              暂无历史影响记录
+              {{ t('event.emptyConsequence') }}
             </div>
           </div>
         </div>
@@ -115,35 +115,35 @@
 
     <button v-if="currentEvent" class="drawer-trigger" :class="{ open: drawerOpen }" @click="drawerOpen = !drawerOpen">
       <span class="drawer-trigger-icon">{{ drawerOpen ? '›' : '‹' }}</span>
-      <span class="drawer-trigger-label">历史</span>
+      <span class="drawer-trigger-label">{{ t('event.drawerTrigger') }}</span>
     </button>
 
     <Transition name="drawer-slide-right">
       <div v-if="currentEvent && drawerOpen" class="right-drawer">
         <div class="drawer-header">
-          <h4 class="drawer-title">历史档案</h4>
+          <h4 class="drawer-title">{{ t('event.drawerTitle') }}</h4>
           <button class="drawer-close" @click="drawerOpen = false">✕</button>
         </div>
         <div class="drawer-body">
           <div class="drawer-section">
             <button class="cy-btn cy-btn--glow drawer-dialogue-btn" @click="startDialogue">
-              开启时空对话
+              {{ t('event.startDialogue') }}
             </button>
-            <p class="entry-hint">穿越时空，与历史人物对话</p>
+            <p class="entry-hint">{{ t('event.dialogueHint') }}</p>
           </div>
 
           <div class="drawer-section event-desc-panel">
-            <h4 class="desc-title">事件概述</h4>
-            <p class="desc-text">{{ currentEvent.description }}</p>
+            <h4 class="desc-title">{{ t('event.descTitle') }}</h4>
+            <p class="desc-text">{{ localizedEventDesc }}</p>
             <div class="desc-meta">
-              <span class="meta-tag meta-tag--region">{{ currentEvent.region === 'china' ? '华夏' : '海外' }}</span>
+              <span class="meta-tag meta-tag--region">{{ currentEvent.region === 'china' ? t('event.regionChina') : t('event.regionForeign') }}</span>
               <span class="meta-tag meta-tag--year">{{ formatYear(currentEvent.year) }}</span>
-              <span class="meta-tag meta-tag--importance">重要性 {{ currentEvent.importance }}</span>
+              <span class="meta-tag meta-tag--importance">{{ t('event.importance', { n: currentEvent.importance }) }}</span>
             </div>
           </div>
 
           <div class="drawer-section">
-            <h4 class="drawer-section-title">◆ 探索记录</h4>
+            <h4 class="drawer-section-title">{{ t('event.explorationSection') }}</h4>
             <ExplorationRecord :event-id="currentEvent.id" :event-name="currentEvent.name" :show-controls="true" />
           </div>
 
@@ -158,17 +158,17 @@
     <main class="detail-main" v-if="!currentEvent">
       <div class="not-found">
         <div class="not-found-icon">◇</div>
-        <h2>事件未找到</h2>
-        <p>无法找到指定的历史事件，请返回首页重试。</p>
-        <button class="cy-btn" @click="goHome">返回首页</button>
+        <h2>{{ t('event.notFound') }}</h2>
+        <p>{{ t('event.notFoundHint') }}</p>
+        <button class="cy-btn" @click="goHome">{{ t('event.returnHome') }}</button>
       </div>
     </main>
 
     <Transition name="warp-fade">
       <div v-if="warpTarget" class="warp-overlay">
         <div class="warp-ship">🚀</div>
-        <div class="warp-text">飞船正在前往</div>
-        <div class="warp-dest">{{ warpTarget.name }}</div>
+        <div class="warp-text">{{ t('event.warpText') }}</div>
+        <div class="warp-dest">{{ tf(`events.${warpTarget.id}.name`, warpTarget.name) }}</div>
         <div class="warp-progress-bar">
           <div class="warp-progress-fill" />
         </div>
@@ -187,6 +187,7 @@ import ConstellationMap from '@/components/ConstellationMap.vue'
 import ExplorationRecord from '@/components/ExplorationRecord.vue'
 import VotingSystem from '@/components/VotingSystem.vue'
 import RatingSystem from '@/components/RatingSystem.vue'
+import { useI18n } from '@/composables/useI18n'
 import { allEvents, getEventById, getRelatedEvents, loadEvents } from '@/data/events'
 import { buildDetailStarlinkGraph } from '@/utils/starlinkGraph'
 import { requireAuth } from '@/utils/auth'
@@ -194,18 +195,12 @@ import { recordExploration } from '@/utils/exploration'
 
 const route = useRoute()
 const router = useRouter()
+const { t, tf, eventDetailData } = useI18n()
 
 const warpTarget = ref<{ id: string; name: string } | null>(null)
-const warpLoadingText = ref('正在穿越时空隧道...')
+const warpLoadingText = ref(t('event.warpLoading'))
 
-const loadingTexts = [
-  '正在穿越时空隧道...',
-  '校准时间坐标...',
-  '连接历史数据库...',
-  '加载时空档案...',
-  '对接星链节点...',
-  '数据同步完成 ✓',
-]
+const loadingTexts = computed<string[]>(() => t('event.loadingTexts') as unknown as string[])
 
 let warpTextTimer: ReturnType<typeof setInterval> | null = null
 const drawerOpen = ref(false)
@@ -226,6 +221,20 @@ const consequenceEvents = computed(() => {
   return getRelatedEvents(currentEvent.value.id, 'consequences')
 })
 
+// Localized event detail data (description, causes, consequences)
+const localizedEventDesc = computed(() => {
+  if (!currentEvent.value) return ''
+  return eventDetailData(currentEvent.value.id)?.description || currentEvent.value.description
+})
+const localizedCauses = computed(() => {
+  if (!currentEvent.value) return []
+  return eventDetailData(currentEvent.value.id)?.causes || currentEvent.value.causes
+})
+const localizedConsequences = computed(() => {
+  if (!currentEvent.value) return []
+  return eventDetailData(currentEvent.value.id)?.consequences || currentEvent.value.consequences
+})
+
 watch(eventId, (id) => {
   recordExploration(id)
 }, { immediate: true })
@@ -243,7 +252,7 @@ function toggleConsequence(idx: number) {
 }
 
 function formatYear(year: number): string {
-  return year < 0 ? `公元前${Math.abs(year)}年` : `${year}年`
+  return year < 0 ? t('event.bc', { n: Math.abs(year) }) : t('event.year', { n: year })
 }
 
 function goBack() {
@@ -258,12 +267,13 @@ function startDialogue() {
   if (!requireAuth()) return
   if (!currentEvent.value) return
   warpTarget.value = { id: currentEvent.value.id, name: currentEvent.value.name }
+  const texts = loadingTexts.value
   let textIdx = 0
-  warpLoadingText.value = loadingTexts[0]
+  warpLoadingText.value = texts[0]
   warpTextTimer = setInterval(() => {
     textIdx++
-    if (textIdx < loadingTexts.length) {
-      warpLoadingText.value = loadingTexts[textIdx]
+    if (textIdx < texts.length) {
+      warpLoadingText.value = texts[textIdx]
     }
   }, 350)
   setTimeout(() => {
@@ -285,7 +295,7 @@ function handleNavigate(eventId: string) {
 
 watch(() => route.params.id, () => {
   if (currentEvent.value) {
-    document.title = `${currentEvent.value.name} - 历史星链探索`
+    document.title = t('event.docTitle', { name: tf(`events.${currentEvent.value.id}.name`, currentEvent.value.name) })
   }
   const main = document.querySelector('.detail-main')
   if (main) main.scrollTop = 0
@@ -309,6 +319,14 @@ watch(() => route.params.id, () => {
   background: linear-gradient(180deg, rgba(4, 8, 15, 0.96), rgba(4, 8, 15, 0.72));
   border-bottom: 1px solid var(--border-subtle);
   z-index: var(--z-header);
+  gap: 16px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .back-btn {

@@ -2,11 +2,11 @@
   <div class="trends-view">
     <header class="trends-header">
       <router-link to="/" class="back-link">
-        <span>←</span> 返回首页
+        <span>←</span> {{ t('common.backToPrev') }}
       </router-link>
       <h2 class="page-title">
         <span class="title-icon">◈</span>
-        探索趋势分析
+        {{ t('trends.pageTitle') }}
       </h2>
       <div class="header-accent"></div>
     </header>
@@ -15,44 +15,44 @@
       <div class="stats-grid">
         <div class="stat-card cy-card">
           <span class="stat-value">{{ totalExplorations }}</span>
-          <span class="stat-label">总探索次数</span>
+          <span class="stat-label">{{ t('trends.statTotalExplorations') }}</span>
         </div>
         <div class="stat-card cy-card">
           <span class="stat-value">{{ uniqueEvents }}</span>
-          <span class="stat-label">涉及事件</span>
+          <span class="stat-label">{{ t('trends.statUniqueEvents') }}</span>
         </div>
         <div class="stat-card cy-card">
           <span class="stat-value">{{ totalDuration }}</span>
-          <span class="stat-label">累计时长</span>
+          <span class="stat-label">{{ t('trends.statTotalDuration') }}</span>
         </div>
         <div class="stat-card cy-card">
           <span class="stat-value">{{ streakDays }}</span>
-          <span class="stat-label">连续探索</span>
+          <span class="stat-label">{{ t('trends.statStreakDays') }}</span>
         </div>
       </div>
 
       <div class="section-block cy-card">
         <h3 class="section-title">
           <span class="section-icon">⬡</span>
-          区域分布
+          {{ t('trends.regionDistribution') }}
         </h3>
         <div class="region-bar-container">
           <div class="region-bar">
             <div class="region-segment region-china" :style="{ width: chinaRatio + '%' }">
-              <span class="region-segment-label" v-if="chinaRatio > 20">中国 {{ chinaRatio }}%</span>
+              <span class="region-segment-label" v-if="chinaRatio > 20">{{ t('trends.regionChina') }} {{ chinaRatio }}%</span>
             </div>
             <div class="region-segment region-foreign" :style="{ width: foreignRatio + '%' }">
-              <span class="region-segment-label" v-if="foreignRatio > 20">海外 {{ foreignRatio }}%</span>
+              <span class="region-segment-label" v-if="foreignRatio > 20">{{ t('trends.regionForeign') }} {{ foreignRatio }}%</span>
             </div>
           </div>
           <div class="region-legend">
             <div class="legend-item">
               <span class="legend-dot legend-dot--china"></span>
-              <span class="legend-text">中国事件 {{ chinaRatio }}%</span>
+              <span class="legend-text">{{ t('trends.regionChinaFull', { n: chinaRatio }) }}</span>
             </div>
             <div class="legend-item">
               <span class="legend-dot legend-dot--foreign"></span>
-              <span class="legend-text">海外事件 {{ foreignRatio }}%</span>
+              <span class="legend-text">{{ t('trends.regionForeignFull', { n: foreignRatio }) }}</span>
             </div>
           </div>
         </div>
@@ -61,7 +61,7 @@
       <div class="section-block cy-card">
         <h3 class="section-title">
           <span class="section-icon">◇</span>
-          兴趣维度
+          {{ t('trends.interestDimensions') }}
         </h3>
         <div class="dimensions-list">
           <div v-for="dim in dimensions" :key="dim.name" class="dimension-row">
@@ -77,7 +77,7 @@
       <div class="section-block cy-card">
         <h3 class="section-title">
           <span class="section-icon">◈</span>
-          探索时间线
+          {{ t('trends.timeline') }}
         </h3>
         <div class="timeline">
           <div v-for="(item, idx) in timelineItems" :key="idx" class="timeline-item">
@@ -97,14 +97,14 @@
       <div class="section-block cy-card">
         <h3 class="section-title">
           <span class="section-icon">⬡</span>
-          近期活动记录
+          {{ t('trends.recentActivities') }}
         </h3>
         <div class="activity-table">
           <div class="table-columns">
-            <span class="col-event">事件</span>
-            <span class="col-date">日期</span>
-            <span class="col-duration">时长</span>
-            <span class="col-depth">深度</span>
+            <span class="col-event">{{ t('trends.colEvent') }}</span>
+            <span class="col-date">{{ t('trends.colDate') }}</span>
+            <span class="col-duration">{{ t('trends.colDuration') }}</span>
+            <span class="col-depth">{{ t('trends.colDepth') }}</span>
           </div>
           <div class="table-body">
             <div
@@ -120,7 +120,7 @@
                 <span class="duration-value">{{ row.duration }}</span>
               </span>
               <span class="col-depth">
-                <span class="depth-badge">{{ row.depth }}</span>
+                <span class="depth-badge">{{ t('trends.dimDepth', { n: row.depth }) }}</span>
               </span>
             </div>
           </div>
@@ -134,6 +134,9 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 const totalExplorations = ref(42)
 const uniqueEvents = ref(7)
@@ -144,11 +147,11 @@ const chinaRatio = ref(60)
 const foreignRatio = computed(() => 100 - chinaRatio.value)
 
 const dimensions = ref([
-  { name: '政治变革', value: 85 },
-  { name: '军事征伐', value: 70 },
-  { name: '文化交流', value: 55 },
-  { name: '经济发展', value: 45 },
-  { name: '科技进步', value: 65 }
+  { name: t('profile.dimension.politics'), value: 85 },
+  { name: t('profile.dimension.military'), value: 70 },
+  { name: t('profile.dimension.culture'), value: 55 },
+  { name: t('profile.dimension.economy'), value: 45 },
+  { name: t('profile.dimension.science'), value: 65 }
 ])
 
 const timelineItems = ref([
@@ -165,13 +168,13 @@ const timelineItems = ref([
 ])
 
 const activityRows = ref([
-  { event: '商鞅变法', date: '2026-05-28', duration: '32min', depth: '3层' },
-  { event: '秦始皇统一六国', date: '2026-05-26', duration: '45min', depth: '4层' },
-  { event: '大汉帝国建立', date: '2026-05-24', duration: '28min', depth: '2层' },
-  { event: '亚历山大东征', date: '2026-05-22', duration: '37min', depth: '3层' },
-  { event: '罗马帝国建立', date: '2026-05-20', duration: '41min', depth: '5层' },
-  { event: '法国大革命', date: '2026-05-18', duration: '52min', depth: '4层' },
-  { event: '工业革命', date: '2026-05-15', duration: '38min', depth: '3层' }
+  { event: '商鞅变法', date: '2026-05-28', duration: '32min', depth: 3 },
+  { event: '秦始皇统一六国', date: '2026-05-26', duration: '45min', depth: 4 },
+  { event: '大汉帝国建立', date: '2026-05-24', duration: '28min', depth: 2 },
+  { event: '亚历山大东征', date: '2026-05-22', duration: '37min', depth: 3 },
+  { event: '罗马帝国建立', date: '2026-05-20', duration: '41min', depth: 5 },
+  { event: '法国大革命', date: '2026-05-18', duration: '52min', depth: 4 },
+  { event: '工业革命', date: '2026-05-15', duration: '38min', depth: 3 }
 ])
 </script>
 
@@ -233,6 +236,13 @@ const activityRows = ref([
   height: 1px;
   background: linear-gradient(90deg, var(--border-cyan), transparent);
   margin-left: 8px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .trends-main {

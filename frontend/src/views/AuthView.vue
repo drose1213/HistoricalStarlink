@@ -8,8 +8,8 @@
       <div class="auth-card">
         <div class="auth-logo">
           <span class="logo-glyph">◇</span>
-          <h1 class="logo-text">文明星链</h1>
-          <p class="logo-sub">历史探索之旅</p>
+          <h1 class="logo-text">{{ t('auth.authLogoTitle') }}</h1>
+          <p class="logo-sub">{{ t('auth.authLogoSub') }}</p>
         </div>
 
         <div class="auth-tabs">
@@ -18,14 +18,14 @@
             :class="{ active: mode === 'login' }"
             @click="switchMode('login')"
           >
-            登录
+            {{ t('auth.tabLogin') }}
           </button>
           <button
             class="tab-btn"
             :class="{ active: mode === 'register' }"
             @click="switchMode('register')"
           >
-            注册
+            {{ t('auth.tabRegister') }}
           </button>
           <div class="tab-indicator" :class="{ right: mode === 'register' }"></div>
         </div>
@@ -33,11 +33,11 @@
         <form class="auth-form" @submit.prevent="handleSubmit">
           <Transition name="field-fade" mode="out-in">
             <div v-if="mode === 'register'" key="reg-user" class="field-group">
-              <label class="field-label">用户名</label>
+              <label class="field-label">{{ t('auth.fieldUsernameReg') }}</label>
               <input
                 v-model="form.username"
                 class="cy-input auth-input"
-                placeholder="设置用户名"
+                :placeholder="t('auth.fieldUsernameRegPh')"
                 autocomplete="username"
               />
             </div>
@@ -45,11 +45,11 @@
 
           <Transition name="field-fade" mode="out-in">
             <div v-if="mode === 'login'" key="login-user" class="field-group">
-              <label class="field-label">用户名 / 邮箱</label>
+              <label class="field-label">{{ t('auth.fieldUsernameLogin') }}</label>
               <input
                 v-model="form.username"
                 class="cy-input auth-input"
-                placeholder="输入用户名或邮箱"
+                :placeholder="t('auth.fieldUsernameLoginPh')"
                 autocomplete="username"
               />
             </div>
@@ -57,13 +57,13 @@
 
           <Transition name="field-fade" mode="out-in">
             <div v-if="mode === 'register'" key="reg-email" class="field-group">
-              <label class="field-label">邮箱</label>
+              <label class="field-label">{{ t('auth.fieldEmail') }}</label>
               <div class="code-row">
                 <input
                   v-model="form.email"
                   type="email"
                   class="cy-input auth-input code-input"
-                  placeholder="输入邮箱地址"
+                  :placeholder="t('auth.fieldEmailPh')"
                   autocomplete="email"
                 />
                 <button
@@ -73,7 +73,7 @@
                   @click="handleSendCode"
                 >
                   <span v-if="codeSending" class="btn-loading"></span>
-                  <span v-else>{{ codeCooldown > 0 ? `${codeCooldown}s` : '获取验证码' }}</span>
+                  <span v-else>{{ codeCooldown > 0 ? t('auth.sendCodeCooldown', { n: codeCooldown }) : t('auth.sendCode') }}</span>
                 </button>
               </div>
             </div>
@@ -81,11 +81,11 @@
 
           <Transition name="field-fade" mode="out-in">
             <div v-if="mode === 'register'" key="reg-code" class="field-group">
-              <label class="field-label">邮箱验证码</label>
+              <label class="field-label">{{ t('auth.fieldEmailCode') }}</label>
               <input
                 v-model="form.emailCode"
                 class="cy-input auth-input"
-                placeholder="输入6位验证码"
+                :placeholder="t('auth.fieldEmailCodePh')"
                 maxlength="6"
                 inputmode="numeric"
               />
@@ -93,23 +93,23 @@
           </Transition>
 
           <div class="field-group">
-            <label class="field-label">密码</label>
+            <label class="field-label">{{ t('auth.fieldPassword') }}</label>
             <input
               v-model="form.password"
               type="password"
               class="cy-input auth-input"
-              placeholder="输入密码"
+              :placeholder="t('auth.fieldPasswordPh')"
               autocomplete="current-password"
             />
           </div>
 
           <Transition name="field-fade" mode="out-in">
             <div v-if="mode === 'register'" key="reg-nick" class="field-group">
-              <label class="field-label">昵称 <span class="optional">（选填）</span></label>
+              <label class="field-label" v-html="t('auth.fieldNickname')"></label>
               <input
                 v-model="form.nickname"
                 class="cy-input auth-input"
-                placeholder="给自己取个昵称"
+                :placeholder="t('auth.fieldNicknamePh')"
               />
             </div>
           </Transition>
@@ -123,7 +123,7 @@
               class="error-action"
               @click="switchMode('register')"
             >
-              去注册 →
+              {{ t('auth.goRegister') }}
             </button>
           </div>
 
@@ -133,12 +133,12 @@
             :disabled="submitting"
           >
             <span v-if="submitting" class="btn-loading"></span>
-            <span v-else>{{ mode === 'login' ? '进入星链' : '开启旅程' }}</span>
+            <span v-else>{{ mode === 'login' ? t('auth.enterStarlink') : t('auth.startJourney') }}</span>
           </button>
         </form>
 
         <div class="auth-footer">
-          <button class="skip-btn" @click="goHome">先逛逛 →</button>
+          <button class="skip-btn" @click="goHome">{{ t('auth.skipBrowse') }}</button>
         </div>
       </div>
 
@@ -158,10 +158,12 @@ import { ref, reactive, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
+import { useI18n } from '@/composables/useI18n'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const appStore = useAppStore()
+const { t } = useI18n()
 
 const mode = ref<'login' | 'register'>('login')
 const submitting = ref(false)
@@ -190,12 +192,12 @@ async function handleSendCode() {
   errorHint.value = false
 
   if (!form.email.trim()) {
-    error.value = '请先输入邮箱'
+    error.value = t('auth.errEmailEmpty')
     return
   }
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   if (!emailRe.test(form.email.trim())) {
-    error.value = '邮箱格式不正确'
+    error.value = t('auth.errEmailFormat')
     return
   }
 
@@ -203,7 +205,7 @@ async function handleSendCode() {
   try {
     const res = await authStore.sendCode(form.email.trim().toLowerCase())
     if (res.code === 200) {
-      appStore.showToast('success', '验证码已发送，请查收邮箱')
+      appStore.showToast('success', t('auth.errCodeSent'))
       codeCooldown.value = 60
       cooldownTimer = setInterval(() => {
         codeCooldown.value--
@@ -213,10 +215,10 @@ async function handleSendCode() {
         }
       }, 1000)
     } else {
-      error.value = res.message || '验证码发送失败'
+      error.value = res.message || t('auth.errCodeSend')
     }
   } catch (e: any) {
-    error.value = e?.response?.data?.detail || '验证码发送失败，请稍后重试'
+    error.value = e?.response?.data?.detail || t('auth.errCodeSendRetry')
   } finally {
     codeSending.value = false
   }
@@ -227,37 +229,37 @@ async function handleSubmit() {
   errorHint.value = false
 
   if (!form.username.trim()) {
-    error.value = mode.value === 'login' ? '请输入用户名' : '请设置用户名'
+    error.value = mode.value === 'login' ? t('auth.errUsernameEmptyLogin') : t('auth.errUsernameEmptyReg')
     return
   }
   if (mode.value === 'register') {
     const u = form.username.trim()
     if (u.length < 3) {
-      error.value = '用户名至少3个字符'
+      error.value = t('auth.errUsernameShort')
       return
     }
     if (!/^[\w\u4e00-\u9fa5-]+$/.test(u)) {
-      error.value = '用户名只能包含字母、数字、下划线、连字符和中文'
+      error.value = t('auth.errUsernamePattern')
       return
     }
   }
   if (mode.value === 'register' && !form.email.trim()) {
-    error.value = '请输入邮箱'
+    error.value = t('auth.errEmailEmpty2')
     return
   }
   if (mode.value === 'register') {
     const em = form.email.trim()
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
-      error.value = '邮箱格式不正确'
+      error.value = t('auth.errEmailFormat2')
       return
     }
   }
   if (mode.value === 'register' && !form.emailCode.trim()) {
-    error.value = '请输入邮箱验证码'
+    error.value = t('auth.errEmailCodeEmpty')
     return
   }
   if (!form.password || form.password.length < 6) {
-    error.value = '密码至少6位'
+    error.value = t('auth.errPasswordShort')
     return
   }
 
@@ -276,7 +278,7 @@ async function handleSubmit() {
       )
     }
     if (result.success) {
-      appStore.showToast('success', '欢迎来到文明星链！')
+      appStore.showToast('success', t('auth.welcomeHome'))
       router.push({ name: 'Home' })
     } else {
       error.value = result.message
@@ -285,7 +287,7 @@ async function handleSubmit() {
       }
     }
   } catch (e: any) {
-    const detail = e?.response?.data?.detail || '操作失败，请稍后重试'
+    const detail = e?.response?.data?.detail || t('auth.errOpFail')
     error.value = detail
     if (mode.value === 'login' && /未注册/.test(detail)) {
       errorHint.value = true
@@ -597,8 +599,15 @@ onUnmounted(() => {
 
 .auth-footer {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
+  align-items: center;
   margin-top: 20px;
+  gap: 8px;
+}
+
+.footer-locale {
+  display: inline-flex;
+  align-items: center;
 }
 
 .skip-btn {

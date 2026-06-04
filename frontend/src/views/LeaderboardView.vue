@@ -2,11 +2,11 @@
   <div class="leaderboard-view">
     <header class="lb-header">
       <router-link to="/" class="back-link">
-        <span>←</span> 返回首页
+        <span>←</span> {{ t('common.backToPrev') }}
       </router-link>
       <h2 class="page-title">
         <span class="title-icon">◈</span>
-        探索排行榜
+        {{ t('leaderboard.pageTitle') }}
       </h2>
       <div class="header-accent"></div>
     </header>
@@ -27,27 +27,27 @@
 
       <div v-if="loading" class="loading-state">
         <div class="loading-icon">⬡</div>
-        <p class="loading-text">正在加载排行榜…</p>
+        <p class="loading-text">{{ t('leaderboard.loading') }}</p>
       </div>
 
       <div v-else-if="loadError" class="empty-card empty-card--error">
         <div class="empty-icon">⚠</div>
-        <p class="empty-title">数据加载失败</p>
+        <p class="empty-title">{{ t('leaderboard.loadError') }}</p>
         <p class="empty-hint">{{ loadError }}</p>
-        <button class="retry-btn" @click="loadLeaderboard(activePeriod)">重试</button>
+        <button class="retry-btn" @click="loadLeaderboard(activePeriod)">{{ t('common.retry') }}</button>
       </div>
 
       <div v-else-if="ranking.length === 0" class="empty-card">
         <div class="empty-icon">⬡</div>
-        <p class="empty-title">暂无探索者</p>
-        <p class="empty-hint">邀请好友一起加入时空之旅, 一起探索历史星河</p>
+        <p class="empty-title">{{ t('leaderboard.empty') }}</p>
+        <p class="empty-hint">{{ t('leaderboard.emptyHint') }}</p>
       </div>
 
       <div v-else class="podium-section">
         <div class="podium-bg-glow"></div>
         <h3 class="section-title">
           <span class="section-icon">⬡</span>
-          巅峰探索者
+          {{ t('leaderboard.topExplorers') }}
         </h3>
         <div class="podium">
           <div class="podium-item podium-item--second">
@@ -56,7 +56,7 @@
               <span class="podium-medal">🥈</span>
             </div>
             <div class="podium-name">{{ topThree[1]?.name }}</div>
-            <div class="podium-count">{{ topThree[1]?.exploreCount }} 次探索</div>
+            <div class="podium-count">{{ t('leaderboard.exploreTimes', { count: topThree[1]?.exploreCount ?? 0 }) }}</div>
             <div class="podium-pedestal">
               <div class="pedestal-face">2</div>
             </div>
@@ -68,7 +68,7 @@
               <span class="podium-medal">🥇</span>
             </div>
             <div class="podium-name">{{ topThree[0]?.name }}</div>
-            <div class="podium-count">{{ topThree[0]?.exploreCount }} 次探索</div>
+            <div class="podium-count">{{ t('leaderboard.exploreTimes', { count: topThree[0]?.exploreCount ?? 0 }) }}</div>
             <div class="podium-pedestal podium-pedestal--gold">
               <div class="pedestal-face">1</div>
             </div>
@@ -79,7 +79,7 @@
               <span class="podium-medal">🥉</span>
             </div>
             <div class="podium-name">{{ topThree[2]?.name }}</div>
-            <div class="podium-count">{{ topThree[2]?.exploreCount }} 次探索</div>
+            <div class="podium-count">{{ t('leaderboard.exploreTimes', { count: topThree[2]?.exploreCount ?? 0 }) }}</div>
             <div class="podium-pedestal">
               <div class="pedestal-face">3</div>
             </div>
@@ -91,18 +91,18 @@
         <div class="table-header">
           <h3 class="section-title">
             <span class="section-icon">◇</span>
-            完整排名
+            {{ t('leaderboard.fullRank') }}
           </h3>
           <div class="table-meta">
-            共 {{ currentRanking.length }} 位探索者
+            {{ t('leaderboard.totalExplorers', { count: currentRanking.length }) }}
           </div>
         </div>
         <div class="table-columns">
-          <span class="col-rank">排名</span>
-          <span class="col-name">探索者</span>
-          <span class="col-count">探索次数</span>
-          <span class="col-duration">总时长</span>
-          <span class="col-fav">最爱事件</span>
+          <span class="col-rank">{{ t('leaderboard.colRank') }}</span>
+          <span class="col-name">{{ t('leaderboard.colName') }}</span>
+          <span class="col-count">{{ t('leaderboard.colCount') }}</span>
+          <span class="col-duration">{{ t('leaderboard.colDuration') }}</span>
+          <span class="col-fav">{{ t('leaderboard.colFav') }}</span>
         </div>
         <TransitionGroup name="row-slide" tag="div" class="table-body">
           <div
@@ -129,7 +129,7 @@
             </span>
             <span class="col-count">
               <span class="count-value">{{ explorer.exploreCount }}</span>
-              <span class="count-unit">次</span>
+              <span class="count-unit">{{ t('leaderboard.unit') }}</span>
             </span>
             <span class="col-duration">
               <span class="duration-value">{{ formatDuration(explorer.totalDuration) }}</span>
@@ -144,10 +144,10 @@
       <div class="champion-events">
         <h3 class="section-title">
           <span class="section-icon">◈</span>
-          热门探索事件 · {{ periodLabel }}
+          {{ t('leaderboard.championEvents') }} · {{ periodLabel }}
         </h3>
         <div v-if="!loading && championEvents.length === 0 && !loadError" class="empty-inline">
-          <span class="empty-inline-text">暂未统计到热门事件</span>
+          <span class="empty-inline-text">{{ t('leaderboard.noChampionEvents') }}</span>
         </div>
         <div v-else-if="!loading" class="champion-grid">
           <div
@@ -166,7 +166,7 @@
                 ></div>
               </div>
             </div>
-            <div class="champion-count">{{ event.exploreCount }} 次</div>
+            <div class="champion-count">{{ t('leaderboard.exploreTimes', { count: event.exploreCount }) }}</div>
           </div>
         </div>
       </div>
@@ -179,13 +179,16 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { leaderboardApi, type Explorer, type ChampionEvent } from '@/api/leaderboard'
+import { useI18n } from '@/composables/useI18n'
 
-const periodTabs = [
-  { value: 'daily' as const, label: '每日', icon: '◇' },
-  { value: 'weekly' as const, label: '每周', icon: '◈' },
-  { value: 'monthly' as const, label: '每月', icon: '⬡' },
-  { value: 'yearly' as const, label: '每年', icon: '✦' }
-]
+const { t } = useI18n()
+
+const periodTabs = computed(() => [
+  { value: 'daily' as const, label: t('leaderboard.period.daily'), icon: '◇' },
+  { value: 'weekly' as const, label: t('leaderboard.period.weekly'), icon: '◈' },
+  { value: 'monthly' as const, label: t('leaderboard.period.monthly'), icon: '⬡' },
+  { value: 'yearly' as const, label: t('leaderboard.period.yearly'), icon: '✦' }
+])
 
 type Period = 'daily' | 'weekly' | 'monthly' | 'yearly'
 
@@ -203,7 +206,7 @@ async function loadLeaderboard(period: Period) {
     ranking.value = res.data?.ranking || []
     championEventsRaw.value = res.data?.championEvents || []
   } catch (e: any) {
-    loadError.value = e?.message || '网络异常, 请稍后重试'
+    loadError.value = e?.message || t('leaderboard.networkError')
     ranking.value = []
     championEventsRaw.value = []
   } finally {
@@ -216,10 +219,10 @@ watch(activePeriod, (p) => loadLeaderboard(p))
 
 const periodLabel = computed(() => {
   const labels: Record<Period, string> = {
-    daily: '每日',
-    weekly: '每周',
-    monthly: '每月',
-    yearly: '每年'
+    daily: t('leaderboard.period.daily'),
+    weekly: t('leaderboard.period.weekly'),
+    monthly: t('leaderboard.period.monthly'),
+    yearly: t('leaderboard.period.yearly')
   }
   return labels[activePeriod.value]
 })
@@ -240,12 +243,12 @@ function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
   if (hours >= 1000) {
-    return `${(hours / 1000).toFixed(1)}k 小时`
+    return t('leaderboard.duration.k', { n: (hours / 1000).toFixed(1) })
   }
   if (hours > 0) {
-    return `${hours}小时${minutes}分`
+    return t('leaderboard.duration.h', { h: hours, m: minutes })
   }
-  return `${minutes}分钟`
+  return t('leaderboard.duration.m', { m: minutes })
 }
 
 function avatarGradient(name: string): string {
@@ -327,6 +330,13 @@ function avatarGradient(name: string): string {
   height: 1px;
   background: linear-gradient(90deg, var(--border-cyan), transparent);
   margin-left: 8px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .lb-main {

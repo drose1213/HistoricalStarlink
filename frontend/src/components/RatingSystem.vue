@@ -2,8 +2,8 @@
   <div class="rating-system">
     <div class="rating-header">
       <h3 class="cy-subtitle">
-        <span class="header-icon">★</span>
-        评分系统
+        <span class="header-icon">{{ t('rating.headerIcon') }}</span>
+        {{ t('rating.systemTitle') }}
       </h3>
     </div>
 
@@ -11,7 +11,7 @@
       <div class="rating-stars">
         <div class="average-score">
           <span class="score-number">{{ averageData.average.toFixed(1) }}</span>
-          <span class="score-max">/5</span>
+          <span class="score-max">{{ t('rating.scoreMax') }}</span>
         </div>
         <div class="stars-row">
           <span
@@ -27,7 +27,7 @@
             {{ i <= displayScore ? '★' : '☆' }}
           </span>
         </div>
-        <span class="rating-count">{{ averageData.count }} 次评分</span>
+        <span class="rating-count">{{ t('rating.ratingCount', { n: averageData.count }) }}</span>
       </div>
     </div>
 
@@ -52,7 +52,7 @@
       <textarea
         v-model="comment"
         class="cy-textarea"
-        placeholder="留下你的评价..."
+        :placeholder="t('rating.placeholder')"
         rows="3"
       ></textarea>
 
@@ -62,14 +62,14 @@
           :disabled="selectedScore === 0 || isSubmitting"
           @click="handleSubmit"
         >
-          {{ isSubmitting ? '提交中...' : '提交评分' }}
+          {{ isSubmitting ? t('rating.submitting') : t('rating.submit') }}
         </button>
         <button
           v-if="userRating"
           class="cy-btn"
           @click="showInput = false"
         >
-          取消
+          {{ t('rating.cancel') }}
         </button>
       </div>
     </div>
@@ -79,12 +79,12 @@
       class="cy-btn add-rating-btn"
       @click="showInput = true"
     >
-      {{ userRating ? '修改评分' : '添加评分' }}
+      {{ userRating ? t('rating.modify') : t('rating.add') }}
     </button>
 
     <div class="recent-ratings" v-if="ratings.length > 0">
       <div class="cy-divider"></div>
-      <h4 class="recent-title">近期评价</h4>
+      <h4 class="recent-title">{{ t('rating.recentTitle') }}</h4>
       <div class="ratings-list">
         <div v-for="rating in ratings" :key="rating.id" class="rating-item">
           <div class="rating-item-header">
@@ -107,6 +107,7 @@ import { ref, computed, watch } from 'vue'
 import { useRatingStore } from '@/stores/rating'
 import { useAppStore } from '@/stores/app'
 import { requireAuth } from '@/utils/auth'
+import { useI18n } from '@/composables/useI18n'
 
 const props = defineProps<{
   eventId: string
@@ -115,6 +116,7 @@ const props = defineProps<{
 
 const ratingStore = useRatingStore()
 const appStore = useAppStore()
+const { t } = useI18n()
 
 const showInput = ref(false)
 const selectedScore = ref(0)
@@ -122,7 +124,13 @@ const hoverScore = ref(0)
 const comment = ref('')
 const isSubmitting = ref(false)
 
-const scoreLabels = ['很差', '较差', '一般', '较好', '很好']
+const scoreLabels = computed<string[]>(() => [
+  t('rating.scoreLabel.veryBad'),
+  t('rating.scoreLabel.bad'),
+  t('rating.scoreLabel.ok'),
+  t('rating.scoreLabel.good'),
+  t('rating.scoreLabel.great'),
+])
 
 const averageData = computed(() => ratingStore.averageData)
 const userRating = computed(() => ratingStore.userRating)
@@ -154,9 +162,9 @@ async function handleSubmit() {
     showInput.value = false
     selectedScore.value = 0
     comment.value = ''
-    appStore.showToast('success', '评分已提交')
+    appStore.showToast('success', t('toast.ratingOk'))
   } catch {
-    appStore.showToast('error', '评分提交失败')
+    appStore.showToast('error', t('toast.ratingFail'))
   } finally {
     isSubmitting.value = false
   }

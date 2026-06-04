@@ -5,7 +5,7 @@
   >
     <header class="dlg-header">
       <button class="back-btn" @click="goBack">
-        <span>←</span> 返回
+        <span>←</span> {{ t('dialogue.back') }}
       </button>
       <div class="dlg-npc-info" v-if="npcInfo">
         <span class="npc-avatar">{{ npcInfo.avatar }}</span>
@@ -16,7 +16,7 @@
       </div>
       <div class="dlg-header-right">
         <span class="dlg-round" v-if="dialogueStore.round > 0">
-          第 {{ dialogueStore.round }} 轮
+          {{ t('dialogue.round', { n: dialogueStore.round }) }}
         </span>
       </div>
     </header>
@@ -39,7 +39,7 @@
             <span class="msg-avatar">{{ npcInfo?.avatar || '◇' }}</span>
             <div class="msg-content-wrap">
               <div class="msg-meta">
-                <span class="msg-npc-name">{{ npcInfo?.name || '时空之声' }}</span>
+                <span class="msg-npc-name">{{ npcInfo?.name || t('dialogue.npcFallbackName') }}</span>
                 <span class="msg-mood" v-if="msg.mood">{{ msg.mood }}</span>
               </div>
               <div class="msg-text">{{ msg.content }}</div>
@@ -67,21 +67,21 @@
 
       <div v-if="dialogueStore.isLoading && dialogueStore.messages.length === 0" class="dlg-loading">
         <div class="cy-loading"></div>
-        <p>正在连接时空隧道...</p>
+        <p>{{ t('dialogue.connecting') }}</p>
       </div>
 
       <div v-if="dialogueStore.errorMessage && !dialogueStore.isLoading" class="dlg-error">
         <div class="dlg-error-icon">◇</div>
         <h3 class="dlg-error-title">
-          {{ dialogueStore.notFound ? '暂未解锁时空对话' : '对话启动失败' }}
+          {{ dialogueStore.notFound ? t('dialogue.notUnlocked') : t('dialogue.startupFail') }}
         </h3>
         <p class="dlg-error-text">{{ dialogueStore.errorMessage }}</p>
         <p v-if="dialogueStore.notFound" class="dlg-error-hint">
-          该历史事件尚未录入剧本，你可以先在星链图谱中浏览其他事件，或尝试「商鞅变法」「秦始皇统一六国」「罗马帝国建立」「法国大革命」「汉帝国建立」「亚历山大东征」「工业革命」等已解锁事件。
+          {{ t('dialogue.notFoundHint') }}
         </p>
         <div class="dlg-error-actions">
-          <button class="cy-btn" @click="goBack">返回上一页</button>
-          <button class="cy-btn cy-btn--ghost" @click="retryInit">重试</button>
+          <button class="cy-btn" @click="goBack">{{ t('dialogue.backPrev') }}</button>
+          <button class="cy-btn cy-btn--ghost" @click="retryInit">{{ t('dialogue.retry') }}</button>
         </div>
       </div>
     </div>
@@ -94,16 +94,16 @@
         <div class="outcome-divider">
           <span class="outcome-line"></span>
           <span class="outcome-label">
-            {{ dialogueStore.outcomeType === 'alternate' ? '◇ 平行时间线' : '◆ 历史定论' }}
+            {{ dialogueStore.outcomeType === 'alternate' ? t('dialogue.outcomeAlternate') : t('dialogue.outcomeCanonical') }}
           </span>
           <span class="outcome-line"></span>
         </div>
-        <p class="outcome-text">{{ dialogueStore.outcomeSummary || '这段时空对话已经结束。' }}</p>
+        <p class="outcome-text">{{ dialogueStore.outcomeSummary || t('dialogue.outcomeEmpty') }}</p>
         <div class="outcome-actions">
           <button class="cy-btn cy-btn--gold" @click="handleRestart">
-            重新探索
+            {{ t('dialogue.restart') }}
           </button>
-          <span class="post-hint">💡 你还可以继续输入，与历史人物进行「后日谈」</span>
+          <span class="post-hint">{{ t('dialogue.postHint') }}</span>
         </div>
       </div>
 
@@ -112,7 +112,7 @@
         class="choice-panel"
       >
         <div class="choice-label">
-          <span class="choice-icon">◆</span> 做出你的选择
+          <span class="choice-icon">◆</span> {{ t('dialogue.choiceLabel') }}
         </div>
         <div class="choice-list">
           <button
@@ -136,7 +136,7 @@
           ref="inputRef"
           v-model="freeText"
           class="cy-input dlg-input"
-          :placeholder="dialogueStore.isDialogueEnded ? '与历史人物进行后日谈...' : '自由输入你的想法...'"
+          :placeholder="dialogueStore.isDialogueEnded ? t('dialogue.placeholderEnded') : t('dialogue.placeholderActive')"
           :disabled="dialogueStore.isLoading"
           @keydown.enter="handleFreeText"
         />
@@ -158,6 +158,7 @@
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDialogueStore } from '@/stores/dialogue'
+import { useI18n } from '@/composables/useI18n'
 
 const props = defineProps<{
   eventId: string
@@ -167,23 +168,28 @@ const props = defineProps<{
 const route = useRoute()
 const router = useRouter()
 const dialogueStore = useDialogueStore()
+const { t } = useI18n()
 
 const chatContainer = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
 const freeText = ref('')
 
-const NPC_AVATARS: Record<string, { avatar: string; name: string; role: string }> = {
-  shangyang_reform: { avatar: '⚖', name: '商鞅', role: '秦国大良造 · 变法者' },
-  qin_unification: { avatar: '👑', name: '秦始皇', role: '始皇帝 · 天下共主' },
-  han_empire: { avatar: '🐉', name: '刘邦', role: '汉高祖 · 布衣天子' },
-  alexander_east: { avatar: '⚔', name: '亚历山大', role: '马其顿之王 · 东方征服者' },
-  roman_empire: { avatar: '🦅', name: '屋大维', role: '奥古斯都 · 罗马帝皇' },
-  french_revolution: { avatar: '⚔', name: '一位巴黎市民', role: '革命参与者' },
-  industrial_revolution: { avatar: '⚙', name: '詹姆斯·瓦特', role: '发明家 · 蒸汽机之父' },
+const NPC_AVATARS: Record<string, { avatar: string; key: string }> = {
+  shangyang_reform: { avatar: '⚖', key: 'shangyang_reform' },
+  qin_unification: { avatar: '👑', key: 'qin_unification' },
+  han_empire: { avatar: '🐉', key: 'han_empire' },
+  alexander_east: { avatar: '⚔', key: 'alexander_east' },
+  roman_empire: { avatar: '🦅', key: 'roman_empire' },
+  french_revolution: { avatar: '⚔', key: 'french_revolution' },
+  industrial_revolution: { avatar: '⚙', key: 'industrial_revolution' },
 }
 
 const npcInfo = computed(() => {
-  return NPC_AVATARS[props.eventId] || { avatar: '◇', name: '时空旅人', role: '历史见证者' }
+  const entry = NPC_AVATARS[props.eventId]
+  if (!entry) {
+    return { avatar: '◇', name: t('dialogue.npc.fallback.name'), role: t('dialogue.npc.fallback.role') }
+  }
+  return { avatar: entry.avatar, name: t(`dialogue.npc.${entry.key}.name`), role: t(`dialogue.npc.${entry.key}.role`) }
 })
 
 function scrollToBottom() {

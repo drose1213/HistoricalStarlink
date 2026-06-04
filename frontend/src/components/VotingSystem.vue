@@ -3,7 +3,7 @@
     <div class="voting-header">
       <h3 class="cy-subtitle">
         <span class="header-icon">⬡</span>
-        投票系统
+        {{ t('rating.systemTitle') }}
       </h3>
     </div>
 
@@ -15,7 +15,7 @@
         :disabled="isLoading"
       >
         <span class="vote-icon">▲</span>
-        <span class="vote-label">赞同</span>
+        <span class="vote-label">{{ t('rating.voteUp') }}</span>
         <span class="vote-count">{{ voteStats?.up_count || 0 }}</span>
       </button>
 
@@ -26,7 +26,7 @@
         :disabled="isLoading"
       >
         <span class="vote-icon">▼</span>
-        <span class="vote-label">反对</span>
+        <span class="vote-label">{{ t('rating.voteDown') }}</span>
         <span class="vote-count">{{ voteStats?.down_count || 0 }}</span>
       </button>
 
@@ -37,7 +37,7 @@
         :disabled="isLoading"
       >
         <span class="vote-icon">★</span>
-        <span class="vote-label">收藏</span>
+        <span class="vote-label">{{ t('rating.voteStar') }}</span>
         <span class="vote-count">{{ voteStats?.star_count || 0 }}</span>
       </button>
     </div>
@@ -69,21 +69,21 @@
       <div class="bar-legend">
         <span class="legend-item">
           <span class="legend-dot legend-dot--up"></span>
-          赞同 {{ upPercent }}%
+          {{ t('rating.voteUp') }} {{ upPercent }}%
         </span>
         <span class="legend-item">
           <span class="legend-dot legend-dot--down"></span>
-          反对 {{ downPercent }}%
+          {{ t('rating.voteDown') }} {{ downPercent }}%
         </span>
         <span class="legend-item">
           <span class="legend-dot legend-dot--star"></span>
-          收藏 {{ starPercent }}%
+          {{ t('rating.voteStar') }} {{ starPercent }}%
         </span>
       </div>
     </div>
 
     <div class="voting-empty" v-else>
-      <p class="empty-text">暂无投票数据</p>
+      <p class="empty-text">{{ t('rating.empty') }}</p>
     </div>
   </div>
 </template>
@@ -93,6 +93,7 @@ import { computed, watch } from 'vue'
 import { useVoteStore } from '@/stores/vote'
 import { useAppStore } from '@/stores/app'
 import { requireAuth } from '@/utils/auth'
+import { useI18n } from '@/composables/useI18n'
 
 const props = defineProps<{
   eventId: string
@@ -101,6 +102,7 @@ const props = defineProps<{
 
 const voteStore = useVoteStore()
 const appStore = useAppStore()
+const { t } = useI18n()
 
 const voteStats = computed(() => voteStore.voteStats)
 const isLoading = computed(() => voteStore.isLoading)
@@ -129,9 +131,9 @@ const starPercent = computed(() => {
 async function handleVote(type: 'up' | 'down' | 'star') {
   try {
     await voteStore.submitVote(props.eventId, type, props.eventName)
-    appStore.showToast('success', '投票已记录')
+    appStore.showToast('success', t('toast.voteOk'))
   } catch {
-    appStore.showToast('error', '投票失败')
+    appStore.showToast('error', t('toast.voteFail'))
   }
 }
 

@@ -8,6 +8,17 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.0.5/index.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@5.0.16/index.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/orbitron@5.0.18/index.css">
+  <script>
+    // 提前同步 lang/data-locale,避免 main.ts 加载完成前出现闪烁
+    (function () {
+      try {
+        var raw = localStorage.getItem('historical-starlink.locale')
+        var locale = raw || (navigator.language && navigator.language.toLowerCase().indexOf('en') === 0 ? 'en' : 'zh')
+        document.documentElement.setAttribute('lang', locale === 'en' ? 'en' : 'zh-CN')
+        document.documentElement.setAttribute('data-locale', locale)
+      } catch (_) { /* ignore */ }
+    })()
+  </script>
 </head>
 <body>
   <div id="app"></div>

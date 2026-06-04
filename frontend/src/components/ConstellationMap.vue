@@ -12,10 +12,10 @@
     <Transition name="tip-fade">
       <div v-if="hoveredNode" class="constellation-tip" :style="{ left: tipX + 'px', top: tipY + 'px' }">
         <div class="tip-kicker">{{ tipKicker(hoveredNode) }}</div>
-        <div class="tip-title">{{ hoveredNode.label }}</div>
+        <div class="tip-title">{{ nodeLabel(hoveredNode) }}</div>
         <div v-if="hoveredNode.year" class="tip-year">{{ formatYear(hoveredNode.year) }}</div>
         <div v-if="hoveredNode.description" class="tip-desc">{{ hoveredNode.description }}</div>
-        <div v-if="hoveredNode.kind === 'event' && hoveredNode.role !== 'center'" class="tip-action">点击进入事件详情</div>
+        <div v-if="hoveredNode.kind === 'event' && hoveredNode.role !== 'center'" class="tip-action">{{ t('map.enterEvent') }}</div>
       </div>
     </Transition>
   </div>
@@ -24,6 +24,9 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { StarlinkGraph, StarlinkGraphNode } from '@/utils/starlinkGraph'
+import { useI18n } from '@/composables/useI18n'
+
+const { t, tf, tc, locale } = useI18n()
 
 interface PositionedNode extends StarlinkGraphNode {
   x: number
@@ -359,7 +362,8 @@ function drawNodes(
 
   for (const node of sorted) {
     const isHover = activeHover?.id === node.id
-    const matchesSearch = search ? node.label.toLowerCase().includes(search) : true
+    const label = nodeLabel(node)
+    const matchesSearch = search ? label.toLowerCase().includes(search) : true
     const dimmedBySearch = search.length > 0 && !matchesSearch
     const dimmedByFocus = focusIds ? !focusIds.has(node.id) : false
     const dimmed = dimmedBySearch || dimmedByFocus
@@ -466,8 +470,9 @@ function drawLabel(
   ctx.strokeStyle = 'rgba(1,3,9,0.92)'
   ctx.fillStyle = isHover || node.role === 'center' ? '#ffffff' : node.color
   ctx.globalAlpha = dimmed ? 0.16 : isConnected ? (isMajor ? 0.9 : 0.56) : 0.24
-  ctx.strokeText(node.label, node.x, node.y + radius + 6)
-  ctx.fillText(node.label, node.x, node.y + radius + 6)
+  const label = nodeLabel(node)
+  ctx.strokeText(label, node.x, node.y + radius + 6)
+  ctx.fillText(label, node.x, node.y + radius + 6)
   ctx.globalAlpha = 1
 }
 
@@ -524,15 +529,22 @@ function onClick(): void {
 }
 
 function tipKicker(node: PositionedNode): string {
-  if (node.role === 'center') return '当前事件'
-  if (node.role === 'cause') return '历史原因'
-  if (node.role === 'consequence') return '历史影响'
-  if (node.kind === 'concept') return '关联概念'
-  return node.region === 'china' ? '华夏星链' : '世界星链'
+  if (node.role === 'center') return t('map.currentEvent')
+  if (node.role === 'cause') return t('map.cause')
+  if (node.role === 'consequence') return t('map.consequence')
+  if (node.kind === 'concept') return t('map.concept')
+  return node.region === 'china' ? t('map.chainChina') : t('map.chainWorld')
+}
+
+function nodeLabel(node: StarlinkGraphNode): string {
+  if (node.kind === 'event') {
+    return tf(`events.${node.id}.name`, node.label)
+  }
+  return node.label
 }
 
 function formatYear(year: number): string {
-  return year < 0 ? `公元前${Math.abs(year)}年` : `${year}年`
+  return year < 0 ? t('map.bc', { n: Math.abs(year) }) : t('map.year', { n: year })
 }
 
 function animate(time: number): void {
@@ -553,6 +565,17 @@ function resize(): void {
 watch(() => props.graph, () => {
   rebuildGraph()
 }, { deep: true })
+
+// Redraw all labels when locale changes (concept/event text may switch language)
+watch(locale, () => {
+  if (!graphCanvasRef.value) return
+  const ctx = graphCanvasRef.value.getContext('2d')
+  if (!ctx) return
+  // Force a full redraw without rebuilding layout
+  const time = performance.now()
+  drawBackground(time)
+  drawGraph(time)
+})
 
 onMounted(() => {
   resize()

@@ -3,37 +3,37 @@
     <div class="exploration-header">
       <h3 class="cy-subtitle">
         <span class="header-icon">◈</span>
-        探索记录
+        {{ t('exploration.title') }}
       </h3>
       <span class="cy-badge cy-badge--cyan" v-if="isActive">
-        探索中 · {{ formatDuration(elapsedTime) }}
+        {{ t('exploration.active', { time: formatDuration(elapsedTime) }) }}
       </span>
     </div>
 
     <div class="exploration-body">
       <div class="record-info" v-if="currentRecord">
         <div class="info-row">
-          <span class="info-label">记录ID</span>
+          <span class="info-label">{{ t('exploration.recordId') }}</span>
           <span class="info-value">#{{ currentRecord.id }}</span>
         </div>
         <div class="info-row">
-          <span class="info-label">事件</span>
+          <span class="info-label">{{ t('exploration.event') }}</span>
           <span class="info-value">{{ eventId }}</span>
         </div>
         <div class="info-row">
-          <span class="info-label">路径深度</span>
-          <span class="info-value">{{ currentRecord.path_depth }} 层</span>
+          <span class="info-label">{{ t('exploration.pathDepth') }}</span>
+          <span class="info-value">{{ t('exploration.pathDepthValue', { n: currentRecord.path_depth }) }}</span>
         </div>
         <div class="info-row">
-          <span class="info-label">探索时长</span>
+          <span class="info-label">{{ t('exploration.duration') }}</span>
           <span class="info-value">{{ formatDuration(currentRecord.duration_seconds) }}</span>
         </div>
       </div>
 
       <div class="record-empty" v-else>
         <div class="empty-icon">◇</div>
-        <p>尚未开始探索</p>
-        <p class="empty-hint">点击事件节点开始探索旅程</p>
+        <p>{{ t('exploration.notStarted') }}</p>
+        <p class="empty-hint">{{ t('exploration.startHint') }}</p>
       </div>
     </div>
 
@@ -44,20 +44,20 @@
         :disabled="!eventId"
         @click="handleStart"
       >
-        开始探索
+        {{ t('exploration.start') }}
       </button>
       <button
         v-else
         class="cy-btn cy-btn--pink"
         @click="handleEnd"
       >
-        结束探索
+        {{ t('exploration.end') }}
       </button>
     </div>
 
     <div class="history-section" v-if="exploreHistory.length > 0">
       <div class="cy-divider"></div>
-      <h4 class="history-title">探索历程</h4>
+      <h4 class="history-title">{{ t('exploration.historyTitle') }}</h4>
       <div class="history-list">
         <div
           v-for="(eid, idx) in exploreHistory"
@@ -78,6 +78,7 @@ import { ref, computed, onBeforeUnmount } from 'vue'
 import { useExplorationStore } from '@/stores/exploration'
 import { useAppStore } from '@/stores/app'
 import { requireAuth } from '@/utils/auth'
+import { useI18n } from '@/composables/useI18n'
 
 const props = defineProps<{
   eventId?: string
@@ -87,6 +88,7 @@ const props = defineProps<{
 
 const explorationStore = useExplorationStore()
 const appStore = useAppStore()
+const { t } = useI18n()
 
 const elapsedTime = ref(0)
 let timer: ReturnType<typeof setInterval> | null = null
@@ -121,9 +123,9 @@ async function handleStart() {
   try {
     await explorationStore.startExploration(props.eventId, props.eventName)
     startTimer()
-    appStore.showToast('success', '探索已开始')
+    appStore.showToast('success', t('toast.exploreStart'))
   } catch {
-    appStore.showToast('error', '开始探索失败')
+    appStore.showToast('error', t('toast.exploreStartFail'))
   }
 }
 
@@ -136,9 +138,9 @@ async function handleEnd() {
       elapsedTime.value,
       currentRecord.value.path_depth
     )
-    appStore.showToast('success', `探索结束，共用时 ${formatDuration(elapsedTime.value)}`)
+    appStore.showToast('success', t('toast.exploreEnd', { duration: formatDuration(elapsedTime.value) }))
   } catch {
-    appStore.showToast('error', '结束探索失败')
+    appStore.showToast('error', t('toast.exploreEndFail'))
   }
 }
 

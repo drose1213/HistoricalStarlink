@@ -3,11 +3,11 @@
     <header class="gallery-header">
       <router-link to="/" class="back-link">
         <span class="back-arrow">←</span>
-        返回首页
+        {{ t('champions.back') }}
       </router-link>
       <div class="header-titles">
-        <h1 class="gallery-title">冠军展馆</h1>
-        <p class="gallery-subtitle">全服探索者 · 稀有度殿堂</p>
+        <h1 class="gallery-title">{{ t('champions.title') }}</h1>
+        <p class="gallery-subtitle">{{ t('champions.subtitle') }}</p>
       </div>
       <div class="header-decoration"></div>
     </header>
@@ -28,20 +28,20 @@
 
     <div v-if="loading" class="loading-state">
       <div class="loading-icon">⬡</div>
-      <p class="loading-text">正在加载卡牌数据…</p>
+      <p class="loading-text">{{ t('champions.loadingCards') }}</p>
     </div>
 
     <div v-else-if="loadError" class="error-state">
       <div class="error-icon">⚠</div>
       <p class="error-text">{{ loadError }}</p>
-      <button class="retry-btn" @click="loadCards">重试</button>
+      <button class="retry-btn" @click="loadCards">{{ t('common.retry') }}</button>
     </div>
 
     <div v-else-if="!hasAnyCard" class="empty-state empty-state--full">
       <div class="empty-icon">⬡</div>
-      <p class="empty-text">暂无卡牌</p>
-      <p class="empty-hint">去首页探索事件以解锁卡牌</p>
-      <router-link to="/" class="empty-cta">前往首页探索 →</router-link>
+      <p class="empty-text">{{ t('champions.empty') }}</p>
+      <p class="empty-hint">{{ t('champions.emptyHint') }}</p>
+      <router-link to="/" class="empty-cta">{{ t('champions.goExplore') }}</router-link>
     </div>
 
     <main v-else class="gallery-main">
@@ -61,7 +61,7 @@
               <div class="card-glow-layer"></div>
               <div class="card-head">
                 <span class="card-rarity-tag" :class="`tag--${activeTab}`">{{ currentTab.label }}</span>
-                <span class="card-score">{{ card.score }}分</span>
+                <span class="card-score">{{ t('champions.score', { score: card.score }) }}</span>
               </div>
               <h3 class="card-title">{{ card.title }}</h3>
               <p class="card-event-name">{{ card.event }}</p>
@@ -78,14 +78,14 @@
                 </div>
               </div>
               <div class="card-footer">
-                <span class="footer-hint">点击查看详情 →</span>
+                <span class="footer-hint">{{ t('champions.cardDetail') }}</span>
               </div>
             </div>
           </div>
 
           <div v-if="currentCards.length === 0" class="empty-state">
             <div class="empty-icon">⬡</div>
-            <p class="empty-text">该稀有度暂无卡牌</p>
+            <p class="empty-text">{{ t('champions.emptyForRarity') }}</p>
           </div>
         </div>
       </Transition>
@@ -100,39 +100,39 @@
             <span class="modal-rarity-badge" :class="`badge--${detailCard.rarity}`">
               {{ rarityLabel(detailCard.rarity) }}
             </span>
-            <span class="modal-score">{{ detailCard.score }}分</span>
+            <span class="modal-score">{{ t('champions.score', { score: detailCard.score }) }}</span>
           </div>
           <h2 class="modal-title">{{ detailCard.title }}</h2>
           <p class="modal-event">{{ detailCard.event }}</p>
           <div class="modal-divider" :class="`divider--${detailCard.rarity}`"></div>
           <div class="modal-details">
             <div class="detail-row">
-              <span class="detail-label">拥有者</span>
+              <span class="detail-label">{{ t('champions.owner') }}</span>
               <span class="detail-value">{{ detailCard.owner }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">解锁时间</span>
+              <span class="detail-label">{{ t('champions.unlockTime') }}</span>
               <span class="detail-value">{{ detailCard.date }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">稀有度</span>
+              <span class="detail-label">{{ t('champions.rarityLabel') }}</span>
               <span class="detail-value">{{ rarityLabel(detailCard.rarity) }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">关联事件</span>
+              <span class="detail-label">{{ t('champions.relatedEvent') }}</span>
               <span class="detail-value detail-value--link">{{ detailCard.event }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">探索次数</span>
-              <span class="detail-value">{{ detailCard.exploreCount }} 次</span>
+              <span class="detail-label">{{ t('champions.exploreCount') }}</span>
+              <span class="detail-value">{{ t('champions.exploreTimes', { count: detailCard.exploreCount }) }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">累计停留</span>
+              <span class="detail-label">{{ t('champions.totalStay') }}</span>
               <span class="detail-value">{{ detailCard.stayText }}</span>
             </div>
           </div>
           <div class="modal-lore">
-            <p class="lore-title">◈ 卡牌故事</p>
+            <p class="lore-title">{{ t('champions.cardStory') }}</p>
             <p class="lore-text">{{ detailCard.lore }}</p>
           </div>
         </div>
@@ -147,9 +147,12 @@
 import { ref, computed, onMounted } from 'vue'
 import { championApi } from '@/api/champion'
 import { getSessionId } from '@/utils/session'
+import { useI18n } from '@/composables/useI18n'
 import type { BackendChampionCard } from '@/types'
 
 type RarityKey = 'legendary' | 'epic' | 'rare' | 'common'
+
+const { t } = useI18n()
 
 interface ChampionEntry {
   id: number
@@ -178,10 +181,10 @@ const LEVEL_TO_RARITY: Record<number, RarityKey> = {
 }
 
 const RARITY_LABEL: Record<RarityKey, string> = {
-  legendary: '传说',
-  epic: '史诗',
-  rare: '稀有',
-  common: '普通',
+  legendary: t('champions.rarity.legendary'),
+  epic: t('champions.rarity.epic'),
+  rare: t('champions.rarity.rare'),
+  common: t('champions.rarity.common'),
 }
 
 function rarityLabel(r: RarityKey): string {
@@ -199,14 +202,14 @@ function formatDate(input: string | null | undefined): string {
 }
 
 function formatDuration(seconds: number): string {
-  if (!seconds || seconds <= 0) return '0 分钟'
+  if (!seconds || seconds <= 0) return `0 ${t('common.minutes')}`
   const minutes = Math.round(seconds / 60)
   if (minutes >= 60) {
     const h = Math.floor(minutes / 60)
     const m = minutes % 60
-    return `${h} 小时 ${m} 分`
+    return `${h} ${t('common.hours')} ${m} ${t('common.minutes')}`
   }
-  return `${minutes} 分钟`
+  return `${minutes} ${t('common.minutes')}`
 }
 
 function deriveScore(card: BackendChampionCard): number {
@@ -220,7 +223,7 @@ function deriveScore(card: BackendChampionCard): number {
 
 function deriveLore(card: BackendChampionCard): string {
   const desc = (card.event_description || '').trim()
-  if (!desc) return '该卡牌记录了一段真实的探索旅程。'
+  if (!desc) return t('champions.noLore')
   return desc.length > 120 ? `${desc.slice(0, 120)}…` : desc
 }
 
@@ -230,7 +233,7 @@ function mapCard(card: BackendChampionCard): ChampionEntry {
     id: card.id,
     title: card.nickname?.trim() || card.event_name,
     event: card.event_name,
-    owner: card.nickname?.trim() || '匿名探索者',
+    owner: card.nickname?.trim() || t('champions.anonymous'),
     score: deriveScore(card),
     date: formatDate(card.created_at),
     rarity,
@@ -249,7 +252,7 @@ async function loadCards() {
     const items = (res.data?.items || []) as unknown as BackendChampionCard[]
     cards.value = items.map(mapCard)
   } catch (e: unknown) {
-    loadError.value = e instanceof Error ? e.message : '网络异常, 请稍后重试'
+    loadError.value = e instanceof Error ? e.message : t('leaderboard.networkError')
     cards.value = []
   } finally {
     loading.value = false
@@ -266,10 +269,10 @@ const tabs = computed(() => {
   }
   for (const c of cards.value) counts[c.rarity] += 1
   return [
-    { key: 'legendary' as const, label: '传说', icon: '◆', count: counts.legendary },
-    { key: 'epic' as const, label: '史诗', icon: '◈', count: counts.epic },
-    { key: 'rare' as const, label: '稀有', icon: '◇', count: counts.rare },
-    { key: 'common' as const, label: '普通', icon: '○', count: counts.common },
+    { key: 'legendary' as const, label: t('champions.rarity.legendary'), icon: '◆', count: counts.legendary },
+    { key: 'epic' as const, label: t('champions.rarity.epic'), icon: '◈', count: counts.epic },
+    { key: 'rare' as const, label: t('champions.rarity.rare'), icon: '◇', count: counts.rare },
+    { key: 'common' as const, label: t('champions.rarity.common'), icon: '○', count: counts.common },
   ]
 })
 
@@ -355,6 +358,12 @@ function openDetail(card: ChampionEntry) {
 
 .header-decoration { width: 40px; flex-shrink: 0; }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
 .tab-bar {
   display: flex;
   gap: 4px;

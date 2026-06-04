@@ -2,11 +2,11 @@
   <div class="explore-view">
     <header class="explore-header">
       <router-link to="/" class="back-link">
-        <span>←</span> 返回首页
+        <span>←</span> {{ t('common.backToPrev') }}
       </router-link>
       <h2 class="page-title">
         <span class="title-icon">◈</span>
-        探索记录
+        {{ t('explore.pageTitle') }}
       </h2>
       <div></div>
     </header>
@@ -15,27 +15,27 @@
       <div class="explore-stats" v-if="stats">
         <div class="stat-card cy-card">
           <span class="stat-value">{{ stats.total_explorations || 0 }}</span>
-          <span class="stat-label">总探索次数</span>
+          <span class="stat-label">{{ t('explore.statTotalExplorations') }}</span>
         </div>
         <div class="stat-card cy-card">
           <span class="stat-value">{{ stats.unique_events || 0 }}</span>
-          <span class="stat-label">探索事件数</span>
+          <span class="stat-label">{{ t('explore.statUniqueEvents') }}</span>
         </div>
         <div class="stat-card cy-card">
           <span class="stat-value">{{ formatDuration(Number(stats.total_duration) || 0) }}</span>
-          <span class="stat-label">累计时长</span>
+          <span class="stat-label">{{ t('explore.statTotalDuration') }}</span>
         </div>
       </div>
 
       <div class="records-section">
-        <h3 class="section-title">探索历史</h3>
+        <h3 class="section-title">{{ t('explore.history') }}</h3>
         <div class="records-list" v-if="records.length > 0">
           <div v-for="record in records" :key="record.id" class="record-item cy-card">
             <div class="record-main">
               <div class="record-event">{{ record.event_id }}</div>
               <div class="record-meta">
                 <span class="record-duration">{{ formatDuration(record.duration_seconds) }}</span>
-                <span class="record-depth">深度 {{ record.path_depth }} 层</span>
+                <span class="record-depth">{{ t('explore.depth', { n: record.path_depth }) }}</span>
               </div>
             </div>
             <div class="record-time">{{ formatTime(record.explored_at) }}</div>
@@ -43,8 +43,8 @@
         </div>
         <div class="records-empty" v-else>
           <div class="empty-icon">◇</div>
-          <p>暂无探索记录</p>
-          <router-link to="/" class="cy-btn">开始探索</router-link>
+          <p>{{ t('explore.empty') }}</p>
+          <router-link to="/" class="cy-btn">{{ t('explore.start') }}</router-link>
         </div>
       </div>
 
@@ -60,9 +60,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useExplorationStore } from '@/stores/exploration'
+import { useI18n } from '@/composables/useI18n'
 import SignatureUpload from '@/components/SignatureUpload.vue'
 import type { ExplorationRecord } from '@/types'
 
+const { t } = useI18n()
 const explorationStore = useExplorationStore()
 
 const records = ref<ExplorationRecord[]>([])
@@ -115,6 +117,14 @@ onMounted(async () => {
   background: linear-gradient(180deg, rgba(4, 8, 15, 0.96), rgba(4, 8, 15, 0.72));
   border-bottom: 1px solid var(--border-subtle);
   z-index: var(--z-header);
+  gap: 16px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .back-link {

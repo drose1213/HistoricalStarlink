@@ -49,15 +49,17 @@
 
     <div class="card-footer">
       <span class="unlock-time" v-if="card.unlocked_at">
-        解锁于 {{ formatDate(card.unlocked_at) }}
+        {{ t('championCard.unlockedAt', { time: formatDate(card.unlocked_at) }) }}
       </span>
-      <span class="event-id">事件: {{ card.event_id }}</span>
+      <span class="event-id">{{ t('championCard.event', { id: card.event_id }) }}</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { ChampionCard } from '@/types'
+import { useI18n } from '@/composables/useI18n'
 
 defineProps<{
   card: ChampionCard
@@ -67,12 +69,14 @@ defineEmits<{
   click: [card: ChampionCard]
 }>()
 
-const rarityLabels: Record<string, string> = {
-  common: '普通',
-  rare: '稀有',
-  epic: '史诗',
-  legendary: '传说'
-}
+const { t } = useI18n()
+
+const rarityLabels = computed<Record<string, string>>(() => ({
+  common: t('championCard.rarity.common'),
+  rare: t('championCard.rarity.rare'),
+  epic: t('championCard.rarity.epic'),
+  legendary: t('championCard.rarity.legendary')
+}))
 
 function formatDate(dateStr: string): string {
   if (!dateStr) return ''
