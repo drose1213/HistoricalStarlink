@@ -42,7 +42,7 @@
         </template>
       </div>
 
-      <div class="locale-area">
+      <div class="locale-area" v-show="false">
         <LanguageSwitcher />
       </div>
     </header>

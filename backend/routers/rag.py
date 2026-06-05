@@ -18,6 +18,7 @@ from ..schemas import BaseResponse, PaginationResponse
 from ..rag_engine import search_similar, full_rag_query, build_index
 from ..database import get_db
 from ..models.knowledge_base import KnowledgeEntry, KnowledgeVersion, CrawlSource
+from ..utils import iso_utc
 
 logger = logging.getLogger("historical_starlink.rag")
 
@@ -343,9 +344,9 @@ def _entry_to_summary(e: KnowledgeEntry) -> dict:
         "parent_event_id": e.parent_event_id,
         "status": e.status,
         "is_locked": e.is_locked,
-        "created_at": str(e.created_at) if e.created_at else None,
-        "updated_at": str(e.updated_at) if e.updated_at else None,
-        "last_indexed_at": str(e.last_indexed_at) if e.last_indexed_at else None,
+        "created_at": iso_utc(e.created_at),
+        "updated_at": iso_utc(e.updated_at),
+        "last_indexed_at": iso_utc(e.last_indexed_at),
     }
 
 
@@ -813,7 +814,7 @@ async def get_entry_versions(entry_id: int, db: AsyncSession = Depends(get_db)):
             "content_hash": v.content_hash, "change_summary": v.change_summary,
             "change_source": v.change_source, "operator": v.operator,
             "snapshot_meta": v.snapshot_meta,
-            "created_at": str(v.created_at) if v.created_at else None,
+            "created_at": iso_utc(v.created_at),
         }
         for v in rows
     ]
@@ -918,7 +919,7 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     latest_row = (await db.execute(
         select(KnowledgeEntry.updated_at).order_by(KnowledgeEntry.updated_at.desc()).limit(1)
     )).first()
-    latest_update = str(latest_row[0]) if latest_row else None
+    latest_update = iso_utc(latest_row[0]) if latest_row else None
 
     version_total = (await db.execute(select(func.count()).select_from(KnowledgeVersion))).scalar() or 0
 
@@ -963,7 +964,7 @@ async def list_crawl_sources(
             "id": r.id, "name": r.name, "url": r.url, "category": r.category,
             "region": r.region, "tags": r.tags, "description": r.description,
             "recommended": r.recommended, "enabled": r.enabled, "priority": r.priority,
-            "last_crawled_at": str(r.last_crawled_at) if r.last_crawled_at else None,
+            "last_crawled_at": iso_utc(r.last_crawled_at),
             "last_status": r.last_status, "last_imported": r.last_imported,
         }
         for r in rows

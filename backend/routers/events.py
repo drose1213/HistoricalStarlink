@@ -9,6 +9,7 @@ from ..database import get_db
 from ..models.event import HistoryEvent
 from ..models.exploration_record import ExplorationRecord
 from ..schemas import BaseResponse
+from ..utils import iso_utc
 
 logger = logging.getLogger("historical_starlink.events")
 
@@ -77,7 +78,7 @@ async def get_home_feed(
                 (await db.execute(select(HistoryEvent).where(HistoryEvent.id.in_(ids)))).scalars()
             }
             explored = [
-                {**_event_dict(ev_map[r.event_id]), "visit_count": r.visit_count, "last_visit": str(r.last_visit)}
+                {**_event_dict(ev_map[r.event_id]), "visit_count": r.visit_count, "last_visit": iso_utc(r.last_visit)}
                 for r in rows
                 if r.event_id in ev_map
             ]

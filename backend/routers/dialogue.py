@@ -308,7 +308,7 @@ async def list_dialogues(
             "current_round": r.current_round,
             "is_completed": r.is_completed,
             "outcome_summary": r.outcome_summary,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "created_at": iso_utc(r.created_at),
         })
 
     return PaginationResponse(
@@ -351,7 +351,7 @@ async def get_dialogue(
         "current_round": dialogue.current_round,
         "is_completed": dialogue.is_completed,
         "outcome_summary": dialogue.outcome_summary,
-        "created_at": dialogue.created_at.isoformat() if dialogue.created_at else None,
+        "created_at": iso_utc(dialogue.created_at),
     })
 
 

@@ -179,27 +179,48 @@ function layoutNodes(): void {
 }
 
 function layoutHomeNodes(): void {
-  const cx = width * 0.52
   const cy = height * 0.5
-  const maxRadius = Math.min(width, height) * 0.47
-  const sorted = [...nodes].sort((a, b) => b.importance - a.importance)
+  const chinaNodes = nodes
+    .filter(node => node.kind === 'event' && node.region === 'china')
+    .sort((a, b) => b.importance - a.importance)
+  const foreignNodes = nodes
+    .filter(node => node.kind === 'event' && node.region === 'foreign')
+    .sort((a, b) => b.importance - a.importance)
+  const conceptNodes = nodes
+    .filter(node => node.kind === 'concept')
+    .sort((a, b) => a.phase - b.phase)
 
-  sorted.forEach((node, index) => {
-    if (node.kind === 'concept') {
-      const angle = (index / Math.max(sorted.length, 1)) * Math.PI * 2 + node.phase
-      const radius = maxRadius * (0.45 + ((hash(node.id) % 100) / 100) * 0.48)
-      node.tx = cx + Math.cos(angle) * radius
-      node.ty = cy + Math.sin(angle) * radius
-      return
-    }
+  const placeRegionCluster = (
+    regionNodes: PositionedNode[],
+    clusterCenterX: number,
+    sideBias: number,
+    angleOffset: number,
+  ): void => {
+    const radiusXMax = width * 0.23
+    const radiusYMax = height * 0.38
 
-    const rank = index + 1
-    const angle = rank * 2.399963 + node.phase * 0.18
-    const band = Math.sqrt(rank / Math.max(sorted.length, 1))
-    const radius = maxRadius * (0.08 + band * 0.92)
-    const regionBias = node.region === 'china' ? -width * 0.1 : width * 0.1
-    node.tx = cx + regionBias * (1 - band) + Math.cos(angle) * radius
-    node.ty = cy + Math.sin(angle) * radius * 0.86
+    regionNodes.forEach((node, index) => {
+      const ratio = regionNodes.length <= 1 ? 0 : index / (regionNodes.length - 1)
+      const spiralAngle = index * 2.18 + node.phase * 0.42 + angleOffset
+      const spread = 0.2 + Math.pow(ratio, 0.9) * 0.84
+      const radiusX = radiusXMax * spread + node.radius * 0.8
+      const radiusY = radiusYMax * spread + node.radius * 0.6
+      const lobeDrift = sideBias * width * (0.048 + (1 - spread) * 0.08)
+
+      node.tx = clusterCenterX + Math.cos(spiralAngle) * radiusX + lobeDrift
+      node.ty = cy + Math.sin(spiralAngle) * radiusY * 0.96
+    })
+  }
+
+  placeRegionCluster(chinaNodes, width * 0.34, -1, Math.PI * 0.72)
+  placeRegionCluster(foreignNodes, width * 0.66, 1, -Math.PI * 0.18)
+
+  conceptNodes.forEach((node, index) => {
+    const angle = -Math.PI / 2 + (index / Math.max(conceptNodes.length, 1)) * Math.PI * 2 + node.phase * 0.28
+    const ringX = width * (0.36 + ((hash(node.id) % 100) / 100) * 0.1)
+    const ringY = height * (0.34 + ((hash(`${node.id}_y`) % 100) / 100) * 0.08)
+    node.tx = width * 0.5 + Math.cos(angle) * ringX
+    node.ty = cy + Math.sin(angle) * ringY
   })
 
   clampTargets()
@@ -243,7 +264,9 @@ function layoutDetailNodes(): void {
 
 function clampTargets(): void {
   for (const node of nodes) {
-    const pad = Math.max(42, node.radius * 4)
+    const pad = props.mode === 'home'
+      ? Math.max(26, node.radius * 3.1)
+      : Math.max(42, node.radius * 4)
     node.tx = Math.max(pad, Math.min(width - pad, node.tx))
     node.ty = Math.max(pad, Math.min(height - pad, node.ty))
     if (node.x === width / 2 && node.y === height / 2) {

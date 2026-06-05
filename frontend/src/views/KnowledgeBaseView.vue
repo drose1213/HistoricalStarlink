@@ -2,7 +2,7 @@
   <div class="kb-view">
     <header class="kb-header">
       <router-link to="/" class="back-link">
-        <span><</span> Home
+        <span><</span> {{ t('home.backHome') }}
       </router-link>
       <h2 class="page-title">
         <span class="title-icon">*</span>
@@ -82,7 +82,7 @@
             </div>
           </div>
           <div v-if="stats.latest_update" class="last-update">
-            {{ t('knowledge.overview.latestUpdate', { time: stats.latest_update }) }}
+            {{ t('knowledge.overview.latestUpdate', { time: formatDateTime(stats.latest_update) }) }}
           </div>
         </div>
 
@@ -242,7 +242,7 @@
         </div>
       </div>
 
-      <div v-if="activeTab === 'browse'" class="tab-content">
+      <div v-if="activeTab === 'browse'" class="tab-content tab-content--browse">
         <div class="section-block cy-card search-drawer-card">
           <div class="drawer-head">
             <div class="drawer-head-copy">
@@ -376,8 +376,17 @@
           </div>
 
           <div v-else class="entries-list">
-            <div v-for="entry in entries" :key="entry.id" class="entry-card" @click="viewEntry(entry)">
+            <div
+              v-for="(entry, index) in entries"
+              :key="entry.id"
+              class="entry-card"
+              :class="{ 'entry-card--expanded': hoveredEntryId === entry.id }"
+              @mouseenter="setHoveredEntry(entry.id)"
+              @mouseleave="setHoveredEntry(null)"
+              @click="viewEntry(entry)"
+            >
               <div class="entry-head">
+                <span class="entry-index">#{{ entryIndex(index) }}</span>
                 <span class="entry-source-badge" :class="entry.source_type">
                   {{ sourceLabels[entry.source_type] || entry.source_type }}
                 </span>
@@ -388,6 +397,7 @@
                 <span class="entry-status-badge" :class="entry.status">
                   {{ statusLabels[entry.status] || entry.status }}
                 </span>
+                <span v-if="entry.importance" class="entry-importance">★ {{ entry.importance }}/10</span>
               </div>
               <h4 class="entry-title">{{ entry.title }}</h4>
               <p class="entry-preview">{{ entry.content_preview }}</p>
@@ -399,9 +409,47 @@
                 <span v-if="entry.tags && entry.tags.length" class="meta-item">{{ entry.tags.slice(0, 3).join(' / ') }}</span>
                 <span v-if="entry.importance" class="meta-item">{{ entry.importance }}/10</span>
               </div>
+
+              <div v-show="hoveredEntryId === entry.id" class="entry-detail" @mouseenter="setHoveredEntry(entry.id)" @mouseleave="setHoveredEntry(null)">
+                <div class="entry-detail-grid">
+                  <div v-if="entry.content" class="entry-detail-cell entry-detail-cell--full">
+                    <span class="entry-detail-label">{{ t('knowledge.detail.content') }}</span>
+                    <div class="entry-detail-content">{{ entry.content }}</div>
+                  </div>
+                  <div v-if="entry.source_url" class="entry-detail-cell">
+                    <span class="entry-detail-label">{{ t('knowledge.detail.sourceUrl') }}</span>
+                    <a class="entry-detail-value entry-detail-link" :href="entry.source_url" target="_blank" rel="noopener">{{ entry.source_url }}</a>
+                  </div>
+                  <div v-if="entry.file_name" class="entry-detail-cell">
+                    <span class="entry-detail-label">{{ t('knowledge.detail.file') }}</span>
+                    <span class="entry-detail-value">{{ entry.file_name }}</span>
+                  </div>
+                  <div v-if="entry.content_hash" class="entry-detail-cell">
+                    <span class="entry-detail-label">{{ t('knowledge.detail.contentHash') }}</span>
+                    <span class="entry-detail-value mono">{{ entry.content_hash.substring(0, 16) }}…</span>
+                  </div>
+                  <div v-if="entry.figures && entry.figures.length" class="entry-detail-cell">
+                    <span class="entry-detail-label">{{ t('knowledge.detail.figures') }}</span>
+                    <span class="entry-detail-value">{{ entry.figures.join(', ') }}</span>
+                  </div>
+                  <div v-if="entry.keywords && entry.keywords.length" class="entry-detail-cell">
+                    <span class="entry-detail-label">{{ t('knowledge.detail.tags') }}</span>
+                    <span class="entry-detail-value">{{ entry.keywords.join(', ') }}</span>
+                  </div>
+                  <div v-if="entry.created_at" class="entry-detail-cell">
+                    <span class="entry-detail-label">{{ t('knowledge.detail.created', { time: '' }) }}</span>
+                    <span class="entry-detail-value">{{ formatDateTime(entry.created_at) }}</span>
+                  </div>
+                  <div v-if="entry.updated_at" class="entry-detail-cell">
+                    <span class="entry-detail-label">{{ t('knowledge.detail.updated', { time: '' }) }}</span>
+                    <span class="entry-detail-value">{{ formatDateTime(entry.updated_at) }}</span>
+                  </div>
+                </div>
+              </div>
+
               <div class="entry-footer">
                 <span class="chunk-info">{{ t('knowledge.browseTab.chunkLabel', { n: entry.chunk_index + 1, m: entry.chunk_total }) }}</span>
-                <span class="entry-date">{{ entry.created_at?.split('T')[0] || entry.created_at?.split(' ')[0] || '' }}</span>
+                <span class="entry-date">{{ formatDate(entry.created_at) }}</span>
                 <button class="delete-btn" @click.stop="deleteEntry(entry.id)" :title="t('knowledge.browseTab.delete')">x</button>
               </div>
             </div>
@@ -411,11 +459,21 @@
             <div class="pagination-summary">
               <strong>{{ entriesTotal }}</strong>
               <span>{{ t('knowledge.browseTab.results') }}</span>
-              <span>?</span>
+              <span class="sep">·</span>
               <span>{{ t('knowledge.browseTab.pages', { n: totalEntryPages }) }}</span>
             </div>
             <div class="pagination-controls">
               <button class="page-btn" :disabled="currentPage <= 1" @click="changeBrowsePage(currentPage - 1)">{{ t('knowledge.browseTab.previous') }}</button>
+              <div class="page-numbers">
+                <button
+                  v-for="p in visiblePageNumbers"
+                  :key="p"
+                  class="page-num"
+                  :class="{ active: p === currentPage, ellipsis: p === -1 }"
+                  :disabled="p === -1"
+                  @click="changeBrowsePage(p)"
+                >{{ p === -1 ? '…' : p }}</button>
+              </div>
               <span class="page-info">{{ t('knowledge.browseTab.pageInfo', { cur: currentPage, total: totalEntryPages }) }}</span>
               <button class="page-btn" :disabled="currentPage >= totalEntryPages" @click="changeBrowsePage(currentPage + 1)">{{ t('knowledge.browseTab.next') }}</button>
             </div>
@@ -461,7 +519,7 @@
                 <span v-if="src.category">{{ t('knowledge.sourcesTab.category', { name: src.category }) }}</span>
                 <span v-if="src.region">{{ t('knowledge.sourcesTab.region', { name: src.region === 'china' ? t('knowledge.importTab.regionChina') : src.region === 'foreign' ? t('knowledge.importTab.regionForeign') : src.region }) }}</span>
                 <span v-if="src.last_imported != null">{{ t('knowledge.sourcesTab.lastImport', { time: String(src.last_imported) }) }}</span>
-                <span v-if="src.last_crawled_at">{{ src.last_crawled_at }}</span>
+                <span v-if="src.last_crawled_at">{{ formatDateTime(src.last_crawled_at) }}</span>
               </div>
               <div v-if="src.tags && src.tags.length" class="tag-list">
                 <span v-for="tag in src.tags" :key="tag" class="tag-chip">{{ tag }}</span>
@@ -472,7 +530,7 @@
             <div class="pagination-summary">
               <strong>{{ crawlSources.length }}</strong>
               <span>{{ t('knowledge.sourcesTab.sources') }}</span>
-              <span>?</span>
+              <span class="sep">·</span>
               <span>{{ t('knowledge.browseTab.pages', { n: totalSourcePages }) }}</span>
             </div>
             <div class="pagination-controls">
@@ -503,7 +561,7 @@
                 <div class="version-item-head">
                   <span class="version-num">v{{ v.version }}</span>
                   <span class="version-source-badge">{{ v.change_source || 'system' }}</span>
-                  <span class="version-date">{{ v.created_at }}</span>
+                  <span class="version-date">{{ formatDateTime(v.created_at) }}</span>
                 </div>
                 <div class="version-summary">{{ v.change_summary || t('knowledge.detail.noSummary') }}</div>
                 <div class="version-meta">
@@ -591,8 +649,8 @@
           </div>
 
           <div class="detail-dates">
-            <span>{{ t('knowledge.detail.created', { time: selectedEntry.created_at ?? '' }) }}</span>
-            <span>{{ t('knowledge.detail.updated', { time: selectedEntry.updated_at ?? '' }) }}</span>
+            <span>{{ t('knowledge.detail.created', { time: formatDateTime(selectedEntry.created_at) }) }}</span>
+            <span>{{ t('knowledge.detail.updated', { time: formatDateTime(selectedEntry.updated_at) }) }}</span>
           </div>
         </div>
       </div>
@@ -607,6 +665,7 @@ import { ragApi, type KnowledgeEntry, type KnowledgeStats, type KnowledgeVersion
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from '@/composables/useI18n'
+import { formatDateTime, formatDate } from '@/utils/datetime'
 
 const appStore = useAppStore()
 const authStore = useAuthStore()
@@ -661,7 +720,7 @@ const crawling = ref(false)
 const rebuilding = ref(false)
 const seeding = ref(false)
 const crawlSources = ref<CrawlSource[]>([])
-const searchDrawerOpen = ref(true)
+const searchDrawerOpen = ref(false)
 const sourceCurrentPage = ref(1)
 const sourcePageSize = ref(6)
 const entriesPageSize = ref(20)
@@ -708,10 +767,44 @@ const entries = ref<KnowledgeEntry[]>([])
 const entriesTotal = ref(0)
 const entriesLoading = ref(false)
 const currentPage = ref(1)
+const hoveredEntryId = ref<number | null>(null)
+let hoverClearTimer: number | null = null
+
+function setHoveredEntry(id: number | null) {
+  if (hoverClearTimer != null) {
+    window.clearTimeout(hoverClearTimer)
+    hoverClearTimer = null
+  }
+  if (id == null) {
+    // small delay before collapsing to avoid flicker when moving between card & panel
+    hoverClearTimer = window.setTimeout(() => {
+      hoveredEntryId.value = null
+    }, 120)
+  } else {
+    hoveredEntryId.value = id
+  }
+}
+
+function entryIndex(idx: number): number {
+  return (currentPage.value - 1) * entriesPageSize.value + idx + 1
+}
 
 const selectedEntry = ref<KnowledgeEntry | null>(null)
 
 const totalEntryPages = computed(() => Math.max(1, Math.ceil(entriesTotal.value / entriesPageSize.value)))
+const visiblePageNumbers = computed<number[]>(() => {
+  const total = totalEntryPages.value
+  const cur = currentPage.value
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const set = new Set<number>([1, total, cur, cur - 1, cur + 1, cur - 2, cur + 2])
+  const sorted = Array.from(set).filter((p) => p >= 1 && p <= total).sort((a, b) => a - b)
+  const result: number[] = []
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i] - sorted[i - 1] > 1) result.push(-1)
+    result.push(sorted[i])
+  }
+  return result
+})
 const totalSourcePages = computed(() => Math.max(1, Math.ceil(crawlSources.value.length / sourcePageSize.value)))
 const pagedCrawlSources = computed(() => {
   const start = (sourceCurrentPage.value - 1) * sourcePageSize.value
@@ -815,6 +908,12 @@ async function fetchCrawlSources() {
 
 async function doConditionalSearch(page = 1) {
   currentPage.value = page
+  // Auto-collapse any expanded entry when a new search is performed.
+  hoveredEntryId.value = null
+  if (hoverClearTimer != null) {
+    window.clearTimeout(hoverClearTimer)
+    hoverClearTimer = null
+  }
   try {
     const res = await ragApi.conditionalSearch({
       text: condFilters.text || undefined,
@@ -1037,7 +1136,10 @@ onMounted(() => {
 
 <style scoped>
 .kb-view {
-  min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--bg-primary);
 }
 
@@ -1125,9 +1227,36 @@ onMounted(() => {
   color: #fff;
 }
 
-.kb-main { padding: 28px; max-width: 1000px; margin: 0 auto; }
+.kb-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 28px 28px 24px;
+  overflow: hidden;
+}
 
-.tab-content { animation: fadeIn 0.3s ease; }
+.tab-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 24px;
+  animation: fadeIn 0.3s ease;
+}
+
+.tab-content--browse {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow: hidden;
+}
+
+.tab-content--browse > .section-block {
+  margin-bottom: 0;
+}
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -1379,7 +1508,53 @@ onMounted(() => {
 .filter-input { flex: 1; min-width: 200px; }
 .filter-select { width: 130px; }
 
-.entries-list { display: flex; flex-direction: column; gap: 8px; }
+.entries-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  padding: 0 4px 12px 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(49, 247, 255, 0.4) rgba(255, 255, 255, 0.04);
+}
+
+.entries-list .entry-card:last-child {
+  margin-bottom: 0;
+}
+
+.entries-list::-webkit-scrollbar {
+  width: 8px;
+}
+.entries-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+}
+.entries-list::-webkit-scrollbar-thumb {
+  background: rgba(49, 247, 255, 0.4);
+  border-radius: 4px;
+}
+.entries-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(49, 247, 255, 0.6);
+}
+
+.entry-index {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: rgba(49, 247, 255, 0.12);
+  color: var(--cyan-core);
+  border: 1px solid rgba(49, 247, 255, 0.3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  flex: 0 0 auto;
+}
 
 .entry-card {
   padding: 16px;
@@ -1390,6 +1565,77 @@ onMounted(() => {
 }
 
 .entry-card:hover { border-color: var(--border-cyan); background: rgba(49, 247, 255, 0.03); }
+
+.entry-card--expanded {
+  border-color: var(--border-cyan);
+  background: rgba(49, 247, 255, 0.04);
+  box-shadow: 0 0 0 1px rgba(49, 247, 255, 0.18) inset, 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.entry-importance {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--accent-gold);
+  font-family: var(--font-mono);
+}
+
+.entry-detail {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(49, 247, 255, 0.18);
+}
+
+.entry-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+}
+
+.entry-detail-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.entry-detail-cell--full { grid-column: 1 / -1; }
+
+.entry-detail-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.entry-detail-value {
+  font-size: 12px;
+  color: var(--text-light);
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.entry-detail-value.mono { font-family: var(--font-mono); }
+
+.entry-detail-link {
+  color: var(--cyan-core);
+  text-decoration: none;
+}
+.entry-detail-link:hover { text-decoration: underline; }
+
+.entry-detail-content {
+  max-height: 240px;
+  overflow-y: auto;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--text-light);
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(49, 247, 255, 0.12);
+  border-radius: 6px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 .entry-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 
@@ -1474,6 +1720,23 @@ onMounted(() => {
   margin-top: 16px;
 }
 
+.pagination--panel {
+  position: static;
+  background: rgba(2, 5, 11, 0.85);
+  backdrop-filter: blur(6px);
+  padding: 14px 16px;
+  border: 1px solid rgba(49, 247, 255, 0.12);
+  border-radius: 8px;
+  margin-top: 18px;
+}
+
+.results-panel-card > .pagination--panel {
+  margin-top: 18px;
+  background:
+    linear-gradient(180deg, rgba(7, 14, 25, 0.96), rgba(3, 7, 14, 0.94));
+  box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.26);
+}
+
 .page-btn {
   padding: 6px 14px;
   background: rgba(49, 247, 255, 0.08);
@@ -1488,6 +1751,48 @@ onMounted(() => {
 .page-btn:hover:not(:disabled) { border-color: var(--border-cyan); }
 
 .page-info { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); }
+
+.pagination-summary .sep {
+  margin: 0 4px;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.page-numbers {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.page-num {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.page-num:hover:not(:disabled):not(.ellipsis) {
+  border-color: var(--border-cyan);
+  color: var(--cyan-core);
+}
+
+.page-num.active {
+  background: rgba(49, 247, 255, 0.18);
+  border-color: var(--cyan-core);
+  color: var(--cyan-core);
+}
+
+.page-num.ellipsis {
+  border: none;
+  background: transparent;
+  cursor: default;
+}
 
 .detail-header {
   display: flex;
@@ -1666,6 +1971,19 @@ onMounted(() => {
 .search-drawer-card,
 .results-panel-card {
   position: relative;
+  margin-bottom: 24px;
+}
+
+.tab-content--browse .search-drawer-card {
+  flex: 0 0 auto;
+}
+
+.tab-content--browse .results-panel-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0;
 }
 
 .panel-header-row {
@@ -1916,9 +2234,17 @@ onMounted(() => {
 @media (max-width: 640px) {
   .kb-header { padding: 12px 16px; gap: 12px; }
   .page-title { font-size: 16px; letter-spacing: 2px; }
-  .kb-main { padding: 16px; }
+  .kb-main { padding: 16px 16px 16px; }
   .form-row { grid-template-columns: 1fr; }
   .detail-meta-grid { grid-template-columns: 1fr; }
   .filter-select { width: 100%; }
+
+  .entries-list {
+    min-height: 220px;
+  }
+
+  .results-panel-card > .pagination--panel {
+    margin-top: 14px;
+  }
 }
 </style>

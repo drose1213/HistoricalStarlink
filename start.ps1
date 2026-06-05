@@ -141,7 +141,24 @@ $backendProc = Start-Process -FilePath "python" `
     -WorkingDirectory $ProjectRoot -PassThru -WindowStyle Minimized
 $backendProc.Id | Out-File (Join-Path $ProjectRoot ".backend.pid") -Encoding ASCII
 Write-Info "  Backend PID: $($backendProc.Id)" $Green
-Start-Sleep -Seconds 3
+
+Write-Info "  Waiting for backend to listen on port 8000..." $Yellow
+$waited = 0
+$backendReady = $false
+while ($waited -lt 60) {
+    $listener = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
+    if ($listener) {
+        $backendReady = $true
+        break
+    }
+    Start-Sleep -Seconds 1
+    $waited += 1
+}
+if (-not $backendReady) {
+    Write-Info "  [WARN] Backend did not start listening within 60s, continuing anyway" $Yellow
+} else {
+    Write-Info "  Backend is listening (waited ${waited}s)" $Green
+}
 Write-Host ""
 
 Write-Info "[6/6] Setting up frontend..." $Yellow

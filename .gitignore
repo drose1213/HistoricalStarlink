@@ -49,6 +49,7 @@ docs/superpowers/
 # Tool state
 .superpowers/
 .trae/
+!.trae/specs/
 .ports
 *.pid
 
@@ -67,3 +68,8 @@ tmp/
 test_*.js
 test_results.txt
 backend/frontend/dist/
+
+# 内层嵌套仓库与 workspace 顶层临时日志
+HistoricalStarlink/
+/*.log
+/*.txt

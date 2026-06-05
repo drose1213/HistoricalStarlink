@@ -23,6 +23,7 @@ from ..deps import get_current_user
 from ..models.user import User
 from ..redis_client import cache
 from ..schemas import BaseResponse
+from ..utils import iso_utc
 
 logger = logging.getLogger("historical_starlink.auth")
 
@@ -62,8 +63,8 @@ def _user_out(user: User) -> dict:
         "avatar_url": user.avatar_url,
         "is_active": user.is_active,
         "is_admin": bool(user.is_admin) if user.is_admin is not None else False,
-        "created_at": user.created_at.isoformat() if user.created_at else None,
-        "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+        "created_at": iso_utc(user.created_at),
+        "updated_at": iso_utc(user.updated_at),
     }
 
 
