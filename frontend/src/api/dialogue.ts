@@ -43,5 +43,22 @@ export const dialogueApi = {
 
   getDialogues(page = 1, pageSize = 20): Promise<ApiResponse<PaginatedResponse<DialogueSession>>> {
     return get('/api/dialogue/records', { page, page_size: pageSize })
+  },
+
+  // --- 任意话题 dynamic 模式 ---
+  startDynamic(sessionId: string, topic: string): Promise<ApiResponse<any>> {
+    return post('/api/dialogue/dynamic/start', { session_id: sessionId, topic })
+  },
+
+  sendDynamicChoice(dialogueId: string, choiceId: string): Promise<ApiResponse<any>> {
+    return post('/api/dialogue/dynamic/choice', { dialogue_id: dialogueId, choice_id: choiceId })
+  },
+
+  sendDynamicChat(dialogueId: string, message: string): Promise<ApiResponse<any>> {
+    return post('/api/dialogue/dynamic/chat', { dialogue_id: dialogueId, message })
+  },
+
+  endDynamic(dialogueId: string): Promise<ApiResponse<any>> {
+    return post('/api/dialogue/dynamic/end', { dialogue_id: dialogueId })
   }
 }

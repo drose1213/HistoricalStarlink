@@ -129,6 +129,9 @@
             <button class="cy-btn cy-btn--glow drawer-dialogue-btn" @click="startDialogue">
               {{ t('event.startDialogue') }}
             </button>
+            <button class="cy-btn cy-btn--ghost drawer-dialogue-btn" style="margin-top:8px" @click="startDynamicDialogue">
+              自由探索此事件
+            </button>
             <p class="entry-hint">{{ t('event.dialogueHint') }}</p>
           </div>
 
@@ -192,10 +195,12 @@ import { allEvents, getEventById, getRelatedEvents, loadEvents } from '@/data/ev
 import { buildDetailStarlinkGraph } from '@/utils/starlinkGraph'
 import { requireAuth } from '@/utils/auth'
 import { recordExploration } from '@/utils/exploration'
+import { useDialogueStore } from '@/stores/dialogue'
 
 const route = useRoute()
 const router = useRouter()
 const { t, tf, eventDetailData } = useI18n()
+const dialogueStore = useDialogueStore()
 
 const warpTarget = ref<{ id: string; name: string } | null>(null)
 const warpLoadingText = ref(t('event.warpLoading'))
@@ -281,6 +286,19 @@ function startDialogue() {
     warpTarget.value = null
     router.push({ name: 'Dialogue', params: { eventId: currentEvent.value!.id } })
   }, 2200)
+}
+
+// 备用: 当 preset 事件没有剧本时, 走 dynamic 模式, 用事件名当 topic
+function startDynamicDialogue() {
+  if (!requireAuth()) return
+  if (!currentEvent.value) return
+  const topic = currentEvent.value.name
+  dialogueStore.startDynamicFromTopic(topic).then(() => {
+    const slug = topic.replace(/[^\w一-龥]+/g, '_').slice(0, 32) || 'unknown'
+    router.push({ name: 'Dialogue', params: { eventId: `dynamic_${slug}` } })
+  }).catch((err: any) => {
+    console.warn('startDynamicDialogue failed:', err)
+  })
 }
 
 function handleNavigate(eventId: string) {

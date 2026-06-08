@@ -82,6 +82,11 @@
         <div class="dlg-error-actions">
           <button class="cy-btn" @click="goBack">{{ t('dialogue.backPrev') }}</button>
           <button class="cy-btn cy-btn--ghost" @click="retryInit">{{ t('dialogue.retry') }}</button>
+          <button
+            v-if="dialogueStore.notFound"
+            class="cy-btn cy-btn--glow"
+            @click="goFreeExplore"
+          >自由探索任意话题</button>
         </div>
       </div>
     </div>
@@ -185,6 +190,16 @@ const NPC_AVATARS: Record<string, { avatar: string; key: string }> = {
 }
 
 const npcInfo = computed(() => {
+  // 1) 动态对话模式: 优先用 store 里的 npc 信息 (后端返回)
+  const session = dialogueStore.currentSession as any
+  if (dialogueStore.isDynamic && session?.npc_name) {
+    return {
+      avatar: session.npc_symbol || '✦',
+      name: session.npc_name,
+      role: session.npc_role || '',
+    }
+  }
+  // 2) 预设事件: 用 NPC_AVATARS 表查 locale key
   const entry = NPC_AVATARS[props.eventId]
   if (!entry) {
     return { avatar: '◇', name: t('dialogue.npc.fallback.name'), role: t('dialogue.npc.fallback.role') }
@@ -245,6 +260,12 @@ function retryInit() {
 
 function goBack() {
   router.back()
+}
+
+function goFreeExplore() {
+  // 清掉错误状态, 跳到 HomeView 让 user 自由输入 topic
+  dialogueStore.resetDialogue()
+  router.push({ name: 'Home' })
 }
 
 onMounted(() => {

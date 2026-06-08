@@ -4,7 +4,16 @@
 """
 import uuid
 import re
+import logging
 from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+# 4 维画像关键词词典
+EMPATHY_KEYWORDS = ("百姓", "民生", "共情", "仁慈", "仁政", "爱民", "民苦", "苍生")
+REFORM_KEYWORDS = ("变法", "改革", "新制", "新政", "改制", "革新")
+CONSERVATIVE_KEYWORDS = ("传统", "稳定", "延续", "守成", "祖制", "祖训")
+RADICAL_KEYWORDS = ("彻底", "全盘", "推翻", "打倒", "革命", "暴力")
 
 
 DIALOGUE_SCRIPTS = {
@@ -88,7 +97,11 @@ DIALOGUE_SCRIPTS = {
         ],
         "endings": {
             "historical": "【历史定论】秦始皇统一六国后推行严刑峻法，焚书坑儒以统一思想。其子胡亥继位后暴政连连，秦朝二世而亡。但统一文字、度量衡、郡县制等制度影响中国两千余年。",
-            "altered": "【平行时间线】在你的建议下，秦始皇放缓了对儒生的迫害，允许部分学派保留。秦朝的统治因此获得了更多知识分子的支持，帝国延续了更长时间。历史的河流在此分岔……"
+            "altered": "【平行时间线】在你的建议下，秦始皇放缓了对儒生的迫害，允许部分学派保留。秦朝的统治因此获得了更多知识分子的支持，帝国延续了更长时间。历史的河流在此分岔……",
+            "A-T": "【温和改良】始皇帝听取了你恭敬而深思的进言，对焚书坑儒之事有所收敛，保留部分儒家典籍与博士官。秦法虽严，但兼顾教化，胡亥继位后民怨稍缓，帝国延长了数十年国祚。",
+            "D-T": "【激烈变革】你当面指出焚书坑儒之过，又以深思之言献上改良之策，始皇帝罕见地陷入长考。最终采纳'以法为骨、以儒为辅'之策，秦朝转型为法儒并用之王朝。",
+            "T-T": "【深思远虑】你两次深思的进言让始皇帝意识到：仅靠严刑峻法难以传之万世。他开始着手建立太学、设五经博士，秦朝由武功转向文治，影响后世千年。",
+            "A-D": "【坚守祖制】你先是恭维，后又直陈异议，始皇帝虽欣赏你的坦率，但最终仍以'秦以法治国'为基，拒绝更改焚书之策。秦朝二世而亡的悲剧在所难免。"
         }
     },
 
@@ -424,7 +437,11 @@ DIALOGUE_SCRIPTS = {
         ],
         "endings": {
             "historical": "【历史定论】刘邦建立汉朝后大杀功臣，韩信、彭越、英布等异姓王先后被诛。但'休养生息'政策使国力恢复，'文景之治'奠定了汉朝四百年的基业。",
-            "altered": "【平行时间线】刘邦在你的建议下善待功臣，建立了更稳固的君臣关系。汉朝的开国功臣们得以善终，帝国的根基更加牢固……"
+            "altered": "【平行时间线】刘邦在你的建议下善待功臣，建立了更稳固的君臣关系。汉朝的开国功臣们得以善终，帝国的根基更加牢固……",
+            "A-T": "【君臣相得】刘邦听你赞同大汉四百年，又深思治国之道，龙颜大悦。他采纳你'善待功臣'之策，韩信、萧何得以善终，开国君臣齐心开创文景之治。",
+            "T-T": "【休养安民】你两次深思的进言直击刘邦心底——'天下苦秦久矣'，他决意推行休养生息、轻徭薄赋。汉初黄老之术大行其道，百姓安居乐业，奠定四百年基业。",
+            "D-T": "【不拘一格】你既直指刘邦不擅治国，又深思长远之策。刘邦罕见地虚心纳谏，破格设立'议政大臣'制度，文武并用，开创后世'君臣共治'之先河。",
+            "A-D": "【因循守成】刘邦听取你的赞同，但拒绝改变功臣命运。最终仍是兔死狗烹，异姓王尽数被诛。历史的轮回在所难免。"
         }
     },
 
@@ -681,6 +698,7 @@ def process_choice(
     if not choices:
         ending = _build_ending(script, new_choices_made)
         full_narrative = f"*{selected_choice['consequence']}*\n\n{narrative}\n\n---\n\n{ending['narrative']}"
+        path_sig = ending.get("path_signature", "")
         return {
             "narrative": full_narrative,
             "choices": [],
@@ -689,16 +707,24 @@ def process_choice(
             "mood": new_mood,
             "is_ending": True,
             "ending_type": ending.get("ending_type", "historical"),
+            "path_signature": path_sig,
+            "partial_match": ending.get("partial_match", False),
+            "cumulative_impact": compute_dimension_scores(new_choices_made),
+            "predicted_endings": predict_endings(script, path_sig, top_n=2),
             "choices_summary": ending.get("choices_summary", [])
         }
 
+    path_sig = compute_path_signature(new_choices_made)
     return {
         "narrative": f"*{selected_choice['consequence']}*\n\n{narrative}",
         "choices": choices,
         "round": next_round_num,
         "timeline_change": timeline_change,
         "mood": new_mood,
-        "is_ending": False
+        "is_ending": False,
+        "path_signature": path_sig,
+        "cumulative_impact": compute_dimension_scores(new_choices_made),
+        "predicted_endings": predict_endings(script, path_sig, top_n=2),
     }
 
 
@@ -878,20 +904,54 @@ def process_post_ending(event_id: str, message: str) -> dict:
     }
 
 
-def _build_ending(script: dict, choices_made: list) -> dict:
-    has_timeline_change = any(c.get("timeline_change") or c.get("mood") == "thoughtful" for c in choices_made)
+def _build_ending(script: dict, choices_made: list, free_texts: Optional[list] = None) -> dict:
+    """构造最终结局.
 
-    if has_timeline_change:
-        ending_type = "altered"
-    else:
-        ending_type = "historical"
+    三段式匹配:
+    1. 路径签名完全匹配 script["endings"]
+    2. 前缀匹配 (按长度倒序) - 标记 partial_match
+    3. RAG 兜底 - 调 rag_engine 生成
+    4. 最后回退到 "historical"
+    """
+    path_sig = compute_path_signature(choices_made or [])
+    endings = script.get("endings") or {}
 
-    ending_text = script["endings"].get(ending_type, script["endings"]["historical"])
+    ending_type = None
+    ending_text = None
+    is_partial = False
+
+    if path_sig and path_sig in endings:
+        ending_type = path_sig
+        ending_text = endings[path_sig]
+    elif path_sig:
+        # 前缀匹配: 找最长的 ending key 是 path_sig 前缀
+        candidates = [k for k in endings.keys() if k != "historical" and path_sig.startswith(k)]
+        if candidates:
+            candidates.sort(key=len, reverse=True)
+            ending_type = candidates[0]
+            ending_text = endings[ending_type]
+            is_partial = True
+            ending_text = f"{ending_text}\n\n（部分匹配：完整路径签名 {path_sig} 无对应结局，使用了 {ending_type} 结局作为参考）"
+
+    if ending_text is None:
+        # 尝试 RAG 兜底
+        rag_text = _rag_fallback_ending_sync(script.get("npc_name") or script.get("event_id", ""), path_sig, choices_made, free_texts)
+        if rag_text:
+            ending_type = "rag_fallback"
+            ending_text = rag_text
+        else:
+            ending_type = "historical"
+            ending_text = endings.get("historical", "历史的车轮滚滚向前，你的时空对话已结束。")
+
+    has_timeline_change = any(
+        c.get("timeline_change") or c.get("mood") == "thoughtful"
+        for c in (choices_made or [])
+    )
 
     choices_summary = []
-    for c in choices_made:
+    for c in (choices_made or []):
         choices_summary.append({
-            "round": c["round"],
+            "round": c.get("round"),
             "text": c.get("choice_text", ""),
             "consequence": c.get("consequence", "")
         })
@@ -904,8 +964,96 @@ def _build_ending(script: dict, choices_made: list) -> dict:
         "mood": "ending",
         "is_ending": True,
         "ending_type": ending_type,
-        "choices_summary": choices_summary
+        "path_signature": path_sig,
+        "partial_match": is_partial,
+        "choices_summary": choices_summary,
     }
+
+
+def _rag_fallback_ending_sync(event_key: str, path_sig: str, choices_made: Optional[list], free_texts: Optional[list]) -> Optional[str]:
+    """RAG 兜底: 调 rag_engine.full_rag_query 生成 1 段结局, 截断到 280 字.
+
+    rag_engine 内部是 async + 远端 API, 这里只尝试同步快速路径:
+    1. 先尝试 import rag_engine.full_rag_query
+    2. 失败 / 无 API key → 返回 None
+    """
+    try:
+        from .rag_engine import full_rag_query
+    except Exception:
+        return None
+    try:
+        import asyncio
+        # 在已有 event loop 中跑会失败, 用 try 兜底
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # 在 async 上下文中, 跳过 (由调用方异步处理)
+                return None
+        except RuntimeError:
+            pass
+        query = f"{event_key} 的平行时间线结局, 基于用户选择 {path_sig}"
+        result = asyncio.run(full_rag_query(query, top_k=3))
+        answer = (result or {}).get("answer", "")
+        if not answer:
+            return None
+        return answer[:280]
+    except Exception as e:
+        logger.warning("RAG fallback ending failed: %s", e)
+        return None
+
+
+def compute_path_signature(choices_made: Optional[list]) -> str:
+    """把 choices 列表压缩为 mood 序列签名 (A/D/T/N)."""
+    if not choices_made:
+        return ""
+    mapping = {"agree": "A", "disagree": "D", "thoughtful": "T"}
+    parts = []
+    for c in choices_made:
+        mood = c.get("mood") or ""
+        parts.append(mapping.get(mood, "N"))
+    return "-".join(parts)
+
+
+def compute_dimension_scores(choices_made: Optional[list], free_texts: Optional[list] = None) -> dict:
+    """计算 4 维画像 0-100 分."""
+    scores = {"reform": 0, "conservative": 0, "empathy": 0, "radicalism": 0}
+    for c in (choices_made or []):
+        mood = c.get("mood") or ""
+        if mood == "thoughtful":
+            scores["reform"] += 10
+        elif mood == "agree":
+            scores["conservative"] += 10
+        elif mood == "disagree":
+            scores["radicalism"] += 10
+    for text in (free_texts or []):
+        if not text:
+            continue
+        for kw in EMPATHY_KEYWORDS:
+            if kw in text:
+                scores["empathy"] += 8
+        for kw in REFORM_KEYWORDS:
+            if kw in text:
+                scores["reform"] += 5
+        for kw in CONSERVATIVE_KEYWORDS:
+            if kw in text:
+                scores["conservative"] += 5
+        for kw in RADICAL_KEYWORDS:
+            if kw in text:
+                scores["radicalism"] += 8
+    # 截断到 0-100
+    for k in scores:
+        scores[k] = max(0, min(100, scores[k]))
+    return scores
+
+
+def predict_endings(script: dict, path_sig: str, top_n: int = 2) -> list:
+    """预测当前路径最可能命中的结局 key 列表 (前 top_n 个)."""
+    endings = script.get("endings") or {}
+    if not path_sig:
+        return list(endings.keys())[:top_n]
+    keys = [k for k in endings.keys() if k != "historical" and path_sig.startswith(k)]
+    keys.sort(key=len, reverse=True)
+    return keys[:top_n]
 
 
 def has_timeline_change(mood: str, timeline_change: bool) -> bool:
@@ -923,3 +1071,236 @@ def calculate_timeline_branches(choices_made: list) -> list:
                 "choice_text": c.get("choice_text", "")
             })
     return branches
+
+
+# === 任意话题 dynamic 模式 ===
+# 不依赖预置剧本, 由 RAG 引擎动态生成 NPC 回应与结局.
+# event_id 形如 "dynamic_<slug>", 与 DIALOGUE_SCRIPTS 并行.
+
+MAX_DYNAMIC_ROUNDS = 10
+DYNAMIC_NPC_NAME = "时空对话机"
+DYNAMIC_NPC_ROLE = "全知观测者"
+DYNAMIC_NPC_SYMBOL = "✦"
+
+_DEFAULT_DYNAMIC_OPENING = (
+    "你好，时空旅人。我是【时空对话机】——不拘泥于任何剧本的历史观测者。\n\n"
+    "你提到了「{topic}」。这听起来是一个值得探索的话题。\n"
+    "请告诉我：你想从哪里开始？是对起源的好奇，对人物的评价，还是对未来的畅想？"
+)
+_DEFAULT_DYNAMIC_FALLBACK = "时空之门暂时无法回应，请稍后再试。"
+
+# 3 个可复用选项, 让对话有节奏感
+_DYNAMIC_CHOICES = [
+    {"choice_id": "explore_origin", "text": "我想了解它的起源", "mood": "thoughtful"},
+    {"choice_id": "ask_impact",    "text": "它对后世有什么影响？", "mood": "thoughtful"},
+    {"choice_id": "free",          "text": "我想自己提问", "mood": "agree"},
+]
+
+
+def _slugify_topic(topic: str) -> str:
+    """把任意 topic 字符串规整成可作为 event_id 后缀的 slug."""
+    if not topic:
+        return "unknown"
+    # 只保留中英文和数字, 其余转下划线, 截断 32 字符
+    import re as _re
+    s = _re.sub(r"[^\w\u4e00-\u9fff]+", "_", topic.strip().lower())
+    return s[:32] or "unknown"
+
+
+def build_dynamic_event_id(topic: str) -> str:
+    return f"dynamic_{_slugify_topic(topic)}"
+
+
+def _keyword_fallback_text(query: str, top_k: int = 3, max_chars: int = 500) -> str:
+    """当 RAG 不可用时的关键词兜底: 从 HISTORY_EVENTS 找最相关, 拼一段说明."""
+    try:
+        from .rag_engine import _keyword_search
+        results = _keyword_search(query, top_k=top_k)
+    except Exception:
+        return _DEFAULT_DYNAMIC_FALLBACK
+    if not results:
+        return f"关于「{query}」我暂时没有找到对应的历史记录, 但这是一个值得深思的问题。"
+    lines = [f"关于「{query}」, 我从历史中检索到以下可能相关的事件:"]
+    for r in results[:top_k]:
+        ev = r.get("event", {}) if isinstance(r.get("event"), dict) else {}
+        name = ev.get("name") or r.get("name") or "未知事件"
+        year = ev.get("year")
+        year_str = f"（公元前{abs(year)}年）" if isinstance(year, int) and year < 0 else (f"（公元{year}年）" if isinstance(year, int) else "")
+        desc = ev.get("importance")
+        lines.append(f"• {name}{year_str} — 重要性 {desc}/10")
+    text = "\n".join(lines)
+    return text[:max_chars]
+
+
+async def _rag_generate(query: str, top_k: int = 3, max_chars: int = 500) -> str:
+    """统一 RAG 调用入口, 失败/不可用时回退到关键词检索."""
+    try:
+        from .rag_engine import full_rag_query, _keyword_search
+    except Exception as e:
+        logger.warning("rag_engine import failed: %s", e)
+        return _keyword_fallback_text(query, top_k=top_k, max_chars=max_chars)
+    try:
+        result = await full_rag_query(query, top_k=top_k)
+        answer = (result or {}).get("answer", "")
+        if answer:
+            return answer[:max_chars]
+    except Exception as e:
+        logger.warning("full_rag_query failed: %s", e)
+    # 兜底
+    return _keyword_fallback_text(query, top_k=top_k, max_chars=max_chars)
+
+
+async def start_dynamic_dialogue(topic: str, session_id: Optional[str] = None) -> dict:
+    """为任意 topic 开启一个 dynamic 时空对话.
+
+    Returns:
+        {
+            "event_id": "dynamic_<slug>",
+            "npc_name": "时空对话机",
+            "npc_role": "全知观测者",
+            "npc_symbol": "✦",
+            "context": "...",
+            "narrative": <opening>,
+            "choices": [...3 options...],
+            "round": 1,
+            "topic": <原始 topic>,
+            "is_dynamic": True,
+        }
+    """
+    if not topic or not topic.strip():
+        raise ValueError("topic 不能为空")
+    topic = topic.strip()[:120]  # 截断防止滥用
+    event_id = build_dynamic_event_id(topic)
+    opening_query = f"话题: {topic} 的背景介绍与历史脉络"
+    opening = await _rag_generate(opening_query, top_k=3, max_chars=500)
+    if not opening or opening == _DEFAULT_DYNAMIC_FALLBACK:
+        opening = _DEFAULT_DYNAMIC_OPENING.format(topic=topic)
+    return {
+        "event_id": event_id,
+        "npc_name": DYNAMIC_NPC_NAME,
+        "npc_role": DYNAMIC_NPC_ROLE,
+        "npc_symbol": DYNAMIC_NPC_SYMBOL,
+        "context": f"用户选择探索的话题: {topic}",
+        "narrative": opening,
+        "choices": _DYNAMIC_CHOICES,
+        "round": 1,
+        "topic": topic,
+        "is_dynamic": True,
+    }
+
+
+async def process_dynamic_choice(
+    topic: str,
+    choice_id: str,
+    choices_made: list,
+    free_texts: Optional[list] = None,
+) -> dict:
+    """处理 dynamic 对话中的选择. 返回 NPC 回应 + 累计画像."""
+    if not topic or not topic.strip():
+        raise ValueError("topic 不能为空")
+
+    mood_map = {c["choice_id"]: c["mood"] for c in _DYNAMIC_CHOICES}
+    selected = next((c for c in _DYNAMIC_CHOICES if c["choice_id"] == choice_id), None)
+    if not selected:
+        return {
+            "narrative": "时空对话机没有理解这个选择, 请重新选择。",
+            "choices": _DYNAMIC_CHOICES,
+            "round": (len(choices_made) or 0) + 1,
+            "timeline_change": False,
+            "is_ending": False,
+            "mood": "default",
+        }
+    mood = mood_map.get(choice_id, "default")
+    new_choices = (choices_made or []) + [{
+        "round": (len(choices_made) or 0) + 1,
+        "choice_id": choice_id,
+        "choice_text": selected["text"],
+        "mood": mood,
+    }]
+    next_round = len(new_choices) + 1
+    # 走到 MAX_DYNAMIC_ROUNDS 之后进入 ending
+    is_last = next_round > MAX_DYNAMIC_ROUNDS
+    if not is_last:
+        query = f"话题 {topic}, 用户选择了「{selected['text']}」, 接下来如何回应?"
+        narrative = await _rag_generate(query, top_k=3, max_chars=500)
+    else:
+        narrative = "时空对话机的能量即将耗尽, 让我给你一个总结性回答。"
+
+    path_sig = compute_path_signature(new_choices)
+    return {
+        "narrative": narrative,
+        "choices": [] if is_last else _DYNAMIC_CHOICES,
+        "round": next_round,
+        "timeline_change": mood == "thoughtful",
+        "mood": mood,
+        "is_ending": is_last,
+        "is_dynamic": True,
+        "path_signature": path_sig,
+        "cumulative_impact": compute_dimension_scores(new_choices, free_texts),
+    }
+
+
+async def process_dynamic_free_text(
+    topic: str,
+    message: str,
+    choices_made: list,
+    free_texts: Optional[list] = None,
+) -> dict:
+    """处理 dynamic 对话中的自由文本."""
+    if not topic or not topic.strip():
+        raise ValueError("topic 不能为空")
+    if not message or not message.strip():
+        return {
+            "narrative": "时空对话机等待你的提问。",
+            "choices": _DYNAMIC_CHOICES,
+            "round": (len(choices_made) or 0) + 1,
+            "timeline_change": False,
+            "is_ending": False,
+        }
+    new_choices = choices_made or []
+    new_free_texts = (free_texts or []) + [message.strip()[:500]]
+    query = f"话题 {topic}, 用户说: {message.strip()[:200]}"
+    narrative = await _rag_generate(query, top_k=3, max_chars=500)
+    path_sig = compute_path_signature(new_choices)
+    return {
+        "narrative": narrative,
+        "choices": _DYNAMIC_CHOICES,
+        "round": (len(new_choices) or 0) + 1,
+        "timeline_change": False,
+        "mood": "default",
+        "is_ending": False,
+        "is_dynamic": True,
+        "path_signature": path_sig,
+        "cumulative_impact": compute_dimension_scores(new_choices, new_free_texts),
+    }
+
+
+async def _build_dynamic_ending(
+    topic: str,
+    choices_made: Optional[list] = None,
+    free_texts: Optional[list] = None,
+) -> dict:
+    """构造 dynamic 对话结局. 调用 RAG 生成 1 段总结性结局, 截断 280 字."""
+    summary_query = f"话题 {topic} 的总结与深远影响"
+    text = await _rag_generate(summary_query, top_k=3, max_chars=280)
+    if not text or text == _DEFAULT_DYNAMIC_FALLBACK:
+        text = f"关于「{topic}」的探索告一段落。无论你从哪个角度切入, 历史与思想的多样性, 才是时空穿越真正馈赠给你的礼物。"
+
+    has_change = any(
+        c.get("mood") in ("thoughtful", "disagree") or c.get("timeline_change")
+        for c in (choices_made or [])
+    )
+    path_sig = compute_path_signature(choices_made or [])
+    return {
+        "narrative": text,
+        "choices": [],
+        "round": 0,
+        "timeline_change": has_change,
+        "mood": "ending",
+        "is_ending": True,
+        "is_dynamic": True,
+        "ending_type": "rag_dynamic",
+        "path_signature": path_sig,
+        "partial_match": False,
+        "cumulative_impact": compute_dimension_scores(choices_made or [], free_texts or []),
+    }

@@ -21,9 +21,29 @@ class DialogueSession(Base):
     path_depth = Column(Integer, default=0, comment="")
     is_completed = Column(Boolean, default=False, comment="")
     outcome_summary = Column(Text, nullable=True, comment="")
+    is_dynamic = Column(Boolean, default=False, comment="True 表示由任意话题动态生成的对话")
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     is_deleted = Column(Boolean, default=False)
 
     def __repr__(self):
         return f"<DialogueSession(id={self.id}, event={self.event_name}, npc={self.npc_name})>"
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "session_id": self.session_id,
+            "event_id": self.event_id,
+            "event_name": self.event_name,
+            "npc_name": self.npc_name,
+            "dialogue_history": self.dialogue_history or [],
+            "choices_made": self.choices_made or [],
+            "timeline_branches": self.timeline_branches or [],
+            "current_round": self.current_round or 1,
+            "path_depth": self.path_depth or 0,
+            "is_completed": bool(self.is_completed),
+            "is_dynamic": bool(self.is_dynamic),
+            "outcome_summary": self.outcome_summary,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }

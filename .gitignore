@@ -48,6 +48,9 @@ docs/superpowers/
 
 # Tool state
 .superpowers/
+
+# Workspace backup (created during git push to avoid name collisions)
+_backup_untracked/
 .trae/
 !.trae/specs/
 .ports

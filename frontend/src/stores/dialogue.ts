@@ -21,6 +21,8 @@ export const useDialogueStore = defineStore('dialogue', () => {
   const sessionId = ref(generateSessionId())
   const errorMessage = ref<string>('')
   const notFound = ref(false)
+  const isDynamic = ref(false)  // 当前对话是否 dynamic 模式
+  const currentTopic = ref<string>('')  // dynamic 模式的话题
 
   const isTimelineAnimating = ref(false)
 
@@ -37,8 +39,14 @@ export const useDialogueStore = defineStore('dialogue', () => {
     isLoading.value = true
     errorMessage.value = ''
     notFound.value = false
+    isDynamic.value = eventId.startsWith('dynamic_')
+    if (!isDynamic.value) {
+      currentTopic.value = ''
+    }
     try {
-      const res = await dialogueApi.startDialogue(sessionId.value, eventId) as any
+      const res = isDynamic.value
+        ? await dialogueApi.startDynamic(sessionId.value, currentTopic.value || eventId) as any
+        : await dialogueApi.startDialogue(sessionId.value, eventId) as any
       const data = res.data
       dialogueId.value = String(data.dialogue_id)
       currentSession.value = data
@@ -47,6 +55,9 @@ export const useDialogueStore = defineStore('dialogue', () => {
       isDialogueEnded.value = false
       outcomeType.value = null
       outcomeSummary.value = ''
+      if (isDynamic.value) {
+        currentTopic.value = data.topic || currentTopic.value
+      }
 
       if (data.history && Array.isArray(data.history)) {
         for (const h of data.history) {
@@ -81,7 +92,9 @@ export const useDialogueStore = defineStore('dialogue', () => {
       const status = err?.response?.status
       if (status === 404) {
         notFound.value = true
-        errorMessage.value = '该历史事件暂未配置时空对话剧本'
+        errorMessage.value = isDynamic.value
+          ? '该话题时空对话机暂时无法回应'
+          : '该历史事件暂未配置时空对话剧本'
       } else {
         errorMessage.value = err?.response?.data?.detail || err?.message || '对话启动失败'
       }
@@ -89,6 +102,23 @@ export const useDialogueStore = defineStore('dialogue', () => {
     } finally {
       isLoading.value = false
     }
+  }
+
+  /**
+   * 专门为 dynamic 模式提供的入口: 直接从 topic 启动, 走 startDynamic 接口.
+   * HomeView 用户输入任意话题时调用.
+   */
+  async function startDynamicFromTopic(topic: string) {
+    currentTopic.value = topic.trim()
+    if (!currentTopic.value) {
+      errorMessage.value = '请输入话题'
+      throw new Error('topic is required')
+    }
+    // 复用 startDialogue, 但需要预先设置 isDynamic 让逻辑走 dynamic 分支
+    isDynamic.value = true
+    // 构造一个 dynamic_<slug> 的 eventId 给 startDialogue 用
+    const slug = currentTopic.value.replace(/[^\w一-龥]+/g, '_').slice(0, 32) || 'unknown'
+    return await startDialogue(`dynamic_${slug}`)
   }
 
   async function sendChoice(choiceId: string) {
@@ -108,7 +138,9 @@ export const useDialogueStore = defineStore('dialogue', () => {
     isTyping.value = true
 
     try {
-      const res = await dialogueApi.sendChoice(dialogueId.value, choiceId, round.value) as any
+      const res = isDynamic.value
+        ? await dialogueApi.sendDynamicChoice(dialogueId.value, choiceId) as any
+        : await dialogueApi.sendChoice(dialogueId.value, choiceId, round.value) as any
       const data = res.data
 
       if (data.timeline_change) {
@@ -152,7 +184,9 @@ export const useDialogueStore = defineStore('dialogue', () => {
     isTyping.value = true
 
     try {
-      const res = await dialogueApi.sendFreeText(dialogueId.value, message) as any
+      const res = isDynamic.value
+        ? await dialogueApi.sendDynamicChat(dialogueId.value, message) as any
+        : await dialogueApi.sendFreeText(dialogueId.value, message) as any
       const data = res.data
 
       const content = data.narrative || ''
@@ -221,6 +255,8 @@ export const useDialogueStore = defineStore('dialogue', () => {
     isTimelineAnimating.value = false
     errorMessage.value = ''
     notFound.value = false
+    isDynamic.value = false
+    currentTopic.value = ''
   }
 
   return {
@@ -238,8 +274,11 @@ export const useDialogueStore = defineStore('dialogue', () => {
     isTimelineAnimating,
     errorMessage,
     notFound,
+    isDynamic,
+    currentTopic,
     lastNpcMessage,
     startDialogue,
+    startDynamicFromTopic,
     sendChoice,
     sendFreeText,
     resetDialogue

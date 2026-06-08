@@ -67,6 +67,33 @@
           </div>
 
         <div class="cosmic-overlay" aria-hidden="true"></div>
+
+        <!-- 任意话题自由探索入口 -->
+        <div class="free-explore-panel">
+          <div class="free-explore-title">
+            <span class="free-explore-dot" aria-hidden="true"></span>
+            <span>任意话题 · 时空探索</span>
+          </div>
+          <form class="free-explore-form" @submit.prevent="handleFreeExplore">
+            <input
+              v-model="freeExploreTopic"
+              type="text"
+              class="free-explore-input"
+              placeholder="输入任意话题开启时空对话... 如「AI 发展史」「太空探索」"
+              maxlength="120"
+              :disabled="freeExploreLoading"
+            />
+            <button
+              type="submit"
+              class="free-explore-btn"
+              :disabled="freeExploreLoading || !freeExploreTopic.trim()"
+            >
+              <span v-if="!freeExploreLoading">开启时空对话</span>
+              <span v-else>加载中...</span>
+            </button>
+          </form>
+          <div v-if="freeExploreError" class="free-explore-error">{{ freeExploreError }}</div>
+        </div>
       </div>
 
       <a
@@ -179,6 +206,7 @@ import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+import { useDialogueStore } from '@/stores/dialogue'
 import { useI18n } from '@/composables/useI18n'
 import CosmicMap from '@/components/CosmicMap.vue'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
@@ -202,12 +230,18 @@ interface LocalSearchResult {
 const router = useRouter()
 const appStore = useAppStore()
 const authStore = useAuthStore()
+const dialogueStore = useDialogueStore()
 const { t, tf } = useI18n()
 const showUserMenu = ref(false)
 const drawerOpen = ref(false)
 const searchQuery = ref('')
 const showSearchDropdown = ref(false)
 const searchLoading = ref(false)
+
+// 任意话题自由探索
+const freeExploreTopic = ref('')
+const freeExploreLoading = ref(false)
+const freeExploreError = ref('')
 let searchLoadingTimer: ReturnType<typeof setTimeout> | null = null
 let searchAbortTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -427,6 +461,25 @@ function handleClickOutside(e: MouseEvent) {
 
 function goToEvent(id: string) {
   router.push({ name: 'EventDetail', params: { id } })
+}
+
+async function handleFreeExplore() {
+  const topic = freeExploreTopic.value.trim()
+  if (!topic) {
+    freeExploreError.value = '请输入话题'
+    return
+  }
+  freeExploreLoading.value = true
+  freeExploreError.value = ''
+  try {
+    await dialogueStore.startDynamicFromTopic(topic)
+    const eventId = `dynamic_${topic.replace(/[^\w一-龥]+/g, '_').slice(0, 32) || 'unknown'}`
+    router.push({ name: 'Dialogue', params: { eventId } })
+  } catch (err: any) {
+    freeExploreError.value = err?.message || '开启时空对话失败, 请稍后重试'
+  } finally {
+    freeExploreLoading.value = false
+  }
 }
 
 async function retryLoad() {
@@ -804,6 +857,121 @@ onBeforeUnmount(() => {
 
 @keyframes cosmic-spin {
   to { transform: rotate(360deg); }
+}
+
+.free-explore-panel {
+  position: fixed;
+  right: clamp(20px, 4vw, 60px);
+  bottom: clamp(80px, 12vh, 140px);
+  z-index: 25;
+  width: min(380px, calc(100vw - 40px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+  background: rgba(2, 6, 13, 0.7);
+  border: 1px solid rgba(139, 255, 225, 0.42);
+  border-radius: 6px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+}
+
+.free-explore-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(238, 249, 255, 0.86);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 12px rgba(139, 255, 225, 0.18);
+}
+
+.free-explore-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #8bffe1;
+  box-shadow: 0 0 10px rgba(139, 255, 225, 0.95);
+  animation: cosmic-spin 4s linear infinite;
+}
+
+.free-explore-form {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.free-explore-input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  background: rgba(2, 5, 11, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.free-explore-input::placeholder {
+  color: rgba(238, 249, 255, 0.42);
+}
+
+.free-explore-input:focus {
+  border-color: rgba(139, 255, 225, 0.8);
+  box-shadow: 0 0 14px rgba(139, 255, 225, 0.16);
+}
+
+.free-explore-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.free-explore-btn {
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 16px;
+  background: linear-gradient(180deg, rgba(139, 255, 225, 0.24), rgba(139, 255, 225, 0.08));
+  border: 1px solid rgba(139, 255, 225, 0.78);
+  border-radius: 4px;
+  color: #dffff6;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.free-explore-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(139, 255, 225, 0.36), rgba(139, 255, 225, 0.14));
+  box-shadow: 0 0 18px rgba(139, 255, 225, 0.28);
+  transform: translateY(-1px);
+}
+
+.free-explore-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.free-explore-error {
+  color: #ff8a4d;
+  font-size: 11px;
+  text-shadow: 0 0 6px rgba(255, 138, 77, 0.3);
+}
+
+@media (max-width: 680px) {
+  .free-explore-panel {
+    right: 12px;
+    left: 12px;
+    bottom: 80px;
+    width: auto;
+  }
 }
 
 .hero-copy {
