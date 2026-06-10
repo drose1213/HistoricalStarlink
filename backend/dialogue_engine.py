@@ -545,10 +545,126 @@ async def _call_llm_for_hero_recommendation(topic: str, max_count: int = 3) -> l
             if isinstance(parsed, list):
                 # 过滤无效项
                 valid = [p for p in parsed if isinstance(p, dict) and p.get("name")]
-                return valid[:max_count]
+            return valid[:max_count]
     except Exception as e:
         logger.warning(f"LLM hero recommendation failed: {e}")
     return []
+
+
+async def resolve_hero_for_topic(topic: str, max_count: int = 3) -> dict:
+    """为话题推荐英雄卡牌列表. LLM 优先, 失败时回退到 events_data.
+
+    Returns:
+        {
+            "heroes": [
+                {
+                    "hero_id": str,        # 唯一标识
+                    "name": str,
+                    "role": str,
+                    "era": str,
+                    "greeting": str,      # 见面招呼
+                    "style_hint": str,    # 语言风格
+                    "speaking_pattern": str,  # 自称
+                    "description": str,
+                }
+            ],
+            "source": "llm" | "fallback" | "empty"
+        }
+    """
+    if not topic or not topic.strip():
+        return {"heroes": [], "source": "empty"}
+
+    # 1. 先尝试 LLM 推荐
+    llm_results = await _call_llm_for_hero_recommendation(topic.strip(), max_count)
+
+    heroes = []
+    if llm_results:
+        for idx, item in enumerate(llm_results):
+            name = item.get("name", "").strip()
+            if not name:
+                continue
+            hero_id = f"hero_{_slugify_topic(name)}_{idx}"
+            role = item.get("role", "历史人物")
+            era = item.get("era", "")
+            desc = item.get("description", "")
+            heroes.append({
+                "hero_id": hero_id,
+                "name": name,
+                "role": role,
+                "era": era,
+                "greeting": _generate_default_greeting(name, role),
+                "style_hint": "古朴典雅, 使用符合古人身份的语言",
+                "speaking_pattern": _infer_speaking_pattern(name),
+                "description": desc,
+            })
+        if heroes:
+            return {"heroes": heroes, "source": "llm"}
+
+    # 2. 回退到 events_data
+    fallback = _fallback_heroes_from_events(topic.strip(), max_count)
+    if fallback:
+        for idx, item in enumerate(fallback):
+            name = item.get("name", "").strip()
+            if not name:
+                continue
+            hero_id = f"hero_{_slugify_topic(name)}_fb{idx}"
+            heroes.append({
+                "hero_id": hero_id,
+                "name": name,
+                "role": item.get("role", "历史人物"),
+                "era": item.get("era", ""),
+                "greeting": _generate_default_greeting(name, item.get("role", "")),
+                "style_hint": "古朴典雅, 使用符合古人身份的语言",
+                "speaking_pattern": _infer_speaking_pattern(name),
+                "description": item.get("description", ""),
+            })
+        return {"heroes": heroes, "source": "fallback"}
+
+    # 3. 完全无匹配
+    return {"heroes": [], "source": "empty"}
+
+
+def _generate_default_greeting(name: str, role: str) -> str:
+    """根据人物生成默认招呼语."""
+    if not name:
+        return "你好, 时空旅人."
+    if any(kw in role for kw in ["皇帝", "王", "皇", "帝"]):
+        return f"朕乃{name}, 何方人士, 竟闯入朕的面前?"
+    if any(kw in role for kw in ["将军", "元帅", "都督"]):
+        return f"某乃{name}, 不知阁下有何见教?"
+    if any(kw in role for kw in ["丞相", "臣", "宰相"]):
+        return f"在下{name}, 阁下从未来而来, 有何指教?"
+    if any(kw in role for kw in ["发明家", "科学家"]):
+        return f"你好, 我是{name}, 欢迎来到我的工作室!"
+    return f"吾乃{name}, 时空旅人, 你我有何可谈?"
+
+
+def _infer_speaking_pattern(name: str) -> str:
+    """根据人物名推断自称. 简单规则, 实际由 LLM 自由发挥."""
+    # 三国类常见自称
+    if name in ["诸葛亮", "孔明"]:
+        return "亮"
+    if name in ["刘备"]:
+        return "备"
+    if name in ["曹操", "孟德"]:
+        return "操"
+    if name in ["周瑜", "公瑾"]:
+        return "瑜"
+    if name in ["关羽", "云长"]:
+        return "关某"
+    # 帝王类
+    if name in ["秦始皇", "嬴政", "赢政"]:
+        return "寡人"
+    if name in ["汉武帝"]:
+        return "朕"
+    if name in ["刘邦"]:
+        return "朕"
+    if name in ["唐太宗", "李世民"]:
+        return "朕"
+    # 默认
+    if len(name) == 2:
+        return name[1]  # 取名讳
+    return "吾"
 
 
 def _slugify_topic(topic: str) -> str:
