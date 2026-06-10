@@ -767,18 +767,42 @@ def _keyword_fallback_text(query: str, top_k: int = 3, max_chars: int = 500) -> 
     return text[:max_chars]
 
 
-async def _rag_generate(query: str, top_k: int = 3, max_chars: int = 500) -> str:
-    """统一 RAG 调用入口, 失败/不可用时回退到关键词检索."""
+async def _rag_generate(
+    query: str,
+    top_k: int = 3,
+    max_chars: int = 500,
+    npc_persona: Optional[dict] = None,
+) -> str:
+    """统一 RAG 调用入口, 失败/不可用时回退到关键词检索.
+
+    Args:
+        query: 查询文本
+        top_k: 检索 top k 个事件
+        max_chars: 返回文本最大字符数
+        npc_persona: 英雄 persona (可选), 透传给 generate_answer
+    """
     try:
-        from .rag_engine import full_rag_query, _keyword_search
-    except Exception as e:
-        logger.warning("rag_engine import failed: %s", e)
-        return _keyword_fallback_text(query, top_k=top_k, max_chars=max_chars)
+        from .rag_engine import full_rag_query
+    except ImportError:
+        try:
+            from rag_engine import full_rag_query  # type: ignore
+        except Exception as e:
+            logger.warning("rag_engine import failed: %s", e)
+            return _keyword_fallback_text(query, top_k=top_k, max_chars=max_chars)
     try:
-        result = await full_rag_query(query, top_k=top_k)
+        result = await full_rag_query(query, top_k=top_k, npc_persona=npc_persona)
         answer = (result or {}).get("answer", "")
         if answer:
             return answer[:max_chars]
+    except TypeError:
+        # 旧版 full_rag_query 不支持 npc_persona 参数, 回退
+        try:
+            result = await full_rag_query(query, top_k=top_k)
+            answer = (result or {}).get("answer", "")
+            if answer:
+                return answer[:max_chars]
+        except Exception as e:
+            logger.warning("full_rag_query failed: %s", e)
     except Exception as e:
         logger.warning("full_rag_query failed: %s", e)
     # 兜底
