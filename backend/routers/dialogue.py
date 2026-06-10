@@ -48,6 +48,8 @@ from ..dialogue_engine import (
     process_dynamic_choice,
     process_dynamic_free_text,
     _build_dynamic_ending,
+    resolve_hero_for_topic,
+    cache_hero_persona,
 )
 from ..schemas import BaseResponse, PaginationResponse
 
@@ -131,10 +133,32 @@ class DialogueChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=500, description="用户消息")
 
 
+# --- 英雄卡牌 ---
+class HeroPersona(BaseModel):
+    hero_id: str = Field(..., description="英雄唯一标识")
+    name: str = Field(..., description="人物名")
+    role: str = Field(default="", description="身份/职务")
+    era: str = Field(default="", description="时代")
+    greeting: str = Field(default="", description="见面招呼")
+    style_hint: str = Field(default="古朴典雅", description="语言风格")
+    speaking_pattern: str = Field(default="吾", description="自称")
+    description: str = Field(default="", description="人物简介")
+
+
+class ResolveHeroRequest(BaseModel):
+    topic: str = Field(..., min_length=1, max_length=120, description="用户话题")
+
+
+class ResolveHeroResponseData(BaseModel):
+    heroes: list[HeroPersona] = Field(default_factory=list)
+    source: str = Field(..., description="llm | fallback | empty")
+
+
 # --- 任意话题 dynamic 对话 ---
 class DynamicDialogueStartRequest(BaseModel):
     topic: str = Field(..., min_length=1, max_length=120, description="任意话题")
     session_id: Optional[str] = Field(default=None, description="用户会话ID")
+    hero_id: Optional[str] = Field(default=None, description="英雄卡牌 ID (可选)")
 
 
 class DynamicDialogueChoiceRequest(BaseModel):
@@ -623,6 +647,26 @@ async def delete_dialogue(
     return BaseResponse(message="Dialogue deleted")
 
 
+# === 英雄卡牌推荐 ===
+@router.post("/dynamic/resolve-hero", response_model=BaseResponse, summary="为话题推荐英雄卡牌")
+async def dynamic_resolve_hero(req: ResolveHeroRequest):
+    """根据用户 topic 推荐 1-3 个历史人物供用户选择.
+
+    - LLM 智能推荐 (需要 MINIMAX_API_KEY)
+    - 失败时回退到 events_data 关键词匹配
+    - 推荐结果中的 hero_id 传给 /dynamic/start 即可激活角色扮演
+    """
+    try:
+        result = await resolve_hero_for_topic(req.topic.strip(), max_count=3)
+        # 缓存 hero personas 以便后续 start 时使用
+        for hero in result.get("heroes", []):
+            cache_hero_persona(hero)
+        return BaseResponse(data=result)
+    except Exception as e:
+        logger.exception("dynamic_resolve_hero failed: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to resolve hero")
+
+
 # === 任意话题 dynamic 对话 endpoints ===
 @router.post("/dynamic/start", response_model=BaseResponse, summary="为任意话题开启时空对话")
 async def dynamic_start(
@@ -633,7 +677,7 @@ async def dynamic_start(
     validate_session_id(session_id)
 
     try:
-        opening = await start_dynamic_dialogue(req.topic, session_id=session_id)
+        opening = await start_dynamic_dialogue(req.topic, session_id=session_id, hero_id=req.hero_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -679,6 +723,8 @@ async def dynamic_start(
         "choices": opening["choices"],
         "round": 1,
         "is_dynamic": True,
+        "hero": opening.get("hero"),  # 如果有 hero persona 则返回
+        "hero_id": opening.get("hero_id"),
         "topic": req.topic,
     })
 
