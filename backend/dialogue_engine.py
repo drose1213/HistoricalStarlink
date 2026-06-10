@@ -624,6 +624,71 @@ async def resolve_hero_for_topic(topic: str, max_count: int = 3) -> dict:
     return {"heroes": [], "source": "empty"}
 
 
+# Hero persona缓存: hero_id -> persona dict
+_HERO_PERSONA_CACHE: dict = {}
+
+
+def _get_persona_by_hero_id(hero_id: str) -> dict | None:
+    """根据 hero_id 获取 persona,优先从缓存读."""
+    if not hero_id:
+        return None
+    return _HERO_PERSONA_CACHE.get(hero_id)
+
+
+def cache_hero_persona(hero: dict) -> None:
+    """缓存一个 hero persona,供后续对话使用."""
+    if hero and hero.get("hero_id"):
+        _HERO_PERSONA_CACHE[hero["hero_id"]] = hero
+
+
+def clear_hero_persona_cache() -> None:
+    """清空 hero缓存 (主要用于测试)."""
+    _HERO_PERSONA_CACHE.clear()
+
+
+def _build_persona_prompt(persona: dict, context_text: str = "") -> str:
+    """根据 persona构造古风沉浸式 system prompt.
+
+    Args:
+        persona:英雄 persona字典 (含 name, role, era, style_hint 等)
+        context_text: RAG检索到的历史资料 (可为空)
+
+    Returns:
+        完整的 system prompt字符串.
+    """
+    if not persona:
+        # 兼容旧逻辑, 返回通用 prompt
+        return (
+            "你是「历史星链探索」的历史知识助手。请基于提供的历史事件资料回答用户的问题。"
+            "回答要求：准确、有深度、条理清晰,适当分析事件之间的因果关系和历史意义。"
+            "如果提供的资料不足以回答问题, 请坦诚说明并基于已有资料给出最相关的分析。"
+            "回答使用中文,长度控制在300字以内。"
+        )
+
+    name = persona.get("name", "历史人物")
+    role = persona.get("role", "")
+    era = persona.get("era", "")
+    style_hint = persona.get("style_hint", "古朴典雅")
+    speaking = persona.get("speaking_pattern", "吾")
+    desc = persona.get("description", "")
+
+    context_section = context_text if context_text else "（暂无相关历史资料, 请基于你的历史知识回答）"
+
+    return (
+        f"你是【{name}】, {role}, {era}。\n\n"
+        f"【角色设定】\n"
+        f"- 你自称「{speaking}」\n"
+        f"- 语言风格: {style_hint}\n"
+        f"- 称呼用户为\"时空旅人\"或\"后世之人\"\n"
+        f"- 回答控制在300 字以内, 不要使用现代网络用语\n\n"
+        f"【人物背景】\n"
+        f"{desc}\n\n"
+        f"【可用历史资料】\n"
+        f"{context_section}\n\n"
+        f"请以{name}的身份,回答时空旅人的问题。"
+    )
+
+
 def _generate_default_greeting(name: str, role: str) -> str:
     """根据人物生成默认招呼语."""
     if not name:
