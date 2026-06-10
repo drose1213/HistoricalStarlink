@@ -809,43 +809,65 @@ async def _rag_generate(
     return _keyword_fallback_text(query, top_k=top_k, max_chars=max_chars)
 
 
-async def start_dynamic_dialogue(topic: str, session_id: Optional[str] = None) -> dict:
+async def start_dynamic_dialogue(
+    topic: str,
+    session_id: Optional[str] = None,
+    hero_id: Optional[str] = None,
+) -> dict:
     """为任意 topic 开启一个 dynamic 时空对话.
 
+    Args:
+        topic: 话题
+        session_id: 会话 ID
+        hero_id: 英雄卡牌 ID (可选), 传入时使用对应 persona 扮演
+
     Returns:
-        {
-            "event_id": "dynamic_<slug>",
-            "npc_name": "时空对话机",
-            "npc_role": "全知观测者",
-            "npc_symbol": "✦",
-            "context": "...",
-            "narrative": <opening>,
-            "choices": [...3 options...],
-            "round": 1,
-            "topic": <原始 topic>,
-            "is_dynamic": True,
-        }
+        包含 npc_name/role 等字段的 dict, 如有 hero_id 则 npc 信息来自 persona.
     """
     if not topic or not topic.strip():
         raise ValueError("topic 不能为空")
     topic = topic.strip()[:120]  # 截断防止滥用
     event_id = build_dynamic_event_id(topic)
+
+    # 解析 hero persona
+    persona = _get_persona_by_hero_id(hero_id) if hero_id else None
+
+    # 决定 NPC 身份
+    if persona:
+        npc_name = persona.get("name", DYNAMIC_NPC_NAME)
+        npc_role = persona.get("role", DYNAMIC_NPC_ROLE)
+        npc_symbol = DYNAMIC_NPC_SYMBOL  # 复用统一符号
+        context_str = f"用户选择探索的话题: {topic}, 与 {npc_name} 对话"
+    else:
+        npc_name = DYNAMIC_NPC_NAME
+        npc_role = DYNAMIC_NPC_ROLE
+        npc_symbol = DYNAMIC_NPC_SYMBOL
+        context_str = f"用户选择探索的话题: {topic}"
+
     opening_query = f"话题: {topic} 的背景介绍与历史脉络"
-    opening = await _rag_generate(opening_query, top_k=3, max_chars=500)
+    opening = await _rag_generate(opening_query, top_k=3, max_chars=500, npc_persona=persona)
     if not opening or opening == _DEFAULT_DYNAMIC_FALLBACK:
-        opening = _DEFAULT_DYNAMIC_OPENING.format(topic=topic)
-    return {
+        if persona:
+            opening = persona.get("greeting") or _DEFAULT_DYNAMIC_OPENING.format(topic=topic)
+        else:
+            opening = _DEFAULT_DYNAMIC_OPENING.format(topic=topic)
+
+    result = {
         "event_id": event_id,
-        "npc_name": DYNAMIC_NPC_NAME,
-        "npc_role": DYNAMIC_NPC_ROLE,
-        "npc_symbol": DYNAMIC_NPC_SYMBOL,
-        "context": f"用户选择探索的话题: {topic}",
+        "npc_name": npc_name,
+        "npc_role": npc_role,
+        "npc_symbol": npc_symbol,
+        "context": context_str,
         "narrative": opening,
         "choices": _DYNAMIC_CHOICES,
         "round": 1,
         "topic": topic,
         "is_dynamic": True,
     }
+    if persona:
+        result["hero"] = persona
+        result["hero_id"] = hero_id
+    return result
 
 
 async def process_dynamic_choice(
