@@ -485,6 +485,72 @@ def _fallback_heroes_from_events(topic: str, max_count: int = 3) -> list:
     return result
 
 
+async def _call_llm_for_hero_recommendation(topic: str, max_count: int = 3) -> list:
+    """调 LLM 推荐与 topic 最相关的历史人物.
+
+    Returns:
+        推荐的人物列表, 解析失败返回 [].
+    """
+    import os
+    import json
+    import httpx
+
+    api_key = os.getenv("MINIMAX_API_KEY", "")
+    if not api_key:
+        return []
+
+    prompt = f"""请根据用户话题, 推荐 {max_count} 位最匹配的真实历史人物 (中国或世界历史).
+
+要求:
+1. 必须是真实历史人物, 不能虚构或神话人物
+2. 按相关度从高到低排序
+3. 输出严格的 JSON 数组, 不要包含其他文字
+
+每个元素的字段:
+- name: 人物姓名
+- role: 身份/职务
+- era: 时代 (如"三国时期 (181-234)" 或 "19世纪 (1736-1819)")
+- description: 一句话简介 (50字以内)
+
+话题: {topic}
+
+输出示例:
+[{{"name": "诸葛亮", "role": "蜀汉丞相", "era": "三国时期 (181-234)", "description": "三顾茅庐, 隆中对策"}}]"""
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                "https://api.minimax.chat/v1/text/chatcompletion_v2",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={
+                    "model": "MiniMax-M2.1",
+                    "messages": [
+                        {"role": "system", "content": "你是历史人物推荐助手, 只输出 JSON 数组."},
+                        {"role": "user", "content": prompt},
+                    ],
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            content = data["choices"][0]["message"]["content"].strip()
+
+            # 提取 JSON 数组 (可能被 ```json 包裹)
+            if content.startswith("```"):
+                content = content.split("```")[1]
+                if content.startswith("json"):
+                    content = content[4:]
+                content = content.strip()
+
+            parsed = json.loads(content)
+            if isinstance(parsed, list):
+                # 过滤无效项
+                valid = [p for p in parsed if isinstance(p, dict) and p.get("name")]
+                return valid[:max_count]
+    except Exception as e:
+        logger.warning(f"LLM hero recommendation failed: {e}")
+    return []
+
+
 def _slugify_topic(topic: str) -> str:
     """把任意 topic 字符串规整成可作为 event_id 后缀的 slug."""
     if not topic:
