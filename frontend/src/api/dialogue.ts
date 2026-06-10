@@ -62,3 +62,29 @@ export const dialogueApi = {
     return post('/api/dialogue/dynamic/end', { dialogue_id: dialogueId })
   }
 }
+
+// 英雄卡牌相关类型
+export interface HeroPersona {
+  hero_id: string
+  name: string
+  role: string
+  era: string
+  greeting: string
+  style_hint: string
+  speaking_pattern: string
+  description: string
+}
+
+export interface ResolveHeroResponse {
+  heroes: HeroPersona[]
+  source: 'llm' | 'fallback' | 'empty'
+}
+
+/**
+ * 为话题推荐英雄卡牌列表.
+ * - LLM 智能推荐
+ * - 失败时回退到 events_data 关键词匹配
+ */
+export function resolveHero(topic: string): Promise<ApiResponse<ResolveHeroResponse>> {
+  return post('/api/dialogue/dynamic/resolve-hero', { topic })
+}
