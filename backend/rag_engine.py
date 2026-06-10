@@ -663,11 +663,12 @@ async def full_rag_query(query: str, top_k: int = 5,
                          region: Optional[str] = None,
                          category: Optional[str] = None,
                          year_min: Optional[int] = None,
-                         year_max: Optional[int] = None) -> dict:
+                         year_max: Optional[int] = None,
+                         npc_persona: Optional[dict] = None) -> dict:
     search_results = await search_similar(query, top_k=top_k,
                                           region=region, category=category,
                                           year_min=year_min, year_max=year_max)
-    answer = await generate_answer(query, search_results)
+    answer = await generate_answer(query, search_results, npc_persona=npc_persona)
     sources = []
     for item in search_results:
         sources.append({
