@@ -555,10 +555,19 @@ def _keyword_search_events_only(query: str, top_k: int) -> list[dict]:
     return results
 
 
-async def generate_answer(query: str, context_events: list[dict]) -> str:
-    if not MINIMAX_API_KEY:
-        return _generate_fallback_answer(query, context_events)
+async def generate_answer(
+    query: str,
+    context_events: list[dict],
+    npc_persona: Optional[dict] = None,
+) -> str:
+    """基于检索结果和 (可选) persona 生成回答.
 
+    Args:
+        query: 用户问题
+        context_events: RAG检索到的事件列表
+        npc_persona: 英雄 persona (可选), 传入时使用古风沉浸式 prompt
+    """
+    # 构造 context_text (供 persona prompt 使用)
     context_parts = []
     for item in context_events:
         name = item.get("name", item.get("title", "未知"))
@@ -570,14 +579,32 @@ async def generate_answer(query: str, context_events: list[dict]) -> str:
         context_parts.append(f"【{name}】（{year_str}）{desc}")
     context_text = "\n".join(context_parts)
 
-    system_prompt = (
-        "你是「历史星链探索」的历史知识助手。请基于提供的历史事件资料回答用户的问题。"
-        "回答要求：准确、有深度、条理清晰，适当分析事件之间的因果关系和历史意义。"
-        "如果提供的资料不足以回答问题，请坦诚说明并基于已有资料给出最相关的分析。"
-        "回答使用中文，长度控制在300字以内。"
-    )
+    # 根据是否有 persona 选择 system prompt
+    if npc_persona:
+        # 延迟导入避免循环依赖
+        system_prompt = None
+        try:
+            from .dialogue_engine import _build_persona_prompt
+            system_prompt = _build_persona_prompt(npc_persona, context_text)
+        except ImportError:
+            # 独立运行时回退
+            try:
+                from dialogue_engine import _build_persona_prompt
+                system_prompt = _build_persona_prompt(npc_persona, context_text)
+            except ImportError:
+                system_prompt = _build_persona_prompt_fallback(npc_persona, context_text)
+    else:
+        system_prompt = (
+            "你是「历史星链探索」的历史知识助手。请基于提供的历史事件资料回答用户的问题。"
+            "回答要求：准确、有深度、条理清晰，适当分析事件之间的因果关系和历史意义。"
+            "如果提供的资料不足以回答问题，请坦诚说明并基于已有资料给出最相关的分析。"
+            "回答使用中文，长度控制在300字以内。"
+        )
 
     user_message = f"以下是相关的历史事件资料：\n\n{context_text}\n\n用户问题：{query}"
+
+    if not MINIMAX_API_KEY:
+        return _generate_fallback_answer(query, context_events)
 
     try:
         async with httpx.AsyncClient(timeout=60) as client:
@@ -598,6 +625,20 @@ async def generate_answer(query: str, context_events: list[dict]) -> str:
     except Exception as e:
         logger.error(f"MiniMax chat API failed: {e}")
         return _generate_fallback_answer(query, context_events)
+
+
+def _build_persona_prompt_fallback(persona: dict, context_text: str) -> str:
+    """无 dialogue_engine 依赖时的兜底 prompt 构造器."""
+    name = persona.get("name", "历史人物")
+    role = persona.get("role", "")
+    era = persona.get("era", "")
+    speaking = persona.get("speaking_pattern", "吾")
+    desc = persona.get("description", "")
+    return (
+        f"你是【{name}】, {role}, {era}。自称「{speaking}」。"
+        f"背景: {desc}。资料: {context_text or '无'}。"
+        f"请以{name}身份用古风语气回答。"
+    )
 
 
 def _generate_fallback_answer(query: str, context_events: list[dict]) -> str:
