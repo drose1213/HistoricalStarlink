@@ -875,8 +875,13 @@ async def process_dynamic_choice(
     choice_id: str,
     choices_made: list,
     free_texts: Optional[list] = None,
+    npc_persona: Optional[dict] = None,
 ) -> dict:
-    """处理 dynamic 对话中的选择. 返回 NPC 回应 + 累计画像."""
+    """处理 dynamic 对话中的选择. 返回 NPC 回应 + 累计画像.
+
+    Args:
+        npc_persona: 英雄 persona (可选), 注入到 RAG 调用让 LLM 保持角色身份
+    """
     if not topic or not topic.strip():
         raise ValueError("topic 不能为空")
 
@@ -903,7 +908,7 @@ async def process_dynamic_choice(
     is_last = next_round > MAX_DYNAMIC_ROUNDS
     if not is_last:
         query = f"话题 {topic}, 用户选择了「{selected['text']}」, 接下来如何回应?"
-        narrative = await _rag_generate(query, top_k=3, max_chars=500)
+        narrative = await _rag_generate(query, top_k=3, max_chars=500, npc_persona=npc_persona)
     else:
         narrative = "时空对话机的能量即将耗尽, 让我给你一个总结性回答。"
 
@@ -926,8 +931,13 @@ async def process_dynamic_free_text(
     message: str,
     choices_made: list,
     free_texts: Optional[list] = None,
+    npc_persona: Optional[dict] = None,
 ) -> dict:
-    """处理 dynamic 对话中的自由文本."""
+    """处理 dynamic 对话中的自由文本.
+
+    Args:
+        npc_persona: 英雄 persona (可选), 注入到 RAG 调用让 LLM 保持角色身份
+    """
     if not topic or not topic.strip():
         raise ValueError("topic 不能为空")
     if not message or not message.strip():
@@ -941,7 +951,7 @@ async def process_dynamic_free_text(
     new_choices = choices_made or []
     new_free_texts = (free_texts or []) + [message.strip()[:500]]
     query = f"话题 {topic}, 用户说: {message.strip()[:200]}"
-    narrative = await _rag_generate(query, top_k=3, max_chars=500)
+    narrative = await _rag_generate(query, top_k=3, max_chars=500, npc_persona=npc_persona)
     path_sig = compute_path_signature(new_choices)
     return {
         "narrative": narrative,
