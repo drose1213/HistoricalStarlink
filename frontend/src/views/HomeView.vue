@@ -15,6 +15,12 @@
       </nav>
 
       <div class="user-area">
+        <!-- 升级会员占位按钮 (埋点测试用) -->
+        <button
+          type="button"
+          class="upgrade-btn"
+          @click="handleUpgradeClick"
+        >{{ t('home.upgrade') }}</button>
         <template v-if="authStore.isLoggedIn">
           <div class="user-menu" @click="showUserMenu = !showUserMenu">
             <div class="user-avatar">{{ authStore.userInitial }}</div>
@@ -94,6 +100,19 @@
           </form>
           <div v-if="freeExploreError" class="free-explore-error">{{ freeExploreError }}</div>
         </div>
+
+        <!-- 英雄卡牌选人覆盖层 -->
+        <Transition name="hero-fade">
+          <div v-if="showHeroSelection" class="hero-selection-overlay" @click.self="showHeroSelection = false">
+            <div class="hero-selection-modal">
+              <HeroSelectionStep
+                :topic="currentExploreTopic"
+                @select="onHeroSelect"
+                @skip="onHeroSkip"
+              />
+            </div>
+          </div>
+        </Transition>
       </div>
 
       <a
@@ -208,8 +227,11 @@ import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { useDialogueStore } from '@/stores/dialogue'
 import { useI18n } from '@/composables/useI18n'
+import { trackEvent } from '@/utils/analytics'
 import CosmicMap from '@/components/CosmicMap.vue'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
+import HeroSelectionStep from '@/components/HeroSelectionStep.vue'
+import type { HeroPersona } from '@/api/dialogue'
 import { allEvents as historyEvents, searchEvents, backendAvailable, loadError, loadEvents } from '@/data/events'
 import { ragApi } from '@/api/rag'
 import { eventsApi, type HomeFeedResponse } from '@/api/events'
@@ -242,6 +264,9 @@ const searchLoading = ref(false)
 const freeExploreTopic = ref('')
 const freeExploreLoading = ref(false)
 const freeExploreError = ref('')
+// 英雄卡牌选人
+const showHeroSelection = ref(false)
+const currentExploreTopic = ref('')
 let searchLoadingTimer: ReturnType<typeof setTimeout> | null = null
 let searchAbortTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -452,6 +477,17 @@ function handleLogout() {
   appStore.showToast('success', t('toast.signedOut'))
 }
 
+// 升级会员占位按钮: 触发 paywall_clicked 埋点 + 弹提示
+function handleUpgradeClick() {
+  trackEvent('paywall_clicked', {
+    topic: (dialogueStore.currentTopic || freeExploreTopic.value || 'unknown').trim() || 'unknown',
+  })
+  // 简单占位 alert, 提示会员功能即将上线
+  if (typeof window !== 'undefined') {
+    window.alert(t('home.upgradeAlert'))
+  }
+}
+
 function handleClickOutside(e: MouseEvent) {
   const target = e.target as HTMLElement
   if (!target.closest('.user-area')) {
@@ -469,12 +505,37 @@ async function handleFreeExplore() {
     freeExploreError.value = '请输入话题'
     return
   }
+  // 先展示英雄卡牌选人界面, 用户选择后再启动 dynamic 对话
+  currentExploreTopic.value = topic
+  showHeroSelection.value = true
+}
+
+function navigateToDialogue(topic: string) {
+  const eventId = `dynamic_${topic.replace(/[^\w一-龥]+/g, '_').slice(0, 32) || 'unknown'}`
+  router.push({ name: 'Dialogue', params: { eventId } })
+}
+
+async function onHeroSelect(hero: HeroPersona) {
+  showHeroSelection.value = false
   freeExploreLoading.value = true
   freeExploreError.value = ''
   try {
-    await dialogueStore.startDynamicFromTopic(topic)
-    const eventId = `dynamic_${topic.replace(/[^\w一-龥]+/g, '_').slice(0, 32) || 'unknown'}`
-    router.push({ name: 'Dialogue', params: { eventId } })
+    await dialogueStore.startDynamicFromTopic(currentExploreTopic.value, hero.hero_id)
+    navigateToDialogue(currentExploreTopic.value)
+  } catch (err: any) {
+    freeExploreError.value = err?.message || '开启时空对话失败, 请稍后重试'
+  } finally {
+    freeExploreLoading.value = false
+  }
+}
+
+async function onHeroSkip() {
+  showHeroSelection.value = false
+  freeExploreLoading.value = true
+  freeExploreError.value = ''
+  try {
+    await dialogueStore.startDynamicFromTopic(currentExploreTopic.value)
+    navigateToDialogue(currentExploreTopic.value)
   } catch (err: any) {
     freeExploreError.value = err?.message || '开启时空对话失败, 请稍后重试'
   } finally {
@@ -626,6 +687,32 @@ onBeforeUnmount(() => {
   justify-self: end;
   min-width: 0;
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.upgrade-btn {
+  min-height: 30px;
+  padding: 5px 14px;
+  background: linear-gradient(180deg, rgba(212, 168, 75, 0.28), rgba(212, 168, 75, 0.10));
+  border: 1px solid rgba(212, 168, 75, 0.7);
+  border-radius: 0;
+  color: #f5e3b1;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 8px rgba(212, 168, 75, 0.5);
+  cursor: pointer;
+  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease, color 0.18s ease;
+}
+
+.upgrade-btn:hover {
+  background: linear-gradient(180deg, rgba(212, 168, 75, 0.42), rgba(212, 168, 75, 0.16));
+  color: #fff7d8;
+  box-shadow: 0 0 18px rgba(212, 168, 75, 0.32);
+  transform: translateY(-1px);
 }
 
 .locale-area {
@@ -965,12 +1052,44 @@ onBeforeUnmount(() => {
   text-shadow: 0 0 6px rgba(255, 138, 77, 0.3);
 }
 
+.hero-selection-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal, 100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(2, 5, 11, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.hero-selection-modal {
+  width: min(960px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.hero-fade-enter-active,
+.hero-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.hero-fade-enter-from,
+.hero-fade-leave-to {
+  opacity: 0;
+}
+
 @media (max-width: 680px) {
   .free-explore-panel {
     right: 12px;
     left: 12px;
     bottom: 80px;
     width: auto;
+  }
+
+  .hero-selection-overlay {
+    padding: 12px;
   }
 }
 

@@ -46,8 +46,10 @@ export const dialogueApi = {
   },
 
   // --- 任意话题 dynamic 模式 ---
-  startDynamic(sessionId: string, topic: string): Promise<ApiResponse<any>> {
-    return post('/api/dialogue/dynamic/start', { session_id: sessionId, topic })
+  startDynamic(sessionId: string, topic: string, heroId?: string): Promise<ApiResponse<any>> {
+    const payload: Record<string, unknown> = { session_id: sessionId, topic }
+    if (heroId) payload.hero_id = heroId
+    return post('/api/dialogue/dynamic/start', payload)
   },
 
   sendDynamicChoice(dialogueId: string, choiceId: string): Promise<ApiResponse<any>> {

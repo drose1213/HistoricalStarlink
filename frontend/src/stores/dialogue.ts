@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { dialogueApi } from '@/api/dialogue'
+import type { HeroPersona } from '@/api/dialogue'
 import type { DialogueMessage, DialogueSession } from '@/types'
 
 function generateSessionId(): string {
@@ -23,6 +24,9 @@ export const useDialogueStore = defineStore('dialogue', () => {
   const notFound = ref(false)
   const isDynamic = ref(false)  // 当前对话是否 dynamic 模式
   const currentTopic = ref<string>('')  // dynamic 模式的话题
+  const selectedHero = ref<HeroPersona | null>(null)  // dynamic 模式选中的英雄
+  const isSelectingHero = ref(false)  // 是否在英雄选人阶段
+  const pendingHeroId = ref<string>('')  // 暂存的 hero_id, startDialogue 时透传给后端
 
   const isTimelineAnimating = ref(false)
 
@@ -45,8 +49,12 @@ export const useDialogueStore = defineStore('dialogue', () => {
     }
     try {
       const res = isDynamic.value
-        ? await dialogueApi.startDynamic(sessionId.value, currentTopic.value || eventId) as any
+        ? await dialogueApi.startDynamic(sessionId.value, currentTopic.value || eventId, pendingHeroId.value || undefined) as any
         : await dialogueApi.startDialogue(sessionId.value, eventId) as any
+      // 启动后清掉 pendingHeroId, 避免污染后续对话
+      if (isDynamic.value) {
+        pendingHeroId.value = ''
+      }
       const data = res.data
       dialogueId.value = String(data.dialogue_id)
       currentSession.value = data
@@ -107,8 +115,9 @@ export const useDialogueStore = defineStore('dialogue', () => {
   /**
    * 专门为 dynamic 模式提供的入口: 直接从 topic 启动, 走 startDynamic 接口.
    * HomeView 用户输入任意话题时调用.
+   * 可选传入 heroId, 会透传给后端 /dynamic/start 用于角色扮演.
    */
-  async function startDynamicFromTopic(topic: string) {
+  async function startDynamicFromTopic(topic: string, heroId?: string) {
     currentTopic.value = topic.trim()
     if (!currentTopic.value) {
       errorMessage.value = '请输入话题'
@@ -116,6 +125,8 @@ export const useDialogueStore = defineStore('dialogue', () => {
     }
     // 复用 startDialogue, 但需要预先设置 isDynamic 让逻辑走 dynamic 分支
     isDynamic.value = true
+    // 保存 hero_id 到 session, 后续 startDialogue 时透传给后端
+    pendingHeroId.value = heroId || ''
     // 构造一个 dynamic_<slug> 的 eventId 给 startDialogue 用
     const slug = currentTopic.value.replace(/[^\w一-龥]+/g, '_').slice(0, 32) || 'unknown'
     return await startDialogue(`dynamic_${slug}`)
@@ -257,6 +268,17 @@ export const useDialogueStore = defineStore('dialogue', () => {
     notFound.value = false
     isDynamic.value = false
     currentTopic.value = ''
+    selectedHero.value = null
+    isSelectingHero.value = false
+    pendingHeroId.value = ''
+  }
+
+  function setSelectedHero(hero: HeroPersona | null) {
+    selectedHero.value = hero
+  }
+
+  function setIsSelectingHero(v: boolean) {
+    isSelectingHero.value = v
   }
 
   return {
@@ -276,11 +298,15 @@ export const useDialogueStore = defineStore('dialogue', () => {
     notFound,
     isDynamic,
     currentTopic,
+    selectedHero,
+    isSelectingHero,
     lastNpcMessage,
     startDialogue,
     startDynamicFromTopic,
     sendChoice,
     sendFreeText,
-    resetDialogue
+    resetDialogue,
+    setSelectedHero,
+    setIsSelectingHero
   }
 })
