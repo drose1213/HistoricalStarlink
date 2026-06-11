@@ -9,6 +9,7 @@ from .config import settings
 from .database import init_db
 from .redis_client import redis_client
 from .routers import exploration, rating, vote, signature, champion, dialogue, auth, rag, events, config
+from .routers.analytics import router as analytics_router
 from .routers.leaderboard import router as leaderboard_router
 
 logging.basicConfig(
@@ -134,6 +135,7 @@ app.include_router(rag.router)
 app.include_router(events.router)
 app.include_router(config.router)
 app.include_router(leaderboard_router)
+app.include_router(analytics_router)
 
 
 async def load_db_config_safe():

@@ -9,7 +9,6 @@ from backend.dialogue_engine import (
     calculate_timeline_branches,
     get_available_events,
     get_script,
-    DIALOGUE_SCRIPTS,
     build_dynamic_event_id,
     start_dynamic_dialogue,
     process_dynamic_choice,
@@ -17,16 +16,27 @@ from backend.dialogue_engine import (
     _build_dynamic_ending,
     _keyword_fallback_text,
 )
+from backend.data import get_script_loader
+
+
+def _get_all_scripts():
+    """便捷函数: 获取所有加载的剧本数据 (从 JSON 文件)."""
+    loader = get_script_loader()
+    return {eid: loader.get_script(eid) for eid in loader.get_available_event_ids()}
 
 
 @pytest.mark.unit
 class TestDialogueEngine:
 
     def test_dialogue_scripts_not_empty(self):
-        assert len(DIALOGUE_SCRIPTS) > 0
+        """剧本字典应非空 (从 JSON 文件加载)."""
+        scripts = _get_all_scripts()
+        assert len(scripts) > 0
 
     def test_each_script_has_required_fields(self):
-        for sid, script in DIALOGUE_SCRIPTS.items():
+        """每个剧本应有必要的字段."""
+        scripts = _get_all_scripts()
+        for sid, script in scripts.items():
             assert "title" in script or "npc_name" in script, f"剧本 {sid} 缺必要字段"
             assert "rounds" in script or "opening" in script, f"剧本 {sid} 缺 rounds/opening"
 

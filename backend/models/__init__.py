@@ -9,6 +9,8 @@ from .event import HistoryEvent
 from .system_config import SystemConfig
 from .knowledge_base import KnowledgeEntry, KnowledgeVersion, CrawlSource
 from .embedding import EventEmbedding
+from .analytics import AnalyticsEvent
+from .exploration_profile import UserExplorationProfile
 
 __all__ = [
     "ExplorationRecord",
@@ -24,4 +26,6 @@ __all__ = [
     "KnowledgeVersion",
     "CrawlSource",
     "EventEmbedding",
+    "AnalyticsEvent",
+    "UserExplorationProfile",
 ]

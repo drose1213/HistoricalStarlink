@@ -18,6 +18,16 @@
         <span class="dlg-round" v-if="dialogueStore.round > 0">
           {{ t('dialogue.round', { n: dialogueStore.round }) }}
         </span>
+        <button
+          v-if="dialogueStore.isDynamic"
+          class="share-btn"
+          :class="{ 'share-btn--copied': shareCopied }"
+          :disabled="!canShare"
+          @click="handleShare"
+        >
+          <span class="share-icon">{{ shareCopied ? '✓' : '↗' }}</span>
+          <span class="share-label">{{ shareCopied ? shareCopiedLabel : shareLabel }}</span>
+        </button>
       </div>
     </header>
 
@@ -160,10 +170,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDialogueStore } from '@/stores/dialogue'
 import { useI18n } from '@/composables/useI18n'
+import { trackEvent } from '@/utils/analytics'
+import { generateShareLink } from '@/utils/shareLink'
 
 const props = defineProps<{
   eventId: string
@@ -178,6 +190,11 @@ const { t } = useI18n()
 const chatContainer = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
 const freeText = ref('')
+
+// 对话起始时间 (用于计算 duration_seconds)
+const dialogueStartAt = ref<number>(Date.now())
+// 路径签名: 用户每个选择的 choice_id 序列, 简单拼接
+const pathSignature = ref<string[]>([])
 
 const NPC_AVATARS: Record<string, { avatar: string; key: string }> = {
   shangyang_reform: { avatar: '⚖', key: 'shangyang_reform' },
@@ -229,7 +246,32 @@ watch(
   }
 )
 
+// 对话结束 (preset 或 dynamic 都上报, 让 PMF 验证看数据差异)
+watch(
+  () => dialogueStore.isDialogueEnded,
+  (ended) => {
+    if (!ended) return
+    const durationMs = Date.now() - dialogueStartAt.value
+    const duration_seconds = Math.round(durationMs / 1000)
+    const rounds = pathSignature.value.length
+    // scores: 当前后端未在每次选择返回 scores 字段, 先传路径签名供分析
+    const scores: Record<string, number> = {}
+    trackEvent('dialogue_completed', {
+      topic: dialogueStore.currentTopic || props.eventId,
+      rounds,
+      path_signature: pathSignature.value.join('>'),
+      scores,
+      duration_seconds,
+      // 额外附加: 结局类型 & 是否 dynamic
+      outcome_type: dialogueStore.outcomeType || 'historical',
+      is_dynamic: dialogueStore.isDynamic,
+    } as any)
+  }
+)
+
 async function handleChoice(choiceId: string) {
+  // 记录路径签名 (用于 PMF 验证 dynamic vs preset 的路径差异)
+  pathSignature.value.push(choiceId)
   await dialogueStore.sendChoice(choiceId)
 }
 
@@ -237,6 +279,8 @@ async function handleFreeText() {
   const text = freeText.value.trim()
   if (!text || dialogueStore.isLoading) return
   freeText.value = ''
+  // free text 也算一轮, 用 'free' 标记
+  pathSignature.value.push('free')
   await dialogueStore.sendFreeText(text)
 }
 
@@ -246,6 +290,9 @@ function handleRestart() {
 }
 
 async function initDialogue() {
+  // 重置起始时间和路径
+  dialogueStartAt.value = Date.now()
+  pathSignature.value = []
   try {
     await dialogueStore.startDialogue(props.eventId)
   } catch (e) {
@@ -261,6 +308,96 @@ function retryInit() {
 function goBack() {
   router.back()
 }
+
+// ===== 分享给朋友 =====
+const shareCopied = ref(false)
+let shareCopiedTimer: number | null = null
+
+const currentTopic = computed(() => dialogueStore.currentTopic || '')
+const canShare = computed(() => !!currentTopic.value.trim())
+const shareLabel = computed(() => t('dialogue.share'))
+const shareCopiedLabel = computed(() => t('dialogue.shareCopied'))
+
+function flashShareCopied() {
+  shareCopied.value = true
+  if (shareCopiedTimer !== null) {
+    window.clearTimeout(shareCopiedTimer)
+  }
+  shareCopiedTimer = window.setTimeout(() => {
+    shareCopied.value = false
+    shareCopiedTimer = null
+  }, 1800)
+}
+
+/**
+ * 复制到剪贴板的兜底实现：
+ * - 优先用 navigator.clipboard（仅 HTTPS / localhost）
+ * - 不可用时用临时 textarea + execCommand('copy')
+ * - 两者都失败则弹出 prompt 让用户手动复制
+ */
+async function copyToClipboard(text: string): Promise<boolean> {
+  // 1) 现代化 API
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch (_) {
+    // 继续 fallback
+  }
+  // 2) execCommand fallback
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('readonly', '')
+    ta.style.position = 'fixed'
+    ta.style.top = '-9999px'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    ta.setSelectionRange(0, text.length)
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch (_) {
+    return false
+  }
+}
+
+async function handleShare() {
+  const topic = currentTopic.value.trim()
+  if (!topic) return
+  const url = generateShareLink(topic)
+
+  const ok = await copyToClipboard(url)
+  if (ok) {
+    flashShareCopied()
+    try {
+      const app = (window as any).__appStore
+      // 静默尝试触发现有 toast，若不可用则跳过
+      if (app && typeof app.showToast === 'function') {
+        app.showToast('success', shareCopiedLabel.value)
+      }
+    } catch (_) {
+      // 忽略
+    }
+  } else {
+    // 3) 最后的兜底：弹出 prompt 让用户手动复制
+    window.prompt(t('dialogue.shareManualCopy'), url)
+  }
+  trackEvent('dialogue_share_clicked', {
+    topic,
+    is_dynamic: true,
+    copy_success: ok,
+  })
+}
+
+onBeforeUnmount(() => {
+  if (shareCopiedTimer !== null) {
+    window.clearTimeout(shareCopiedTimer)
+    shareCopiedTimer = null
+  }
+})
 
 function goFreeExplore() {
   // 清掉错误状态, 跳到 HomeView 让 user 自由输入 topic
@@ -379,6 +516,9 @@ onMounted(() => {
   flex-shrink: 0;
   min-width: 80px;
   text-align: right;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .dlg-round {
@@ -389,6 +529,50 @@ onMounted(() => {
   border: 1px solid rgba(212, 168, 75, 0.3);
   border-radius: var(--radius-full);
   background: rgba(212, 168, 75, 0.1);
+}
+
+.share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  padding: 4px 12px;
+  background: rgba(255, 53, 243, 0.08);
+  border: 1px solid var(--border-pink);
+  border-radius: var(--radius-full);
+  color: var(--pink-core);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.share-btn:hover:not(:disabled) {
+  background: rgba(255, 53, 243, 0.18);
+  box-shadow: 0 0 12px rgba(255, 53, 243, 0.35);
+  transform: translateY(-1px);
+}
+
+.share-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.share-btn--copied {
+  background: rgba(212, 168, 75, 0.18);
+  border-color: var(--accent-gold);
+  color: var(--accent-gold);
+  box-shadow: 0 0 12px rgba(212, 168, 75, 0.4);
+}
+
+.share-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.share-label {
+  font-size: 12px;
+  letter-spacing: 0.05em;
 }
 
 .dlg-body {

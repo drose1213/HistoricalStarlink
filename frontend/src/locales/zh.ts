@@ -89,7 +89,9 @@ export default {
     eventsButton: '事件',
     logout: '退出登录',
     welcome: '欢迎来到历史星链!',
-    backHome: '返回首页'
+    backHome: '返回首页',
+    upgrade: '升级会员',
+    upgradeAlert: '会员功能即将上线, 敬请期待'
   },
 
   // 卡牌 / 人物 Champions
@@ -684,6 +686,9 @@ export default {
     choiceLabel: '◆ 做出你的选择',
     placeholderEnded: '与历史人物进行后日谈...',
     placeholderActive: '自由输入你的想法...',
+    share: '分享给朋友',
+    shareCopied: '已复制 ✓',
+    shareManualCopy: '请手动复制以下链接:',
     npc: {
       shangyang_reform: { name: '商鞅', role: '秦国大良造 · 变法者' },
       qin_unification: { name: '秦始皇', role: '始皇帝 · 天下共主' },

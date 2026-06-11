@@ -59,6 +59,11 @@ const routes: RouteRecordRaw[] = [
     name: 'KnowledgeBase',
     component: () => import('@/views/KnowledgeBaseView.vue'),
     meta: { requiresAdmin: true }
+  },
+  {
+    path: '/landing',
+    name: 'Landing',
+    component: () => import('@/views/LandingView.vue')
   }
 ]
 

@@ -1,0 +1,150 @@
+{
+  "meta": {
+    "event_id": "alexander_east",
+    "version": "1.0.0",
+    "description": "亚历山大 (马其顿国王)"
+  },
+  "npc_name": "亚历山大",
+  "npc_role": "马其顿国王",
+  "npc_symbol": "⚔",
+  "opening": "Who are you? You don't look like one of my soldiers... nor a Persian spy. Something about your appearance is strange. Speak — who sent you?",
+  "context": "334 BC. Alexander the Great has just begun his legendary campaign eastward from Greece. He has defeated the Persians at Granicus and is pushing deeper into Asia.",
+  "rounds": [
+    {
+      "round": 1,
+      "narrative": "亚历山大身披战甲，坐在营帐中的王座上。他的眼神锐利如鹰，身后挂着从波斯人那里缴获的地图。\n\n「你说你来自未来？那告诉我——我的帝国能维持多久？我最终能打到哪里？」",
+      "choices": [
+        {
+          "choice_id": "a",
+          "text": "陛下建立了一个横跨欧亚非的大帝国，但英年早逝。",
+          "consequence": "亚历山大沉默了一瞬",
+          "timeline_change": false,
+          "next_round": 2,
+          "mood": "thoughtful"
+        },
+        {
+          "choice_id": "b",
+          "text": "陛下是历史上最伟大的征服者，后人称您为'大帝'。",
+          "consequence": "亚历山大露出骄傲的微笑",
+          "timeline_change": false,
+          "next_round": 2,
+          "mood": "agree"
+        },
+        {
+          "choice_id": "c",
+          "text": "征服虽然伟大，但无数人为此付出了生命。",
+          "consequence": "亚历山大表情变得凝重",
+          "timeline_change": false,
+          "next_round": 2,
+          "mood": "disagree"
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "narrative_thoughtful": "亚历山大站起身来，走到帐篷口望着远方：「英年早逝……我一直在想，时间是不是我最大的敌人。我还有太多地方没有征服，太多梦想没有实现。」",
+      "narrative_agree": "亚历山大拍了拍手中的佩剑：「大帝？我喜欢这个称号。但我征服的不是为了名号——我是为了追寻荷马史诗中阿喀琉斯的荣光！」",
+      "narrative_disagree": "亚历山大皱起眉头：「生命？战争总是要流血的。但我的征服不仅仅是杀戮——我要把希腊文明带到世界的每一个角落。」",
+      "narrative_default": "亚历山大注视着你：「你的话很有意思。如果你能给我一个忠告，你会说什么？」",
+      "choices": [
+        {
+          "choice_id": "a",
+          "text": "陛下应该注意身体健康，不要过度操劳。",
+          "consequence": "亚历山大若有所思",
+          "timeline_change": true,
+          "next_round": 3,
+          "mood": "thoughtful"
+        },
+        {
+          "choice_id": "b",
+          "text": "请为帝国培养合格的继承人。",
+          "consequence": "亚历山大叹了口气",
+          "timeline_change": true,
+          "next_round": 3,
+          "mood": "thoughtful"
+        },
+        {
+          "choice_id": "c",
+          "text": "征服之路自有天意，陛下顺其自然即可。",
+          "consequence": "亚历山大微微点头",
+          "timeline_change": false,
+          "next_round": 3,
+          "mood": "agree"
+        }
+      ]
+    },
+    {
+      "round": 3,
+      "narrative_agree": "亚历山大摸了摸额头：「身体……最近确实经常发烧。你说得对，我应该更注意。但东方还有太多土地等着我去征服。」\n\n时空开始扭曲，营帐的灯火渐渐模糊……",
+      "narrative_disagree": "亚历山大望着远方：「继承人……我还没有子嗣。你说得对，我需要为帝国的未来做打算。」\n\n时空开始扭曲，战鼓声渐渐远去……",
+      "narrative_default": "亚历山大最后说道：「无论命运如何，我亚历山大绝不会停下脚步。如果生命只有一次，那就让它燃烧到最亮！」\n\n你感到时空的洪流将你带回了未来……",
+      "choices": []
+    }
+  ],
+  "endings": {
+    "historical": "【历史定论】亚历山大在32岁时病逝于巴比伦，庞大的帝国随即分裂为三个继业者王国。但他的东征开启了希腊化时代，东西方文明在征服与被征服中实现了前所未有的融合。",
+    "altered": "【平行时间线】亚历山大听取了你的忠告，注意身体健康并培养了继承人。他的帝国得以延续更久，希腊化时代的文明交融达到了前所未有的高度……"
+  },
+  "keyword_responses": [
+    [
+      [
+        "帝国",
+        "征服",
+        "东方"
+      ],
+      "亚历山大兴奋地说：「东方！波斯、印度……我一定要打到世界的尽头！」"
+    ],
+    [
+      [
+        "希腊",
+        "文明",
+        "文化"
+      ],
+      "亚历山大自豪地说：「希腊文明是世界上最伟大的文明！我要让它传遍全世界。」"
+    ],
+    [
+      [
+        "死亡",
+        "命运",
+        "寿命"
+      ],
+      "亚历山大沉默了一瞬：「死亡……我不怕死，但我怕死前还有太多事没做完。」"
+    ],
+    [
+      [
+        "继承",
+        "后继",
+        "帝国分裂"
+      ],
+      "亚历山大叹息：「我的将军们……他们各怀心思。如果我不在了，帝国恐怕会分裂。」"
+    ]
+  ],
+  "default_response": "亚历山大好奇地看着你：「你的话有些我听不懂。但没关系——我亚历山大对一切未知的事物都充满好奇！」",
+  "post_responses": [
+    [
+      [
+        "你好",
+        "在吗",
+        "还在"
+      ],
+      "营帐的灯火在时空的尽头闪烁：「征服虽然结束了，但我亚历山大的传说永远不会停息。」"
+    ],
+    [
+      [
+        "谢谢",
+        "感谢",
+        "再见"
+      ],
+      "战鼓声在远方回荡：「愿阿喀琉斯的荣光与你同在，时空旅人。」"
+    ],
+    [
+      [
+        "改变",
+        "帝国",
+        "命运"
+      ],
+      "时空的裂隙中传来亚历山大的声音：「你的话语在我的帝国中激起了不同的回响。也许在另一条时间线上，我活过了32岁。」"
+    ]
+  ],
+  "post_default": "亚历山大的声音从远方传来：「命运不可改变，但你的勇气令人敬佩。也许在另一个宇宙中，我们会再次相遇。」"
+}

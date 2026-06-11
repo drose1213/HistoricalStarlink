@@ -85,7 +85,9 @@ export default {
     eventsButton: 'Events',
     logout: 'Sign out',
     welcome: 'Welcome to Historical Starlink!',
-    backHome: 'Back to home'
+    backHome: 'Back to home',
+    upgrade: 'Upgrade',
+    upgradeAlert: 'Membership feature is coming soon. Stay tuned.'
   },
 
   champions: {
@@ -670,6 +672,9 @@ export default {
     choiceLabel: '◆ Make your choice',
     placeholderEnded: 'Talk with the historical figure in epilogue...',
     placeholderActive: 'Type anything you want...',
+    share: 'Share with friends',
+    shareCopied: 'Copied ✓',
+    shareManualCopy: 'Please copy this link manually:',
     npc: {
       shangyang_reform: { name: 'Shang Yang', role: 'Qin Lord Chancellor · Reformer' },
       qin_unification: { name: 'Qin Shi Huang', role: 'First Emperor · Lord of All Under Heaven' },

@@ -25,6 +25,7 @@ class Base(DeclarativeBase):
 
 
 from . import models  # noqa: F401,E402  触发所有 Model 类的注册，使 Base.metadata.create_all 生效
+from .models.analytics import AnalyticsEvent  # noqa: F401,E402  确保埋点表被 Base.metadata 发现
 
 
 _db_url = settings.DATABASE_URL

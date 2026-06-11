@@ -1,9 +1,10 @@
-import { createApp } from 'vue'
+import { createApp, nextTick } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import { useAppStore } from './stores/app'
 import { loadEvents } from './data/events'
+import { trackEventIfEnabled } from './utils/analytics'
 import './styles/global.css'
 
 async function bootstrap() {
@@ -20,6 +21,17 @@ async function bootstrap() {
   appStore.setLocale(appStore.locale)
 
   app.mount('#app')
+
+  // app_enter 埋点: 用 nextTick 异步触发, 不阻塞应用启动
+  // 走 trackEventIfEnabled 包装, 支持 ?analytics=off 关闭 (演示用)
+  nextTick(() => {
+    trackEventIfEnabled('app_enter', {
+      user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+      referrer: typeof document !== 'undefined' ? document.referrer : '',
+      url: typeof window !== 'undefined' ? window.location.href : '',
+      path: typeof window !== 'undefined' ? window.location.pathname : '',
+    })
+  })
 }
 
 bootstrap()
