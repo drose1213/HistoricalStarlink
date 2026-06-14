@@ -672,9 +672,9 @@ def _build_persona_prompt(persona: dict, context_text: str = "") -> str:
     speaking = persona.get("speaking_pattern", "吾")
     desc = persona.get("description", "")
 
-    context_section = context_text if context_text else "（暂无相关历史资料, 请基于你的历史知识回答）"
+    context_section = context_text if context_text else ""
 
-    return (
+    instructions = (
         f"你是【{name}】, {role}, {era}。\n\n"
         f"【角色设定】\n"
         f"- 你自称「{speaking}」\n"
@@ -683,10 +683,26 @@ def _build_persona_prompt(persona: dict, context_text: str = "") -> str:
         f"- 回答控制在300 字以内, 不要使用现代网络用语\n\n"
         f"【人物背景】\n"
         f"{desc}\n\n"
-        f"【可用历史资料】\n"
-        f"{context_section}\n\n"
-        f"请以{name}的身份,回答时空旅人的问题。"
     )
+
+    if context_section:
+        instructions += (
+            f"【参考资料】\n"
+            f"{context_section}\n\n"
+            f"【回答规则】\n"
+            f"- 如果参考资料与用户问题相关, 请优先引用参考资料进行回答\n"
+            f"- 如果参考资料与用户问题无关或不足, 请凭自身的历史知识回答, 不要提及\"根据资料\"\n"
+            f"- 只有在确实引用了参考资料时, 才可以说\"据吾所知\"等类似的措辞\n\n"
+        )
+    else:
+        instructions += (
+            f"【回答规则】\n"
+            f"- 当前暂无参考资料, 请完全凭你作为{name}的历史知识和视角回答\n"
+            f"- 不要提及\"根据资料\"或\"根据史料\"等措辞\n\n"
+        )
+
+    instructions += f"请以{name}的身份,回答时空旅人的问题。"
+    return instructions
 
 
 def _generate_default_greeting(name: str, role: str) -> str:

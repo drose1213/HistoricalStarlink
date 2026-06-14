@@ -313,8 +313,17 @@ async def login(
     req: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    # 标准化输入: trim + 邮箱小写匹配, 与 register 保持一致
+    login_id = req.username.strip()
+    login_id_lower = login_id.lower()
+
     stmt = select(User).where(
-        or_(User.username == req.username, User.email == req.username)
+        or_(
+            User.username == login_id,
+            User.username == login_id_lower,
+            User.email == login_id,
+            User.email == login_id_lower,
+        )
     )
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()

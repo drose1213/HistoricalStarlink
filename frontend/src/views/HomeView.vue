@@ -3,7 +3,10 @@
     <header class="app-header">
       <div class="logo">
         <span class="logo-icon" aria-hidden="true"></span>
-        <h1>{{ t('home.title') }}</h1>
+        <div class="logo-text">
+          <h1>{{ t('home.title') }}</h1>
+          <span class="logo-subtitle">Starlink · 史河之链</span>
+        </div>
       </div>
 
       <nav class="page-nav" :aria-label="t('nav.home')">
@@ -113,6 +116,26 @@
             </div>
           </div>
         </Transition>
+
+        <!-- 角色穿越中全屏遮罩 -->
+        <Transition name="hero-fade">
+          <div v-if="freeExploreLoading" class="traversing-overlay">
+            <div class="traversing-content">
+              <div class="traversing-spinner"></div>
+              <div class="traversing-hero" v-if="selectedHeroName">
+                <span class="traversing-symbol">✦</span>
+              </div>
+              <h2 class="traversing-title">时空穿越中</h2>
+              <p class="traversing-hint">
+                <template v-if="selectedHeroName">正在连接「{{ selectedHeroName }}」...</template>
+                <template v-else>正在开启时空对话...</template>
+              </p>
+              <div class="traversing-progress">
+                <div class="traversing-progress-bar"></div>
+              </div>
+            </div>
+          </div>
+        </Transition>
       </div>
 
       <a
@@ -193,10 +216,15 @@
             </div>
           </div>
           <div class="drawer-list">
+            <div class="drawer-section-label" v-if="homeFeed.explored.length > 0 && homeFeed.recommended.length > 0">
+              <span class="section-dot section-dot--cyan" aria-hidden="true"></span>
+              <span>已探索 · {{ homeFeed.explored_total }}</span>
+            </div>
             <div
-              v-for="event in filteredEvents"
+              v-for="event in homeFeed.explored"
               :key="event.id"
               class="drawer-item"
+              :data-importance="event.importance"
               @click="goToEvent(event.id); drawerOpen = false"
             >
               <div class="drawer-item-left">
@@ -212,6 +240,62 @@
                 </span>
                 <span class="drawer-item-score">{{ event.importance }}/10</span>
               </div>
+            </div>
+            <div class="drawer-section-label" v-if="homeFeed.explored.length > 0 && homeFeed.recommended.length > 0">
+              <span class="section-dot section-dot--gold" aria-hidden="true"></span>
+              <span>为你推荐 · {{ homeFeed.recommended_total }}</span>
+            </div>
+            <div
+              v-for="event in homeFeed.recommended"
+              :key="event.id"
+              class="drawer-item"
+              :data-importance="event.importance"
+              @click="goToEvent(event.id); drawerOpen = false"
+            >
+              <div class="drawer-item-left">
+                <span class="drawer-dot" :class="`drawer-dot--${event.region}`"></span>
+                <div class="drawer-item-info">
+                  <span class="drawer-item-name">{{ event.name }}</span>
+                  <span class="drawer-item-year">{{ formatEventYear(event.year) }}</span>
+                </div>
+              </div>
+              <div class="drawer-item-right">
+                <span class="drawer-item-region" :class="`drawer-item-region--${event.region}`">
+                  {{ event.region === 'china' ? t('home.regionChina') : t('home.regionForeign') }}
+                </span>
+                <span class="drawer-item-score">{{ event.importance }}/10</span>
+              </div>
+            </div>
+            <!-- 兜底: 既无探索也无推荐时, 展示全量事件 (按 filter 过滤) -->
+            <div
+              v-if="homeFeed.explored.length === 0 && homeFeed.recommended.length === 0"
+              class="drawer-fallback"
+            >
+              <div
+                v-for="event in historyEvents"
+                :key="event.id"
+                class="drawer-item"
+                :data-importance="event.importance"
+                @click="goToEvent(event.id); drawerOpen = false"
+              >
+                <div class="drawer-item-left">
+                  <span class="drawer-dot" :class="`drawer-dot--${event.region}`"></span>
+                  <div class="drawer-item-info">
+                    <span class="drawer-item-name">{{ event.name }}</span>
+                    <span class="drawer-item-year">{{ formatEventYear(event.year) }}</span>
+                  </div>
+                </div>
+                <div class="drawer-item-right">
+                  <span class="drawer-item-region" :class="`drawer-item-region--${event.region}`">
+                    {{ event.region === 'china' ? t('home.regionChina') : t('home.regionForeign') }}
+                  </span>
+                  <span class="drawer-item-score">{{ event.importance }}/10</span>
+                </div>
+              </div>
+            </div>
+            <div v-if="homeFeed.explored.length === 0 && homeFeed.recommended.length === 0 && historyEvents.length === 0" class="drawer-empty">
+              <span class="empty-glyph" aria-hidden="true">◇</span>
+              <p>正在连接星图…</p>
             </div>
           </div>
         </div>
@@ -267,6 +351,7 @@ const freeExploreError = ref('')
 // 英雄卡牌选人
 const showHeroSelection = ref(false)
 const currentExploreTopic = ref('')
+const selectedHeroName = ref('')
 let searchLoadingTimer: ReturnType<typeof setTimeout> | null = null
 let searchAbortTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -505,6 +590,11 @@ async function handleFreeExplore() {
     freeExploreError.value = '请输入话题'
     return
   }
+  // 未登录需先登录
+  if (!authStore.isLoggedIn) {
+    router.push({ name: 'Login', query: { redirect: '/' } })
+    return
+  }
   // 先展示英雄卡牌选人界面, 用户选择后再启动 dynamic 对话
   currentExploreTopic.value = topic
   showHeroSelection.value = true
@@ -517,6 +607,7 @@ function navigateToDialogue(topic: string) {
 
 async function onHeroSelect(hero: HeroPersona) {
   showHeroSelection.value = false
+  selectedHeroName.value = hero.name
   freeExploreLoading.value = true
   freeExploreError.value = ''
   try {
@@ -526,11 +617,13 @@ async function onHeroSelect(hero: HeroPersona) {
     freeExploreError.value = err?.message || '开启时空对话失败, 请稍后重试'
   } finally {
     freeExploreLoading.value = false
+    selectedHeroName.value = ''
   }
 }
 
 async function onHeroSkip() {
   showHeroSelection.value = false
+  selectedHeroName.value = ''
   freeExploreLoading.value = true
   freeExploreError.value = ''
   try {
@@ -578,6 +671,18 @@ onBeforeUnmount(() => {
 })
 </script>
 
+/* ============================================================
+ * 时空探索首页 · 布局优化要点 (v2)
+ * ------------------------------------------------------------
+ * 1) 顶层使用 CSS Grid 网格,Logo / Nav / User 三段式对齐
+ * 2) 抽屉触发器右移,避开主图左侧星点密集区
+ * 3) 自由探索面板加最大宽 / 触摸区,签名签条移到右侧
+ * 4) 断点 1200 / 1024 / 768 / 480 四级响应式
+ * 5) 抽屉事件按 importance 视觉分级, 顶部加分区标签
+ * 6) 全局 focus-visible 焦点环 + 减少动效适配
+ * 7) 顶部 brand 增加副标题, 抽屉项增加 importance 热度条
+ * 8) 自由探索面板加时空主题的扫描线/光晕装饰
+ * ============================================================ */
 <style scoped>
 .home-view {
   width: 100%;
@@ -588,18 +693,79 @@ onBeforeUnmount(() => {
   background: #02050b;
 }
 
+/* ---------- 0) 全局焦点环 + 减少动效适配 ---------- */
+.home-view :focus { outline: none; }
+.home-view :focus-visible {
+  outline: 2px solid rgba(139, 255, 225, 0.95);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(139, 255, 225, 0.18);
+  border-radius: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-view,
+  .home-view *,
+  .home-view *::before,
+  .home-view *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ---------- 0.b) 环境装饰层: 顶部扫描线 + 角落光晕 ---------- */
+.home-view::before,
+.home-view::after {
+  content: '';
+  position: fixed;
+  pointer-events: none;
+  z-index: 1;
+}
+.home-view::before {
+  /* 横向扫描线 */
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(139, 255, 225, 0.4) 50%, transparent 100%);
+  animation: homeScan 12s linear infinite;
+  opacity: 0.5;
+}
+@keyframes homeScan {
+  0%   { transform: translateY(0); opacity: 0; }
+  5%   { opacity: 0.6; }
+  95%  { opacity: 0.6; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+.home-view::after {
+  /* 右下角柔和光晕 */
+  right: -120px;
+  bottom: -120px;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 53, 243, 0.08) 0%, transparent 70%);
+  filter: blur(8px);
+  animation: cornerBreathe 8s ease-in-out infinite;
+}
+@keyframes cornerBreathe {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50%      { opacity: 0.9; transform: scale(1.08); }
+}
+
+/* ---------- 1) 顶部导航栏: Grid 三栏式, 不再换行 ---------- */
 .app-header {
   position: fixed;
   top: 18px;
   left: 24px;
   right: 24px;
   z-index: var(--z-header);
-  min-height: 48px;
-  display: flex;
-  flex-wrap: wrap;
+  min-height: 52px;
+  display: grid;
+  /* 左侧 logo / 中间 nav / 右侧 user */
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 14px;
-  padding: 10px 14px;
+  column-gap: clamp(12px, 1.6vw, 24px);
+  padding: 10px clamp(14px, 1.8vw, 22px);
   background: rgba(2, 5, 11, 0.5);
   border: 1px solid rgba(139, 255, 225, 0.78);
   border-radius: 8px;
@@ -610,7 +776,7 @@ onBeforeUnmount(() => {
 .logo {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -623,6 +789,27 @@ onBeforeUnmount(() => {
   background: #8bffe1;
   box-shadow: 0 0 16px rgba(139, 255, 225, 0.95);
   flex: 0 0 auto;
+  position: relative;
+}
+
+/* logo 图标双层光晕: 内核 + 外圈 */
+.logo-icon::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid rgba(139, 255, 225, 0.35);
+  animation: logoOrbit 4s linear infinite;
+}
+@keyframes logoOrbit {
+  to { transform: rotate(360deg); }
+}
+
+.logo-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
 }
 
 .logo h1 {
@@ -631,9 +818,21 @@ onBeforeUnmount(() => {
   font-size: 14px;
   font-weight: 800;
   color: #f3fff9;
-  letter-spacing: 0;
+  letter-spacing: 0.04em;
   white-space: nowrap;
   text-shadow: 0 0 18px rgba(139, 255, 225, 0.34);
+  line-height: 1.1;
+}
+
+.logo-subtitle {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  color: rgba(139, 255, 225, 0.55);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  line-height: 1;
 }
 
 .filter-nav,
@@ -686,10 +885,16 @@ onBeforeUnmount(() => {
   position: relative;
   justify-self: end;
   min-width: 0;
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* 让 nav 居中, 避免被 user 挤到 */
+.page-nav {
+  justify-self: center;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .upgrade-btn {
@@ -905,10 +1110,12 @@ onBeforeUnmount(() => {
 
 .cosmic-overlay {
   position: absolute;
-  left: clamp(28px, 7vw, 104px);
-  bottom: clamp(72px, 13vh, 142px);
+  left: 50%;
+  top: clamp(80px, 14vh, 140px);
+  transform: translateX(-50%);
   z-index: 20;
-  width: min(440px, calc(100vw - 56px));
+  width: min(720px, calc(100vw - 56px));
+  text-align: center;
   pointer-events: none;
 }
 
@@ -948,32 +1155,59 @@ onBeforeUnmount(() => {
 
 .free-explore-panel {
   position: fixed;
-  right: clamp(20px, 4vw, 60px);
-  bottom: clamp(80px, 12vh, 140px);
+  left: 50%;
+  bottom: clamp(28px, 5vh, 56px);
+  transform: translateX(-50%);
   z-index: 25;
-  width: min(380px, calc(100vw - 40px));
+  /* 桌面端上限 720, 中等屏收紧到 560, 留出 56px 边距 */
+  width: min(720px, calc(100vw - 56px));
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 16px 18px;
-  background: rgba(2, 6, 13, 0.7);
-  border: 1px solid rgba(139, 255, 225, 0.42);
-  border-radius: 6px;
-  backdrop-filter: blur(14px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  gap: 12px;
+  padding: 18px 22px;
+  background:
+    linear-gradient(180deg, rgba(2, 6, 13, 0.84), rgba(2, 6, 13, 0.6)),
+    radial-gradient(circle at 0% 0%, rgba(139, 255, 225, 0.06), transparent 40%),
+    radial-gradient(circle at 100% 100%, rgba(255, 53, 243, 0.05), transparent 40%);
+  border: 1px solid rgba(139, 255, 225, 0.55);
+  border-radius: 10px;
+  backdrop-filter: blur(16px);
+  box-shadow:
+    0 16px 56px rgba(0, 0, 0, 0.5),
+    0 0 24px rgba(139, 255, 225, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   pointer-events: auto;
+  overflow: hidden;
+}
+
+/* 顶部 1px 扫描线, 增强"时空"主题感 */
+.free-explore-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(139, 255, 225, 0.7), transparent);
+  pointer-events: none;
+  animation: panelScan 3.6s ease-in-out infinite;
+}
+@keyframes panelScan {
+  0%, 100% { opacity: 0.4; transform: translateX(0); }
+  50% { opacity: 1; transform: translateX(2%); }
 }
 
 .free-explore-title {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   color: rgba(238, 249, 255, 0.86);
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.1em;
-  text-shadow: 0 0 12px rgba(139, 255, 225, 0.18);
+  letter-spacing: 0.18em;
+  text-shadow: 0 0 12px rgba(139, 255, 225, 0.22);
 }
 
 .free-explore-dot {
@@ -987,20 +1221,20 @@ onBeforeUnmount(() => {
 
 .free-explore-form {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: stretch;
 }
 
 .free-explore-input {
   flex: 1;
   min-width: 0;
-  height: 36px;
-  padding: 0 12px;
+  height: 42px;
+  padding: 0 16px;
   background: rgba(2, 5, 11, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 6px;
   color: #ffffff;
-  font-size: 12px;
+  font-size: 13px;
   outline: none;
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
@@ -1010,8 +1244,8 @@ onBeforeUnmount(() => {
 }
 
 .free-explore-input:focus {
-  border-color: rgba(139, 255, 225, 0.8);
-  box-shadow: 0 0 14px rgba(139, 255, 225, 0.16);
+  border-color: rgba(139, 255, 225, 0.85);
+  box-shadow: 0 0 18px rgba(139, 255, 225, 0.18);
 }
 
 .free-explore-input:disabled {
@@ -1021,24 +1255,30 @@ onBeforeUnmount(() => {
 
 .free-explore-btn {
   flex: 0 0 auto;
-  height: 36px;
-  padding: 0 16px;
-  background: linear-gradient(180deg, rgba(139, 255, 225, 0.24), rgba(139, 255, 225, 0.08));
-  border: 1px solid rgba(139, 255, 225, 0.78);
-  border-radius: 4px;
+  height: 42px;
+  padding: 0 22px;
+  background: linear-gradient(180deg, rgba(139, 255, 225, 0.30), rgba(139, 255, 225, 0.10));
+  border: 1px solid rgba(139, 255, 225, 0.85);
+  border-radius: 6px;
   color: #dffff6;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   cursor: pointer;
   transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  white-space: nowrap;
 }
 
 .free-explore-btn:hover:not(:disabled) {
-  background: linear-gradient(180deg, rgba(139, 255, 225, 0.36), rgba(139, 255, 225, 0.14));
-  box-shadow: 0 0 18px rgba(139, 255, 225, 0.28);
+  background: linear-gradient(180deg, rgba(139, 255, 225, 0.42), rgba(139, 255, 225, 0.18));
+  box-shadow: 0 0 22px rgba(139, 255, 225, 0.32);
   transform: translateY(-1px);
+}
+
+.free-explore-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 0 12px rgba(139, 255, 225, 0.4), inset 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .free-explore-btn:disabled {
@@ -1048,7 +1288,8 @@ onBeforeUnmount(() => {
 
 .free-explore-error {
   color: #ff8a4d;
-  font-size: 11px;
+  font-size: 12px;
+  text-align: center;
   text-shadow: 0 0 6px rgba(255, 138, 77, 0.3);
 }
 
@@ -1080,6 +1321,97 @@ onBeforeUnmount(() => {
   opacity: 0;
 }
 
+/* 角色穿越中全屏遮罩 */
+.traversing-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-modal, 100) + 10);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 5, 11, 0.92);
+  backdrop-filter: blur(16px);
+  cursor: not-allowed;
+}
+
+.traversing-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  text-align: center;
+  animation: traversingPulse 2s ease-in-out infinite;
+}
+
+.traversing-spinner {
+  width: 60px;
+  height: 60px;
+  border: 3px solid rgba(139, 255, 225, 0.15);
+  border-top-color: #8bffe1;
+  border-radius: 50%;
+  animation: cosmic-spin 1s linear infinite;
+  box-shadow: 0 0 30px rgba(139, 255, 225, 0.3);
+}
+
+.traversing-hero {
+  margin-top: -10px;
+}
+
+.traversing-symbol {
+  font-size: 2.5rem;
+  color: #8bffe1;
+  text-shadow: 0 0 30px rgba(139, 255, 225, 0.8), 0 0 60px rgba(139, 255, 225, 0.4);
+  animation: traversingGlow 1.5s ease-in-out infinite alternate;
+}
+
+.traversing-title {
+  margin: 0;
+  color: #ffffff;
+  font-family: var(--font-serif);
+  font-size: clamp(24px, 4vw, 36px);
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  text-shadow: 0 0 20px rgba(139, 255, 225, 0.5), 0 2px 16px rgba(0, 0, 0, 0.6);
+}
+
+.traversing-hint {
+  margin: 0;
+  color: rgba(139, 255, 225, 0.8);
+  font-size: 14px;
+  letter-spacing: 0.1em;
+}
+
+.traversing-progress {
+  width: 200px;
+  height: 3px;
+  background: rgba(139, 255, 225, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.traversing-progress-bar {
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, #8bffe1, transparent);
+  border-radius: 2px;
+  animation: traversingSlide 1.2s ease-in-out infinite;
+}
+
+@keyframes traversingPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+
+@keyframes traversingGlow {
+  from { text-shadow: 0 0 20px rgba(139, 255, 225, 0.6), 0 0 40px rgba(139, 255, 225, 0.3); }
+  to { text-shadow: 0 0 40px rgba(139, 255, 225, 1), 0 0 80px rgba(139, 255, 225, 0.5); }
+}
+
+@keyframes traversingSlide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
 @media (max-width: 680px) {
   .free-explore-panel {
     right: 12px;
@@ -1094,7 +1426,8 @@ onBeforeUnmount(() => {
 }
 
 .hero-copy {
-  width: min(420px, 100%);
+  width: min(560px, 100%);
+  margin: 0 auto;
 }
 
 .cosmic-title {
@@ -1105,15 +1438,17 @@ onBeforeUnmount(() => {
   font-weight: 900;
   line-height: 1.04;
   letter-spacing: 0;
+  text-align: center;
   text-shadow: 0 0 18px rgba(65, 166, 255, 0.32), 0 2px 16px rgba(0, 0, 0, 0.76);
 }
 
 .cosmic-subtitle {
-  width: min(360px, 100%);
-  margin: 0;
-  color: rgba(226, 246, 255, 0.76);
+  width: min(440px, 100%);
+  margin: 0 auto;
+  color: rgba(226, 246, 255, 0.78);
   font-size: 14px;
   line-height: 1.7;
+  text-align: center;
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.72);
 }
 
@@ -1279,54 +1614,56 @@ onBeforeUnmount(() => {
 }
 
 .deerflow-signature {
+  /* 由底部居中改为右侧, 避免和探索面板重叠 */
   position: fixed;
-  right: 18px;
-  bottom: 14px;
+  right: 16px;
+  bottom: 8px;
   z-index: 30;
-  padding: 5px 8px;
-  color: rgba(238, 249, 255, 0.38);
-  background: rgba(2, 5, 11, 0.36);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
+  padding: 4px 8px;
+  color: rgba(238, 249, 255, 0.32);
+  background: transparent;
+  border: 0;
   font-size: 10px;
-  letter-spacing: 0;
+  letter-spacing: 0.05em;
   text-decoration: none;
-  backdrop-filter: blur(8px);
-  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  transition: color 0.18s ease;
 }
 
 .deerflow-signature:hover {
-  color: rgba(255, 255, 255, 0.78);
-  background: rgba(139, 255, 225, 0.06);
-  border-color: rgba(139, 255, 225, 0.3);
-  text-shadow: none;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .drawer-trigger {
+  /* 离开屏幕左边 6px, 不再贴 0; 仍保持纵向居中 */
   position: fixed;
-  left: 0;
-  top: 90px;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
   z-index: var(--z-header);
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 9px;
+  padding: 16px 8px;
   color: #8bffe1;
-  background: rgba(2, 5, 11, 0.7);
+  background: linear-gradient(180deg, rgba(2, 5, 11, 0.78), rgba(2, 5, 11, 0.62));
   border: 1px solid rgba(139, 255, 225, 0.56);
   border-left: 0;
-  border-radius: 0 6px 6px 0;
-  box-shadow: 0 0 20px rgba(139, 255, 225, 0.08);
-  transition: left 0.28s ease, background 0.18s ease;
+  border-radius: 0 8px 8px 0;
+  box-shadow: 0 0 24px rgba(139, 255, 225, 0.12), inset 1px 0 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(10px);
+  transition: left 0.28s ease, background 0.18s ease, box-shadow 0.18s ease;
   writing-mode: vertical-rl;
+  font-family: var(--font-mono);
+  font-weight: 600;
 }
 
 .drawer-trigger:hover {
-  background: rgba(139, 255, 225, 0.1);
+  background: linear-gradient(180deg, rgba(139, 255, 225, 0.18), rgba(139, 255, 225, 0.06));
+  box-shadow: 0 0 30px rgba(139, 255, 225, 0.24), inset 1px 0 0 rgba(255, 255, 255, 0.1);
 }
 
 .drawer-trigger.open {
-  left: 306px;
+  left: calc(320px + 6px);
 }
 
 .trigger-icon {
@@ -1342,15 +1679,17 @@ onBeforeUnmount(() => {
 .event-drawer {
   position: fixed;
   left: 0;
-  top: 90px;
+  top: 80px;
   bottom: 0;
   z-index: calc(var(--z-header) - 1);
-  width: 306px;
+  width: 320px;
   display: flex;
   flex-direction: column;
-  background: rgba(2, 6, 13, 0.72);
+  background:
+    linear-gradient(180deg, rgba(2, 6, 13, 0.86), rgba(2, 6, 13, 0.72)),
+    radial-gradient(circle at 0% 0%, rgba(139, 255, 225, 0.08), transparent 40%);
   border-right: 1px solid rgba(139, 255, 225, 0.44);
-  box-shadow: 12px 0 42px rgba(0, 0, 0, 0.35);
+  box-shadow: 12px 0 42px rgba(0, 0, 0, 0.45), inset -1px 0 0 rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(18px);
 }
 
@@ -1388,22 +1727,117 @@ onBeforeUnmount(() => {
   flex: 1;
   overflow-y: auto;
   padding: 10px 0;
+  position: relative;
+  /* 顶部 + 底部柔化遮罩, 提示可滚动 */
+  mask-image: linear-gradient(180deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 255, 225, 0.4) transparent;
+}
+
+/* 自定义滚动条: Webkit */
+.drawer-list::-webkit-scrollbar { width: 4px; }
+.drawer-list::-webkit-scrollbar-track { background: transparent; }
+.drawer-list::-webkit-scrollbar-thumb {
+  background: rgba(139, 255, 225, 0.35);
+  border-radius: 2px;
+}
+.drawer-list::-webkit-scrollbar-thumb:hover { background: rgba(139, 255, 225, 0.6); }
+
+/* 分区标签: sticky 顶部, 玻璃质感 */
+.drawer-section-label {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px 8px 22px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(238, 249, 255, 0.55);
+  background: linear-gradient(180deg, rgba(2, 6, 13, 0.96), rgba(2, 6, 13, 0.7));
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(6px);
+}
+.section-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.section-dot--cyan { background: #8bffe1; box-shadow: 0 0 8px rgba(139, 255, 225, 0.7); }
+.section-dot--gold { background: #d4a84b; box-shadow: 0 0 8px rgba(212, 168, 75, 0.6); }
+
+/* 空状态 */
+.drawer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px 16px;
+  color: rgba(238, 249, 255, 0.42);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+}
+.empty-glyph {
+  font-size: 36px;
+  color: rgba(139, 255, 225, 0.5);
+  text-shadow: 0 0 16px rgba(139, 255, 225, 0.4);
+  animation: emptyPulse 2.4s ease-in-out infinite;
+}
+@keyframes emptyPulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
 }
 
 .drawer-item {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 11px 18px;
+  padding: 11px 18px 11px 22px;
   border-left: 2px solid transparent;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
+
+/* 重要性热度条: 左侧 2px 颜色 + 透明度按 importance 1-10 线性插值 */
+.drawer-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: linear-gradient(180deg, rgba(139, 255, 225, 0.85), rgba(139, 255, 225, 0.25));
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.drawer-item[data-importance="9"]::before,
+.drawer-item[data-importance="10"]::before { opacity: 1; }
+.drawer-item[data-importance="7"]::before,
+.drawer-item[data-importance="8"]::before { opacity: 0.7; }
+.drawer-item[data-importance="5"]::before,
+.drawer-item[data-importance="6"]::before { opacity: 0.45; }
+.drawer-item[data-importance="3"]::before,
+.drawer-item[data-importance="4"]::before { opacity: 0.25; }
+.drawer-item[data-importance="1"]::before,
+.drawer-item[data-importance="2"]::before { opacity: 0.12; }
 
 .drawer-item:hover {
   background: rgba(139, 255, 225, 0.07);
   border-left-color: #8bffe1;
+  transform: translateX(2px);
+}
+
+.drawer-item:active {
+  transform: translateX(2px) scale(0.99);
 }
 
 .drawer-item-left,
@@ -1505,74 +1939,179 @@ onBeforeUnmount(() => {
   transform: translateY(-6px);
 }
 
+/* ============================================================
+ * 响应式断点
+ * 1200: 平板横屏, nav 缩短
+ * 1024: 中等屏幕, 探索面板收紧
+ * 768:  平板竖屏 / 手机横屏
+ * 480:  手机竖屏, 抽屉全屏化
+ * ============================================================ */
+
+/* 1200 横向平板: 收紧内边距 */
+@media (max-width: 1200px) {
+  .app-header {
+    top: 14px;
+    left: 16px;
+    right: 16px;
+    column-gap: 10px;
+    padding: 8px 14px;
+  }
+
+  .free-explore-panel {
+    width: min(560px, calc(100vw - 48px));
+    padding: 16px 18px;
+  }
+}
+
+/* 1024 中等屏幕: 探索面板让出更多空间给星图 */
+@media (max-width: 1024px) {
+  .free-explore-panel {
+    bottom: clamp(20px, 4vh, 40px);
+    padding: 14px 16px;
+  }
+
+  .free-explore-form {
+    gap: 8px;
+  }
+
+  .event-drawer {
+    width: 300px;
+    top: 76px; /* 同步缩短顶部偏移 */
+  }
+
+  .drawer-trigger.open {
+    left: calc(300px + 6px);
+  }
+}
+
+/* 1200 横向平板: 抽屉从 80px 缩到 76px 偏移, 与导航栏下沿对齐 */
+@media (max-width: 1200px) {
+  .event-drawer { top: 76px; }
+}
+
+/* 900 兼容原断点: nav 折行布局, 不再水平挤一行 */
 @media (max-width: 900px) {
   .app-header {
     grid-template-columns: 1fr auto;
-    gap: 10px;
-  }
-
-  .filter-nav {
-    order: 3;
-    grid-column: 1 / -1;
-    justify-content: flex-start;
+    row-gap: 10px;
   }
 
   .page-nav {
-    justify-self: end;
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    order: 3;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    flex-wrap: nowrap;
   }
 
   .user-area {
     order: 2;
   }
-
-  .locale-area {
-    order: 1;
-    margin-left: 0;
-  }
 }
 
-@media (max-width: 680px) {
+/* 768 平板竖屏: 全宽组件 */
+@media (max-width: 768px) {
   .app-header {
-    top: 10px;
-    left: 10px;
-    right: 10px;
-    grid-template-columns: 1fr;
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    padding: 8px 12px;
+    min-height: 48px;
   }
 
-  .page-nav,
-  .filter-nav {
-    width: 100%;
-    justify-content: flex-start;
-    overflow-x: auto;
-    padding-bottom: 2px;
+  .logo h1 {
+    font-size: 13px;
   }
 
-  .user-area {
-    justify-self: start;
-  }
-
-  .locale-area {
-    justify-self: end;
-    margin-left: 0;
-  }
-
-  .cosmic-overlay {
-    left: 22px;
-    right: 22px;
-    bottom: 56px;
+  .free-explore-panel {
+    left: 12px;
+    right: 12px;
+    bottom: 20px;
     width: auto;
+    transform: none;
+    padding: 14px 14px;
+    gap: 10px;
   }
 
-  .cosmic-title {
-    font-size: clamp(28px, 11vw, 42px);
-  }
-
-  .drawer-trigger.open {
-    left: min(306px, calc(100vw - 44px));
+  .free-explore-input,
+  .free-explore-btn {
+    height: 44px; /* 触摸目标 44px+ */
+    font-size: 13px;
   }
 
   .event-drawer {
-    width: min(306px, calc(100vw - 44px));
+    width: min(300px, calc(100vw - 56px));
+  }
+
+  .drawer-trigger.open {
+    left: calc(min(300px, calc(100vw - 56px)) + 6px);
+  }
+}
+
+/* 680 兼容原断点: 抽屉紧凑 */
+@media (max-width: 680px) {
+  .event-drawer {
+    width: min(300px, calc(100vw - 56px));
+  }
+}
+
+/* 480 手机竖屏: 抽屉全屏化, 按钮加大 */
+@media (max-width: 480px) {
+  .app-header {
+    grid-template-columns: 1fr;
+    row-gap: 8px;
+  }
+
+  .logo,
+  .user-area {
+    justify-self: stretch;
+  }
+
+  .user-area {
+    flex-wrap: wrap;
+  }
+
+  .free-explore-form {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .free-explore-btn {
+    width: 100%;
+    padding: 0 16px;
+  }
+
+  /* 抽屉全屏, 触发器上移到底部 (从底部 70vh 抽屉上沿伸出) */
+  .drawer-trigger {
+    left: 50%;
+    top: auto;
+    bottom: calc(70vh - 56px);
+    transform: translateX(-50%);
+    writing-mode: horizontal-tb;
+    border-left: 1px solid rgba(139, 255, 225, 0.56);
+    border-radius: 6px 6px 0 0;
+  }
+
+  .drawer-trigger.open {
+    left: 50%;
+    bottom: calc(70vh - 56px);
+  }
+
+  .event-drawer {
+    width: 100vw;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    height: 70vh;
+    border-right: 0;
+    border-top: 1px solid rgba(139, 255, 225, 0.44);
+  }
+
+  .deerflow-signature {
+    /* 小屏仍保持右下角, 但要避开抽屉底部 */
+    right: 12px;
+    bottom: calc(70vh + 8px);
   }
 }
 </style>

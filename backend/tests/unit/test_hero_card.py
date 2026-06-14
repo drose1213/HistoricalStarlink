@@ -106,7 +106,7 @@ class TestPersonaPrompt:
         persona = {"name": "李白", "role": "诗人", "speaking_pattern": "某"}
         prompt = _build_persona_prompt(persona, "")
         assert "李白" in prompt
-        assert "暂无相关历史资料" in prompt
+        assert "暂无参考资料" in prompt
 
 
 @pytest.mark.unit

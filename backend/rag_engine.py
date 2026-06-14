@@ -567,9 +567,15 @@ async def generate_answer(
         context_events: RAG检索到的事件列表
         npc_persona: 英雄 persona (可选), 传入时使用古风沉浸式 prompt
     """
+    # 过滤低相关度结果: score=0 表示无实际匹配, 仅是兜底数据
+    relevant_events = [
+        item for item in context_events
+        if item.get("score", 0) > 0
+    ]
+
     # 构造 context_text (供 persona prompt 使用)
     context_parts = []
-    for item in context_events:
+    for item in relevant_events:
         name = item.get("name", item.get("title", "未知"))
         year = item.get("year")
         year_str = ""
@@ -594,14 +600,24 @@ async def generate_answer(
             except ImportError:
                 system_prompt = _build_persona_prompt_fallback(npc_persona, context_text)
     else:
-        system_prompt = (
-            "你是「历史星链探索」的历史知识助手。请基于提供的历史事件资料回答用户的问题。"
-            "回答要求：准确、有深度、条理清晰，适当分析事件之间的因果关系和历史意义。"
-            "如果提供的资料不足以回答问题，请坦诚说明并基于已有资料给出最相关的分析。"
-            "回答使用中文，长度控制在300字以内。"
-        )
+        has_relevant = bool(context_text.strip())
+        if has_relevant:
+            system_prompt = (
+                "你是「历史星链探索」的历史知识助手。\n\n"
+                "【回答规则】\n"
+                "- 如果参考资料与用户问题相关，请优先引用资料进行回答，做到准确、有深度、条理清晰\n"
+                "- 如果参考资料与用户问题无关或不足，请凭自身历史知识回答，不要说\"根据资料\"\n"
+                "- 适当分析事件之间的因果关系和历史意义\n"
+                "- 回答使用中文，长度控制在300字以内。"
+            )
+        else:
+            system_prompt = (
+                "你是「历史星链探索」的历史知识助手。当前暂无参考资料，请凭自身知识回答。\n"
+                "回答要求：准确、有深度、条理清晰，适当分析事件之间的因果关系和历史意义。\n"
+                "回答使用中文，长度控制在300字以内。"
+            )
 
-    user_message = f"以下是相关的历史事件资料：\n\n{context_text}\n\n用户问题：{query}"
+    user_message = f"以下是检索到的参考资料（可能与问题相关, 也可能不相关）：\n\n{context_text}\n\n用户问题：{query}"
 
     if not MINIMAX_API_KEY:
         return _generate_fallback_answer(query, context_events)
@@ -634,11 +650,20 @@ def _build_persona_prompt_fallback(persona: dict, context_text: str) -> str:
     era = persona.get("era", "")
     speaking = persona.get("speaking_pattern", "吾")
     desc = persona.get("description", "")
-    return (
-        f"你是【{name}】, {role}, {era}。自称「{speaking}」。"
-        f"背景: {desc}。资料: {context_text or '无'}。"
-        f"请以{name}身份用古风语气回答。"
+    instructions = (
+        f"你是【{name}】, {role}, {era}。自称「{speaking}」。\n"
+        f"背景: {desc}。\n"
     )
+    if context_text:
+        instructions += (
+            f"参考资料: {context_text}\n"
+            f"- 如果参考资料与用户问题相关, 请优先引用\n"
+            f"- 如果不相关或不足, 凭自身知识回答, 不要提及\"根据资料\"\n"
+        )
+    else:
+        instructions += f"暂无参考资料, 请凭{name}的历史知识回答。\n"
+    instructions += f"请以{name}身份用古风语气回答。"
+    return instructions
 
 
 def _generate_fallback_answer(query: str, context_events: list[dict]) -> str:
