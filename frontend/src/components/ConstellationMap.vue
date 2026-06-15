@@ -292,6 +292,8 @@ function drawBackground(time: number): void {
   if (!canvas || !ctx) return
 
   ctx.clearRect(0, 0, width, height)
+
+  // ── 深空星云基底 ──
   const core = ctx.createRadialGradient(width * 0.5, height * 0.52, 0, width * 0.5, height * 0.52, Math.max(width, height) * 0.72)
   core.addColorStop(0, props.mode === 'detail' ? 'rgba(255,109,182,0.10)' : 'rgba(255,255,255,0.055)')
   core.addColorStop(0.38, 'rgba(134,255,232,0.035)')
@@ -299,6 +301,12 @@ function drawBackground(time: number): void {
   ctx.fillStyle = core
   ctx.fillRect(0, 0, width, height)
 
+  // ── 赛博朋克六角网格 (仅首页模式) ──
+  if (props.mode === 'home') {
+    drawHexGrid(ctx, time)
+  }
+
+  // ── 星空粒子 ──
   for (const star of bgStars) {
     const flicker = 0.55 + Math.sin(time * star.s + star.phase) * 0.45
     const x = ((star.x + time * star.s * 0.00018) % 1.002) * width
@@ -308,6 +316,81 @@ function drawBackground(time: number): void {
     ctx.fillStyle = rgba(star.color, star.o * flicker)
     ctx.fill()
   }
+
+  // ── CRT 水平扫描线 ──
+  drawScanlines(ctx, time)
+
+  // ── 暗角渐晕 ──
+  drawVignette(ctx)
+}
+
+/** 六角网格 — 赛博朋克标志性背景元素 */
+function drawHexGrid(ctx: CanvasRenderingContext2D, time: number): void {
+  const hexSize = 38
+  const hexH = hexSize * Math.sqrt(3)
+  const cols = Math.ceil(width / (hexSize * 1.5)) + 2
+  const rows = Math.ceil(height / hexH) + 2
+  const drift = time * 0.004
+
+  ctx.lineWidth = 0.35
+  // 微妙的呼吸效果
+  const breathe = 0.028 + Math.sin(time * 0.0004) * 0.012
+  ctx.strokeStyle = `rgba(134,255,232,${breathe})`
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const cx = col * hexSize * 1.5
+      const cy = row * hexH + (col % 2 === 1 ? hexH / 2 : 0)
+      // 每个六角格有微弱的随机明暗变化，避免均匀死板
+      const cellNoise = Math.sin(cx * 0.017 + cy * 0.013 + drift * 0.3) * 0.01
+      ctx.globalAlpha = 1
+      ctx.beginPath()
+      for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI / 3) * i - Math.PI / 6
+        const px = cx + hexSize * 0.48 * Math.cos(angle)
+        const py = cy + hexSize * 0.48 * Math.sin(angle)
+        if (i === 0) ctx.moveTo(px, py)
+        else ctx.lineTo(px, py)
+      }
+      ctx.closePath()
+      ctx.globalAlpha = 0.6 + cellNoise
+      ctx.stroke()
+    }
+  }
+  ctx.globalAlpha = 1
+}
+
+/** CRT 扫描线 — 模拟老式显示器的横纹 */
+function drawScanlines(ctx: CanvasRenderingContext2D, time: number): void {
+  // 快速移动的亮线
+  const scanY = ((time * 0.06) % (height + 40)) - 20
+  const grad = ctx.createLinearGradient(0, scanY - 18, 0, scanY + 18)
+  grad.addColorStop(0, 'rgba(134,255,232,0)')
+  grad.addColorStop(0.4, 'rgba(134,255,232,0.028)')
+  grad.addColorStop(0.5, 'rgba(134,255,232,0.055)')
+  grad.addColorStop(0.6, 'rgba(134,255,232,0.028)')
+  grad.addColorStop(1, 'rgba(134,255,232,0)')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, scanY - 18, width, 36)
+
+  // 全屏极细横纹 (模拟CRT磷光条纹)
+  ctx.fillStyle = 'rgba(0,0,0,0.06)'
+  for (let y = 0; y < height; y += 3) {
+    ctx.fillRect(0, y, width, 1)
+  }
+}
+
+/** 暗角渐晕 — 四角压暗聚焦中心 */
+function drawVignette(ctx: CanvasRenderingContext2D): void {
+  const vignette = ctx.createRadialGradient(
+    width / 2, height / 2, Math.min(width, height) * 0.28,
+    width / 2, height / 2, Math.max(width, height) * 0.76,
+  )
+  vignette.addColorStop(0, 'rgba(0,0,0,0)')
+  vignette.addColorStop(0.6, 'rgba(0,0,0,0.08)')
+  vignette.addColorStop(1, 'rgba(0,0,0,0.38)')
+  ctx.fillStyle = vignette
+  ctx.fillRect(0, 0, width, height)
 }
 
 function drawGraph(time: number): void {
@@ -320,13 +403,14 @@ function drawGraph(time: number): void {
 
   ctx.clearRect(0, 0, width, height)
   updateNodePositions(time)
-  drawEdges(ctx, activeHover, focusIds)
-  drawParticles(ctx)
+  drawEdges(ctx, time, activeHover, focusIds)
+  drawParticles(ctx, time)
   drawNodes(ctx, time, search, activeHover, focusIds)
 }
 
 function drawEdges(
   ctx: CanvasRenderingContext2D,
+  time: number,
   activeHover: PositionedNode | null,
   focusIds: Set<string> | null,
 ): void {
@@ -336,20 +420,57 @@ function drawEdges(
     if (!source || !target) continue
     const highlighted = activeHover ? source.id === activeHover.id || target.id === activeHover.id : false
     const dimmedByFocus = focusIds ? !(focusIds.has(source.id) && focusIds.has(target.id)) : false
+
+    // ── 赛博线路: 两段式折角路径 (L形拐角) ──
+    const midX = (source.x + target.x) / 2
+    const midY = source.y + (target.y - source.y) * 0.15 // 先走水平再走垂直
+    const useBend = Math.abs(target.x - source.x) > 40 && Math.abs(target.y - source.y) > 40
+
     ctx.beginPath()
-    ctx.moveTo(source.x, source.y)
-    ctx.lineTo(target.x, target.y)
-    ctx.strokeStyle = highlighted
+    if (useBend && props.mode === 'home') {
+      ctx.moveTo(source.x, source.y)
+      ctx.lineTo(midX, source.y)
+      ctx.lineTo(midX, target.y)
+      ctx.lineTo(target.x, target.y)
+    } else {
+      ctx.moveTo(source.x, source.y)
+      ctx.lineTo(target.x, target.y)
+    }
+
+    const color = highlighted
       ? 'rgba(255,255,255,0.78)'
       : dimmedByFocus
         ? 'rgba(255,255,255,0.05)'
         : edgeColor(edge.role, edge.strength)
-    ctx.lineWidth = highlighted ? 1.35 : dimmedByFocus ? 0.3 : 0.45 + edge.strength * 0.8
+    ctx.strokeStyle = color
+    ctx.lineWidth = highlighted ? 1.6 : dimmedByFocus ? 0.3 : 0.5 + edge.strength * 0.9
     ctx.stroke()
+
+    // ── 边线发光层 (高亮或非淡化时) ──
+    if (!dimmedByFocus && (highlighted || edge.strength > 0.5)) {
+      ctx.save()
+      ctx.globalAlpha = highlighted ? 0.35 : 0.12
+      ctx.shadowColor = edge.role === 'cause' ? '#86ffe8' : edge.role === 'consequence' ? '#ff6db6' : '#f0c84b'
+      ctx.shadowBlur = highlighted ? 12 : 6
+      ctx.beginPath()
+      if (useBend && props.mode === 'home') {
+        ctx.moveTo(source.x, source.y)
+        ctx.lineTo(midX, source.y)
+        ctx.lineTo(midX, target.y)
+        ctx.lineTo(target.x, target.y)
+      } else {
+        ctx.moveTo(source.x, source.y)
+        ctx.lineTo(target.x, target.y)
+      }
+      ctx.strokeStyle = color
+      ctx.lineWidth = highlighted ? 2.5 : 1.2
+      ctx.stroke()
+      ctx.restore()
+    }
   }
 }
 
-function drawParticles(ctx: CanvasRenderingContext2D): void {
+function drawParticles(ctx: CanvasRenderingContext2D, _time: number): void {
   if (props.graph.edges.length === 0) return
   for (const particle of particles) {
     particle.t += particle.speed
@@ -363,9 +484,33 @@ function drawParticles(ctx: CanvasRenderingContext2D): void {
     if (!source || !target) continue
     const x = source.x + (target.x - source.x) * particle.t
     const y = source.y + (target.y - source.y) * particle.t
+
+    // 区域配色粒子
+    const particleColor = edge.role === 'cause'
+      ? 'rgba(134,255,232,'
+      : edge.role === 'consequence'
+        ? 'rgba(255,109,182,'
+        : 'rgba(240,200,75,'
+
+    // ── 拖尾效果: 绘制3-4个尾迹残影 ──
+    const trailCount = 4
+    for (let t = trailCount; t >= 0; t--) {
+      const trailT = particle.t - t * 0.012
+      if (trailT < 0) continue
+      const tx = source.x + (target.x - source.x) * trailT
+      const ty = source.y + (target.y - source.y) * trailT
+      const alpha = (1 - t / trailCount) * 0.42
+      const r = (props.mode === 'detail' ? 1.4 : 0.95) * (1 - t / trailCount * 0.6)
+      ctx.beginPath()
+      ctx.arc(tx, ty, r, 0, Math.PI * 2)
+      ctx.fillStyle = `${particleColor}${alpha})`
+      ctx.fill()
+    }
+
+    // 主粒子核心 (更亮)
     ctx.beginPath()
-    ctx.arc(x, y, props.mode === 'detail' ? 1.25 : 0.85, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(255,255,255,0.58)'
+    ctx.arc(x, y, props.mode === 'detail' ? 1.6 : 1.1, 0, Math.PI * 2)
+    ctx.fillStyle = `${particleColor}0.72)`
     ctx.fill()
   }
 }
@@ -394,8 +539,8 @@ function drawNodes(
     const radius = node.role === 'center' ? node.radius * 1.45 : node.radius
     const drawRadius = isHover ? radius * 1.34 : radius
 
-    drawHalo(ctx, node, drawRadius, dimmed, isConnected)
-    drawCore(ctx, node, drawRadius, dimmed, isConnected)
+    drawHalo(ctx, node, drawRadius, dimmed, isConnected, time)
+    drawCore(ctx, node, drawRadius, dimmed, isConnected, time)
 
     if (node.kind === 'event') {
       drawOrbit(ctx, node, drawRadius, time, isConnected && (isHover || node.role === 'center' || node.importance >= 9))
@@ -420,7 +565,9 @@ function drawHalo(
   radius: number,
   dimmed: boolean,
   isConnected: boolean,
+  time: number,
 ): void {
+  // ── 多层光晕: 外层大弥散 + 内层锐利核心 ──
   const halo = node.role === 'center' ? radius * 7.2 : radius * (isConnected ? 4.2 : 2.1)
   const gradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, halo)
   const coreAlpha = dimmed ? 0.06 : isConnected ? 0.58 : 0.14
@@ -432,6 +579,43 @@ function drawHalo(
   ctx.arc(node.x, node.y, halo, 0, Math.PI * 2)
   ctx.fillStyle = gradient
   ctx.fill()
+
+  // ── 赛博朋克"数据环": 围绕重要节点的虚线旋转环 ──
+  if (!dimmed && isConnected && (node.importance >= 7 || node.role === 'center')) {
+    const ringRadius = radius * 2.8
+    const segments = node.role === 'center' ? 16 : 10
+    const segmentLen = (Math.PI * 2) / segments
+    const rot = time * 0.0008
+    ctx.save()
+    ctx.translate(node.x, node.y)
+    ctx.rotate(rot)
+    ctx.lineWidth = 0.6
+    ctx.strokeStyle = node.role === 'center'
+      ? `rgba(255,255,255,0.22)`
+      : `${node.glowColor}0.18)`
+    ctx.setLineDash([segmentLen * 0.5, segmentLen * 0.5])
+    ctx.beginPath()
+    ctx.arc(0, 0, ringRadius, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.setLineDash([])
+    ctx.restore()
+
+    // 反向慢旋第二圈
+    if (node.role === 'center' || node.importance >= 9) {
+      const ring2 = radius * 3.6
+      ctx.save()
+      ctx.translate(node.x, node.y)
+      ctx.rotate(-time * 0.0005)
+      ctx.lineWidth = 0.45
+      ctx.strokeStyle = `${node.glowColor}0.12)`
+      ctx.setLineDash([segmentLen * 0.3, segmentLen * 0.7])
+      ctx.beginPath()
+      ctx.arc(0, 0, ring2, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.setLineDash([])
+      ctx.restore()
+    }
+  }
 }
 
 function drawCore(
@@ -440,16 +624,53 @@ function drawCore(
   radius: number,
   dimmed: boolean,
   isConnected: boolean,
+  time: number,
 ): void {
-  const gradient = ctx.createRadialGradient(node.x - radius * 0.28, node.y - radius * 0.28, 0, node.x, node.y, radius)
+  // ── 赛博朋克节点核心: 偏移高光 + 微故障闪烁 ──
+  const glitchOffset = isConnected && node.importance >= 8
+    ? Math.sin(time * 0.008 + node.phase * 3) > 0.97 ? (Math.random() - 0.5) * 2.5 : 0
+    : 0
+
+  const gradient = ctx.createRadialGradient(
+    node.x - radius * 0.28 + glitchOffset,
+    node.y - radius * 0.28,
+    0,
+    node.x,
+    node.y,
+    radius,
+  )
   gradient.addColorStop(0, isConnected ? '#ffffff' : 'rgba(255,255,255,0.72)')
   gradient.addColorStop(0.28, node.color)
   gradient.addColorStop(1, `${node.glowColor}${isConnected ? '0.42)' : '0.16)'}`)
+
   ctx.globalAlpha = dimmed ? 0.22 : isConnected ? 1 : 0.4
   ctx.beginPath()
   ctx.arc(node.x, node.y, isConnected ? radius : radius * 0.82, 0, Math.PI * 2)
   ctx.fillStyle = gradient
   ctx.fill()
+
+  // ── 节点外圈锐利描边 (赛博朋克硬边风格) ──
+  if (!dimmed && isConnected) {
+    ctx.beginPath()
+    ctx.arc(node.x, node.y, radius + 0.5, 0, Math.PI * 2)
+    ctx.strokeStyle = `${node.glowColor}0.35)`
+    ctx.lineWidth = 0.8
+    ctx.stroke()
+  }
+
+  // ── 赛博故障色偏移 (RGB split) ──
+  if (!dimmed && isConnected && node.importance >= 7 && glitchOffset !== 0) {
+    ctx.globalAlpha = 0.18
+    ctx.beginPath()
+    ctx.arc(node.x + 2, node.y, radius * 0.9, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(255,0,0,0.25)'
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(node.x - 2, node.y, radius * 0.9, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(0,255,255,0.25)'
+    ctx.fill()
+  }
+
   ctx.globalAlpha = 1
 }
 
@@ -634,6 +855,18 @@ onBeforeUnmount(() => {
   user-select: none;
 }
 
+/* 赛博朋克噪点纹理覆盖层 */
+.constellation-map::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  opacity: 0.35;
+  mix-blend-mode: overlay;
+}
+
 .constellation-map--detail {
   min-height: 360px;
   border: 1px solid rgba(134, 255, 232, 0.16);
@@ -660,14 +893,18 @@ onBeforeUnmount(() => {
   z-index: 4;
   width: 240px;
   max-width: calc(100% - 24px);
-  padding: 10px 12px;
+  padding: 12px 14px;
   pointer-events: none;
   color: #eef8ff;
-  background: rgba(3, 7, 16, 0.9);
-  border: 1px solid rgba(134, 255, 232, 0.34);
-  border-radius: 6px;
+  background:
+    linear-gradient(135deg, rgba(3, 7, 16, 0.94), rgba(3, 7, 16, 0.86)),
+    radial-gradient(circle at 0% 0%, rgba(134, 255, 232, 0.06), transparent 50%);
+  border: 1px solid rgba(134, 255, 232, 0.42);
+  border-left: 2px solid rgba(134, 255, 232, 0.78);
+  border-radius: 2px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 28px rgba(134, 255, 232, 0.12);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%);
 }
 
 .tip-kicker {

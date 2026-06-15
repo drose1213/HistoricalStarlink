@@ -77,32 +77,69 @@
 
         <div class="cosmic-overlay" aria-hidden="true"></div>
 
-        <!-- 任意话题自由探索入口 -->
-        <div class="free-explore-panel">
-          <div class="free-explore-title">
-            <span class="free-explore-dot" aria-hidden="true"></span>
-            <span>任意话题 · 时空探索</span>
+        <!-- 时空探索 FAB (浮动触发按钮) -->
+        <button
+          class="explore-fab"
+          :class="{ 'explore-fab--active': showExploreModal }"
+          @click="showExploreModal = true"
+          aria-label="开启时空探索"
+        >
+          <span class="explore-fab__ring" aria-hidden="true"></span>
+          <span class="explore-fab__core" aria-hidden="true"></span>
+          <span class="explore-fab__label">时空探索</span>
+        </button>
+
+        <!-- 时空探索弹窗 (点击 FAB 后弹出) -->
+        <Transition name="explore-modal">
+          <div v-if="showExploreModal" class="explore-modal-overlay" @click.self="showExploreModal = false">
+            <div class="explore-modal">
+              <div class="explore-modal__scanline" aria-hidden="true"></div>
+              <button class="explore-modal__close" @click="showExploreModal = false" aria-label="关闭">
+                <span aria-hidden="true">&times;</span>
+              </button>
+              <div class="explore-modal__header">
+                <div class="explore-modal__glyph" aria-hidden="true">
+                  <span class="glyph-orbit"></span>
+                  <span class="glyph-core">&#10022;</span>
+                </div>
+                <h2 class="explore-modal__title">任意话题 · 时空探索</h2>
+                <p class="explore-modal__subtitle">输入任何你感兴趣的话题，穿越时空与历史人物对话</p>
+              </div>
+              <form class="explore-modal__form" @submit.prevent="handleFreeExplore">
+                <input
+                  ref="exploreInputRef"
+                  v-model="freeExploreTopic"
+                  type="text"
+                  class="explore-modal__input"
+                  placeholder="如「AI 发展史」「太空探索」「商鞅变法」..."
+                  maxlength="120"
+                  :disabled="freeExploreLoading"
+                />
+                <button
+                  type="submit"
+                  class="explore-modal__btn"
+                  :disabled="freeExploreLoading || !freeExploreTopic.trim()"
+                >
+                  <span v-if="!freeExploreLoading">开启时空对话</span>
+                  <span v-else>加载中...</span>
+                </button>
+              </form>
+              <div v-if="freeExploreError" class="explore-modal__error">{{ freeExploreError }}</div>
+              <div class="explore-modal__hints">
+                <span class="explore-hint-tag" v-for="hint in exploreHints" :key="hint" @click="freeExploreTopic = hint">{{ hint }}</span>
+              </div>
+              <button
+                v-if="!authStore.isLoggedIn && freeExploreError.includes('登录')"
+                type="button"
+                class="explore-modal__login-link"
+                @click="handleLoginRedirect"
+              >
+                <span>前往登录</span>
+                <span class="login-arrow" aria-hidden="true">→</span>
+              </button>
+            </div>
           </div>
-          <form class="free-explore-form" @submit.prevent="handleFreeExplore">
-            <input
-              v-model="freeExploreTopic"
-              type="text"
-              class="free-explore-input"
-              placeholder="输入任意话题开启时空对话... 如「AI 发展史」「太空探索」"
-              maxlength="120"
-              :disabled="freeExploreLoading"
-            />
-            <button
-              type="submit"
-              class="free-explore-btn"
-              :disabled="freeExploreLoading || !freeExploreTopic.trim()"
-            >
-              <span v-if="!freeExploreLoading">开启时空对话</span>
-              <span v-else>加载中...</span>
-            </button>
-          </form>
-          <div v-if="freeExploreError" class="free-explore-error">{{ freeExploreError }}</div>
-        </div>
+        </Transition>
 
         <!-- 英雄卡牌选人覆盖层 -->
         <Transition name="hero-fade">
@@ -305,7 +342,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
@@ -348,12 +385,23 @@ const searchLoading = ref(false)
 const freeExploreTopic = ref('')
 const freeExploreLoading = ref(false)
 const freeExploreError = ref('')
+const showExploreModal = ref(false)
+const exploreInputRef = ref<HTMLInputElement | null>(null)
+const exploreHints = ['AI 发展史', '太空探索', '商鞅变法', '工业革命', '法国大革命', '人工智能伦理']
 // 英雄卡牌选人
 const showHeroSelection = ref(false)
 const currentExploreTopic = ref('')
 const selectedHeroName = ref('')
 let searchLoadingTimer: ReturnType<typeof setTimeout> | null = null
 let searchAbortTimer: ReturnType<typeof setTimeout> | null = null
+
+// 弹窗打开时自动聚焦输入框
+watch(showExploreModal, (val) => {
+  if (val) {
+    freeExploreError.value = ''
+    nextTick(() => { exploreInputRef.value?.focus() })
+  }
+})
 
 const ragSearchResults = ref<LocalSearchResult[]>([])
 
@@ -590,12 +638,13 @@ async function handleFreeExplore() {
     freeExploreError.value = '请输入话题'
     return
   }
-  // 未登录需先登录
+  // 未登录需先登录 (在弹窗内提示, 不跳转路由)
   if (!authStore.isLoggedIn) {
-    router.push({ name: 'Login', query: { redirect: '/' } })
+    freeExploreError.value = '请先登录后再开启时空探索'
     return
   }
-  // 先展示英雄卡牌选人界面, 用户选择后再启动 dynamic 对话
+  // 关闭探索弹窗，展示英雄卡牌选人界面
+  showExploreModal.value = false
   currentExploreTopic.value = topic
   showHeroSelection.value = true
 }
@@ -614,6 +663,9 @@ async function onHeroSelect(hero: HeroPersona) {
     await dialogueStore.startDynamicFromTopic(currentExploreTopic.value, hero.hero_id)
     navigateToDialogue(currentExploreTopic.value)
   } catch (err: any) {
+    // 失败: 关闭英雄卡, 回到探索弹窗, 保留 topic 便于重试
+    showHeroSelection.value = false
+    showExploreModal.value = true
     freeExploreError.value = err?.message || '开启时空对话失败, 请稍后重试'
   } finally {
     freeExploreLoading.value = false
@@ -630,11 +682,32 @@ async function onHeroSkip() {
     await dialogueStore.startDynamicFromTopic(currentExploreTopic.value)
     navigateToDialogue(currentExploreTopic.value)
   } catch (err: any) {
+    // 失败: 关闭英雄卡, 回到探索弹窗, 保留 topic 便于重试
+    showHeroSelection.value = false
+    showExploreModal.value = true
     freeExploreError.value = err?.message || '开启时空对话失败, 请稍后重试'
   } finally {
     freeExploreLoading.value = false
+    selectedHeroName.value = ''
   }
 }
+
+function closeHeroSelection() {
+  currentExploreTopic.value = ''
+  selectedHeroName.value = ''
+  freeExploreError.value = ''
+  freeExploreTopic.value = ''
+}
+
+function handleLoginRedirect() {
+  router.push({ name: 'Login', query: { redirect: '/' } })
+  showExploreModal.value = false
+}
+
+// 英雄卡关闭时清理状态, 避免下次打开残留
+watch(showHeroSelection, (val) => {
+  if (!val) closeHeroSelection()
+})
 
 async function retryLoad() {
   const { loadEvents } = await import('@/data/events')
@@ -1153,113 +1226,244 @@ onBeforeUnmount(() => {
   to { transform: rotate(360deg); }
 }
 
-.free-explore-panel {
+/* ================================================================
+ * 时空探索 FAB (浮动触发按钮) — 悬浮在右下角, 不遮挡星图
+ * ================================================================ */
+.explore-fab {
   position: fixed;
-  left: 50%;
-  bottom: clamp(28px, 5vh, 56px);
-  transform: translateX(-50%);
+  right: clamp(16px, 3vw, 32px);
+  bottom: clamp(20px, 4vh, 44px);
   z-index: 25;
-  /* 桌面端上限 720, 中等屏收紧到 560, 留出 56px 边距 */
-  width: min(720px, calc(100vw - 56px));
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 18px 22px;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px 14px 16px;
   background:
-    linear-gradient(180deg, rgba(2, 6, 13, 0.84), rgba(2, 6, 13, 0.6)),
-    radial-gradient(circle at 0% 0%, rgba(139, 255, 225, 0.06), transparent 40%),
-    radial-gradient(circle at 100% 100%, rgba(255, 53, 243, 0.05), transparent 40%);
-  border: 1px solid rgba(139, 255, 225, 0.55);
-  border-radius: 10px;
-  backdrop-filter: blur(16px);
+    linear-gradient(135deg, rgba(2, 6, 13, 0.88), rgba(2, 6, 13, 0.72)),
+    radial-gradient(circle at 30% 50%, rgba(139, 255, 225, 0.12), transparent 60%);
+  border: 1px solid rgba(139, 255, 225, 0.6);
+  border-radius: 40px;
+  cursor: pointer;
+  backdrop-filter: blur(14px);
   box-shadow:
-    0 16px 56px rgba(0, 0, 0, 0.5),
-    0 0 24px rgba(139, 255, 225, 0.08),
+    0 8px 32px rgba(0, 0, 0, 0.45),
+    0 0 20px rgba(139, 255, 225, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  pointer-events: auto;
-  overflow: hidden;
+  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
 }
 
-/* 顶部 1px 扫描线, 增强"时空"主题感 */
-.free-explore-panel::before {
-  content: '';
+.explore-fab:hover {
+  border-color: rgba(139, 255, 225, 0.9);
+  box-shadow:
+    0 12px 44px rgba(0, 0, 0, 0.5),
+    0 0 36px rgba(139, 255, 225, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform: translateY(-2px);
+}
+
+.explore-fab--active {
+  border-color: rgba(139, 255, 225, 0.95);
+  box-shadow: 0 0 40px rgba(139, 255, 225, 0.25);
+}
+
+.explore-fab__ring {
   position: absolute;
-  top: 0;
-  left: 8%;
-  right: 8%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(139, 255, 225, 0.7), transparent);
+  inset: -3px;
+  border-radius: 40px;
+  border: 1px solid rgba(139, 255, 225, 0.2);
+  animation: fabOrbit 3s linear infinite;
   pointer-events: none;
-  animation: panelScan 3.6s ease-in-out infinite;
 }
-@keyframes panelScan {
-  0%, 100% { opacity: 0.4; transform: translateX(0); }
-  50% { opacity: 1; transform: translateX(2%); }
+@keyframes fabOrbit {
+  to { transform: rotate(360deg); }
 }
 
-.free-explore-title {
+.explore-fab__core {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #8bffe1;
+  box-shadow: 0 0 14px rgba(139, 255, 225, 0.9), 0 0 28px rgba(139, 255, 225, 0.4);
+  animation: fabPulse 2.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes fabPulse {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.25); opacity: 1; }
+}
+
+.explore-fab__label {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #dffff6;
+  white-space: nowrap;
+  text-shadow: 0 0 10px rgba(139, 255, 225, 0.3);
+}
+
+/* ================================================================
+ * 时空探索弹窗 — 居中弹出, 星空玻璃质感
+ * ================================================================ */
+.explore-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal, 100);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  color: rgba(238, 249, 255, 0.86);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-shadow: 0 0 12px rgba(139, 255, 225, 0.22);
+  padding: 24px;
+  background: rgba(2, 5, 11, 0.6);
+  backdrop-filter: blur(8px);
 }
 
-.free-explore-dot {
-  width: 6px;
-  height: 6px;
+.explore-modal {
+  position: relative;
+  width: min(560px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 36px 32px 28px;
+  background:
+    linear-gradient(170deg, rgba(4, 10, 22, 0.94), rgba(2, 6, 13, 0.88)),
+    radial-gradient(circle at 0% 0%, rgba(139, 255, 225, 0.08), transparent 40%),
+    radial-gradient(circle at 100% 100%, rgba(255, 53, 243, 0.05), transparent 40%);
+  border: 1px solid rgba(139, 255, 225, 0.45);
+  border-radius: 16px;
+  backdrop-filter: blur(20px);
+  box-shadow:
+    0 32px 80px rgba(0, 0, 0, 0.55),
+    0 0 40px rgba(139, 255, 225, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+/* 扫描线装饰 */
+.explore-modal__scanline {
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(139, 255, 225, 0.65), transparent);
+  animation: modalScan 3s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes modalScan {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.9; }
+}
+
+.explore-modal__close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  color: rgba(238, 249, 255, 0.6);
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.explore-modal__close:hover {
+  border-color: rgba(139, 255, 225, 0.6);
+  color: #8bffe1;
+  background: rgba(139, 255, 225, 0.08);
+}
+
+.explore-modal__header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 中央旋转图腾 */
+.explore-modal__glyph {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+}
+.glyph-orbit {
+  position: absolute;
+  inset: 0;
   border-radius: 50%;
-  background: #8bffe1;
-  box-shadow: 0 0 10px rgba(139, 255, 225, 0.95);
-  animation: cosmic-spin 4s linear infinite;
+  border: 1px solid rgba(139, 255, 225, 0.3);
+  border-top-color: rgba(139, 255, 225, 0.8);
+  animation: cosmic-spin 3s linear infinite;
+}
+.glyph-core {
+  font-size: 22px;
+  color: #8bffe1;
+  text-shadow: 0 0 18px rgba(139, 255, 225, 0.8), 0 0 36px rgba(139, 255, 225, 0.4);
+  animation: fabPulse 2.6s ease-in-out infinite;
 }
 
-.free-explore-form {
+.explore-modal__title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(20px, 3.2vw, 26px);
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 18px rgba(65, 166, 255, 0.28), 0 2px 12px rgba(0, 0, 0, 0.6);
+}
+
+.explore-modal__subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(226, 246, 255, 0.65);
+  line-height: 1.6;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.explore-modal__form {
   display: flex;
   gap: 10px;
   align-items: stretch;
 }
 
-.free-explore-input {
+.explore-modal__input {
   flex: 1;
   min-width: 0;
-  height: 42px;
-  padding: 0 16px;
+  height: 46px;
+  padding: 0 18px;
   background: rgba(2, 5, 11, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 6px;
+  border-radius: 8px;
   color: #ffffff;
-  font-size: 13px;
+  font-size: 14px;
   outline: none;
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
-
-.free-explore-input::placeholder {
-  color: rgba(238, 249, 255, 0.42);
+.explore-modal__input::placeholder {
+  color: rgba(238, 249, 255, 0.38);
 }
-
-.free-explore-input:focus {
+.explore-modal__input:focus {
   border-color: rgba(139, 255, 225, 0.85);
-  box-shadow: 0 0 18px rgba(139, 255, 225, 0.18);
+  box-shadow: 0 0 20px rgba(139, 255, 225, 0.18);
 }
-
-.free-explore-input:disabled {
-  opacity: 0.6;
+.explore-modal__input:disabled {
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
-.free-explore-btn {
+.explore-modal__btn {
   flex: 0 0 auto;
-  height: 42px;
-  padding: 0 22px;
+  height: 46px;
+  padding: 0 24px;
   background: linear-gradient(180deg, rgba(139, 255, 225, 0.30), rgba(139, 255, 225, 0.10));
   border: 1px solid rgba(139, 255, 225, 0.85);
-  border-radius: 6px;
+  border-radius: 8px;
   color: #dffff6;
   font-family: var(--font-mono);
   font-size: 13px;
@@ -1269,28 +1473,106 @@ onBeforeUnmount(() => {
   transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
   white-space: nowrap;
 }
-
-.free-explore-btn:hover:not(:disabled) {
-  background: linear-gradient(180deg, rgba(139, 255, 225, 0.42), rgba(139, 255, 225, 0.18));
-  box-shadow: 0 0 22px rgba(139, 255, 225, 0.32);
+.explore-modal__btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(139, 255, 225, 0.44), rgba(139, 255, 225, 0.18));
+  box-shadow: 0 0 24px rgba(139, 255, 225, 0.32);
   transform: translateY(-1px);
 }
-
-.free-explore-btn:active:not(:disabled) {
+.explore-modal__btn:active:not(:disabled) {
   transform: translateY(0) scale(0.98);
-  box-shadow: 0 0 12px rgba(139, 255, 225, 0.4), inset 0 1px 2px rgba(0, 0, 0, 0.2);
 }
-
-.free-explore-btn:disabled {
-  opacity: 0.5;
+.explore-modal__btn:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
-.free-explore-error {
+.explore-modal__error {
   color: #ff8a4d;
   font-size: 12px;
   text-align: center;
   text-shadow: 0 0 6px rgba(255, 138, 77, 0.3);
+}
+
+/* 快捷话题标签 */
+.explore-modal__hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  padding-top: 4px;
+}
+.explore-hint-tag {
+  padding: 5px 14px;
+  background: rgba(139, 255, 225, 0.06);
+  border: 1px solid rgba(139, 255, 225, 0.25);
+  border-radius: 20px;
+  color: rgba(238, 249, 255, 0.72);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+.explore-hint-tag:hover {
+  background: rgba(139, 255, 225, 0.14);
+  border-color: rgba(139, 255, 225, 0.6);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+/* 未登录提示下的「前往登录」快捷按钮 */
+.explore-modal__login-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 auto;
+  padding: 8px 20px;
+  background: linear-gradient(180deg, rgba(212, 168, 75, 0.18), rgba(212, 168, 75, 0.06));
+  border: 1px solid rgba(212, 168, 75, 0.6);
+  border-radius: 6px;
+  color: #f5e3b1;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.explore-modal__login-link:hover {
+  background: linear-gradient(180deg, rgba(212, 168, 75, 0.32), rgba(212, 168, 75, 0.12));
+  border-color: rgba(212, 168, 75, 0.95);
+  box-shadow: 0 0 18px rgba(212, 168, 75, 0.32);
+  transform: translateY(-1px);
+}
+.login-arrow { font-size: 14px; }
+
+/* 弹窗过渡动画 */
+.explore-modal-enter-active {
+  transition: opacity 0.25s ease;
+}
+.explore-modal-enter-active .explore-modal {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+}
+.explore-modal-leave-active {
+  transition: opacity 0.18s ease;
+}
+.explore-modal-leave-active .explore-modal {
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+.explore-modal-enter-from {
+  opacity: 0;
+}
+.explore-modal-enter-from .explore-modal {
+  opacity: 0;
+  transform: translateY(24px) scale(0.96);
+}
+.explore-modal-leave-to {
+  opacity: 0;
+}
+.explore-modal-leave-to .explore-modal {
+  opacity: 0;
+  transform: translateY(12px) scale(0.98);
 }
 
 .hero-selection-overlay {
@@ -1413,13 +1695,6 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 680px) {
-  .free-explore-panel {
-    right: 12px;
-    left: 12px;
-    bottom: 80px;
-    width: auto;
-  }
-
   .hero-selection-overlay {
     padding: 12px;
   }
@@ -1956,24 +2231,10 @@ onBeforeUnmount(() => {
     column-gap: 10px;
     padding: 8px 14px;
   }
-
-  .free-explore-panel {
-    width: min(560px, calc(100vw - 48px));
-    padding: 16px 18px;
-  }
 }
 
-/* 1024 中等屏幕: 探索面板让出更多空间给星图 */
+/* 1024 中等屏幕 */
 @media (max-width: 1024px) {
-  .free-explore-panel {
-    bottom: clamp(20px, 4vh, 40px);
-    padding: 14px 16px;
-  }
-
-  .free-explore-form {
-    gap: 8px;
-  }
-
   .event-drawer {
     width: 300px;
     top: 76px; /* 同步缩短顶部偏移 */
@@ -2024,20 +2285,25 @@ onBeforeUnmount(() => {
     font-size: 13px;
   }
 
-  .free-explore-panel {
-    left: 12px;
-    right: 12px;
-    bottom: 20px;
-    width: auto;
-    transform: none;
-    padding: 14px 14px;
-    gap: 10px;
+  .explore-fab {
+    padding: 10px 16px 10px 14px;
+  }
+  .explore-fab__label {
+    font-size: 12px;
   }
 
-  .free-explore-input,
-  .free-explore-btn {
-    height: 44px; /* 触摸目标 44px+ */
+  .explore-modal {
+    padding: 28px 20px 24px;
+    border-radius: 12px;
+  }
+  .explore-modal__input,
+  .explore-modal__btn {
+    height: 44px;
     font-size: 13px;
+  }
+  .explore-hint-tag {
+    padding: 4px 10px;
+    font-size: 11px;
   }
 
   .event-drawer {
@@ -2072,14 +2338,37 @@ onBeforeUnmount(() => {
     flex-wrap: wrap;
   }
 
-  .free-explore-form {
+  .explore-fab {
+    right: 12px;
+    bottom: 12px;
+    padding: 10px 14px 10px 12px;
+  }
+  .explore-fab__core {
+    width: 8px;
+    height: 8px;
+  }
+  .explore-fab__label {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+  }
+
+  .explore-modal-overlay {
+    padding: 12px;
+    align-items: flex-end;
+  }
+  .explore-modal {
+    width: 100%;
+    padding: 24px 16px 20px;
+    border-radius: 14px 14px 0 0;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  .explore-modal__form {
     flex-direction: column;
     gap: 10px;
   }
-
-  .free-explore-btn {
+  .explore-modal__btn {
     width: 100%;
-    padding: 0 16px;
   }
 
   /* 抽屉全屏, 触发器上移到底部 (从底部 70vh 抽屉上沿伸出) */
