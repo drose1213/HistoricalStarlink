@@ -139,6 +139,28 @@ async def _run_lightweight_migrations():
             except Exception as e:
                 logger.warning(f"Migration {table}.{column} skipped: {e}")
 
+    # 唯一约束迁移（仅 MySQL）
+    for table, constraint, columns in _PENDING_UNIQUE_CONSTRAINTS:
+        try:
+            async with engine.connect() as conn:
+                if not await _table_exists(conn, table):
+                    continue
+                result = await conn.execute(text(
+                    "SELECT COUNT(*) FROM information_schema.statistics "
+                    "WHERE table_schema = DATABASE() AND table_name = :t "
+                    "AND index_name = :i AND non_unique = 0"
+                ), {"t": table, "i": constraint})
+                exists = (result.scalar() or 0) > 0
+                if not exists:
+                    col_list = ", ".join(columns)
+                    await conn.execute(text(
+                        f"ALTER TABLE {table} ADD CONSTRAINT {constraint} UNIQUE ({col_list})"
+                    ))
+                    await conn.commit()
+                    logger.info(f"Migration: added unique constraint {constraint} on {table}({col_list})")
+        except Exception as e:
+            logger.warning(f"Migration unique {constraint} skipped: {e}")
+
 
 _PENDING_MIGRATIONS = [
     ("knowledge_entries", "year_end", "INT NULL"),
@@ -160,4 +182,17 @@ _PENDING_MIGRATIONS = [
     ("users", "is_admin", "BOOLEAN NOT NULL DEFAULT 0"),
     # dialogue_sessions: 标记由任意话题动态生成的对话
     ("dialogue_sessions", "is_dynamic", "BOOLEAN NOT NULL DEFAULT 0"),
+    # champion_cards: 卡牌拍卖与收藏扩展字段
+    ("champion_cards", "owner_session_id", "VARCHAR(64) NULL"),
+    ("champion_cards", "is_on_auction", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("champion_cards", "is_high_rated", "BOOLEAN NOT NULL DEFAULT 0"),
+    # card_reviews: 评价扩展字段（点赞数 + 回复父ID + 卡牌关联）
+    ("card_reviews", "parent_review_id", "INT NULL"),
+    ("card_reviews", "likes_count", "INT NOT NULL DEFAULT 0"),
+    ("card_reviews", "card_id", "INT NULL"),
+]
+
+
+_PENDING_UNIQUE_CONSTRAINTS = [
+    ("card_reviews", "uq_card_reviewer", ["card_id", "reviewer_session_id"]),
 ]

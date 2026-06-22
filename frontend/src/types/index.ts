@@ -115,8 +115,68 @@ export interface BackendChampionCard {
   related_events: Record<string, unknown> | null
   achievements: string[] | null
   is_favorite: boolean
+  owner_session_id: string | null
+  is_on_auction: boolean
+  is_high_rated: boolean
   created_at: string | null
   updated_at: string | null
+}
+
+export interface UserCardCollection {
+  id: number
+  user_session_id: string
+  card_id: number
+  event_id: string
+  event_name: string
+  is_high_rated: boolean
+  source: 'explore' | 'auction' | 'system'
+  collected_at: string | null
+}
+
+export interface CardAuction {
+  id: number
+  card_id: number
+  event_id: string
+  event_name: string
+  seller_session_id: string
+  start_price: number
+  current_price: number
+  min_increment: number
+  end_time: string
+  status: 'active' | 'sold' | 'expired' | 'cancelled'
+  sold_price: number | null
+  platform_fee: number | null
+  seller_revenue: number | null
+  winner_session_id: string | null
+  description: string | null
+  bid_count: number
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface CardBid {
+  id: number
+  auction_id: number
+  bidder_session_id: string
+  amount: number
+  is_winning: boolean
+  created_at: string | null
+}
+
+export interface CardReview {
+  id: number
+  auction_id: number
+  reviewer_session_id: string
+  stars: number
+  comment: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface AuctionDetail {
+  auction: CardAuction
+  bids: CardBid[]
+  reviews: CardReview[]
 }
 
 export interface ExploreStartRequest {
@@ -181,4 +241,44 @@ export interface DialogueSession {
   is_completed: boolean
   outcome_summary?: string
   created_at: string
+}
+
+// ==================== 评价系统（spec rating-system-enhancement）====================
+
+export interface ReviewItem {
+  id: number
+  card_id: number | null
+  auction_id: number | null
+  reviewer_session_id: string  // 已被后端脱敏
+  stars: number
+  comment: string | null
+  parent_review_id: number | null
+  likes_count: number
+  liked_by_me: boolean
+  reply_count: number
+  created_at: string | null
+  updated_at: string | null
+  replies?: ReviewItem[]  // 顶级评价嵌入的回复列表
+}
+
+export interface RatingDistributionItem {
+  stars: number  // 0-5
+  count: number
+}
+
+export interface RatingTrendPoint {
+  date: string  // YYYY-MM-DD
+  avg_score: number
+  count: number
+}
+
+export interface RatingDistribution {
+  event_id: string
+  items: RatingDistributionItem[]
+}
+
+export interface RatingTrend {
+  event_id: string
+  days: number
+  points: RatingTrendPoint[]
 }

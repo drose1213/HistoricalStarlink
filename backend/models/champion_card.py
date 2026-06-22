@@ -32,5 +32,10 @@ class ChampionCard(Base):
     created_at = Column(DateTime, server_default=func.now(), comment="创建时间")
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), comment="更新时间")
 
+    # 卡牌拍卖与收藏扩展字段
+    owner_session_id = Column(String(64), nullable=True, index=True, comment="当前持有人会话ID")
+    is_on_auction = Column(Boolean, default=False, index=True, comment="是否正在拍卖中")
+    is_high_rated = Column(Boolean, default=False, index=True, comment="是否高分卡牌(评分>=8.0)")
+
     def __repr__(self):
         return f"<ChampionCard(id={self.id}, event={self.event_name}, level={self.card_level})>"

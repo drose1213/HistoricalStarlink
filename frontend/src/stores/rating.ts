@@ -1,13 +1,16 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { ratingApi } from '@/api/rating'
-import type { RatingEntry } from '@/types'
+import type { RatingEntry, RatingDistribution, RatingTrend } from '@/types'
 
 export const useRatingStore = defineStore('rating', () => {
   const ratings = ref<RatingEntry[]>([])
   const userRating = ref<RatingEntry | null>(null)
   const averageData = ref({ average: 0, count: 0 })
   const isLoading = ref(false)
+  // spec rating-system-enhancement
+  const distribution = ref<RatingDistribution | null>(null)
+  const trend = ref<RatingTrend | null>(null)
 
   async function submitRating(eventId: string, score: number, comment?: string, eventName?: string) {
     isLoading.value = true
@@ -49,14 +52,31 @@ export const useRatingStore = defineStore('rating', () => {
     return res.data
   }
 
+  // spec rating-system-enhancement: 分布 + 趋势
+  async function fetchDistribution(eventId: string) {
+    const res = (await ratingApi.getDistribution(eventId)) as any
+    distribution.value = res.data
+    return res.data
+  }
+
+  async function fetchTrend(eventId: string, days = 7) {
+    const res = (await ratingApi.getTrend(eventId, days)) as any
+    trend.value = res.data
+    return res.data
+  }
+
   return {
     ratings,
     userRating,
     averageData,
     isLoading,
+    distribution,
+    trend,
     submitRating,
     fetchRatingsByEvent,
     fetchAverage,
-    fetchUserRating
+    fetchUserRating,
+    fetchDistribution,
+    fetchTrend,
   }
 })

@@ -13,11 +13,13 @@ const SHARE_PARAM = 'd'
  * Base64 编码（兼容中文/多字节字符）。
  * 使用 encodeURIComponent + unescape + btoa 模式，
  * 避免直接 btoa 中文抛出 InvalidCharacterError。
+ * 进一步替换为 base64url（+/= → -_ 不带填充），避免 URL parser 把 + 当空格。
  */
 export function encodeTopic(topic: string): string {
   if (typeof topic !== 'string') return ''
   try {
-    return btoa(unescape(encodeURIComponent(topic)))
+    const std = btoa(unescape(encodeURIComponent(topic)))
+    return std.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
   } catch (_) {
     return ''
   }
@@ -25,12 +27,17 @@ export function encodeTopic(topic: string): string {
 
 /**
  * Base64 解码（兼容中文/多字节字符）。
- * 解码失败返回空串。
+ * 解码失败返回空串。同时兼容标准 base64 与 base64url 输入。
  */
 export function decodeTopic(encoded: string): string {
   if (typeof encoded !== 'string' || !encoded) return ''
   try {
-    return decodeURIComponent(escape(atob(encoded)))
+    let std = encoded.replace(/-/g, '+').replace(/_/g, '/')
+    const pad = std.length % 4
+    if (pad === 2) std += '=='
+    else if (pad === 3) std += '='
+    else if (pad === 1) return ''
+    return decodeURIComponent(escape(atob(std)))
   } catch (_) {
     return ''
   }

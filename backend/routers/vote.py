@@ -11,6 +11,29 @@ from ..schemas import BaseResponse, VoteCreate, VoteOut, VoteStats
 router = APIRouter(prefix="/api/vote", tags=["投票"])
 
 
+async def _current_vote_stats(db: AsyncSession, event_id: str, session_id: str) -> dict:
+    """统计某事件当前会话的三态计数字段（spec rating-system-enhancement）"""
+    cond = [Vote.event_id == event_id, Vote.is_deleted == False]
+    stmt = select(
+        func.sum(case((Vote.vote_type == 1, 1), else_=0)).label("agree"),
+        func.sum(case((Vote.vote_type == -1, 1), else_=0)).label("disagree"),
+    ).where(and_(*cond))
+    row = (await db.execute(stmt)).one()
+    agree = int(row.agree or 0)
+    disagree = int(row.disagree or 0)
+    # favorite 暂用赞成 + session 已投 1 标记映射，前端按 vote_type 渲染
+    my_vote_stmt = select(Vote.vote_type).where(
+        and_(Vote.event_id == event_id, Vote.session_id == session_id, Vote.is_deleted == False)
+    )
+    my_vote = (await db.execute(my_vote_stmt)).scalar() or 0
+    return {
+        "agree_count": agree,
+        "disagree_count": disagree,
+        "favorite_count": 0,
+        "my_vote": int(my_vote),
+    }
+
+
 @router.post("", response_model=BaseResponse, summary="创建或切换投票")
 async def create_or_toggle_vote(
     vote: VoteCreate,
@@ -36,9 +59,12 @@ async def create_or_toggle_vote(
         await db.flush()
         await db.refresh(existing)
         await cache.delete(f"vote:stats:{vote.event_id}")
+        stats = await _current_vote_stats(db, vote.event_id, vote.session_id)
+        data = VoteOut.model_validate(existing).model_dump()
+        data.update(stats)
         return BaseResponse(
             message=f"{action}成功",
-            data=VoteOut.model_validate(existing).model_dump(),
+            data=data,
         )
 
     new_vote = Vote(
@@ -52,10 +78,12 @@ async def create_or_toggle_vote(
     await db.refresh(new_vote)
 
     await cache.delete(f"vote:stats:{vote.event_id}")
-
+    stats = await _current_vote_stats(db, vote.event_id, vote.session_id)
+    data = VoteOut.model_validate(new_vote).model_dump()
+    data.update(stats)
     return BaseResponse(
         message="投票成功",
-        data=VoteOut.model_validate(new_vote).model_dump(),
+        data=data,
     )
 
 

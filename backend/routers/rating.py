@@ -1,10 +1,12 @@
 from typing import Optional
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 
 from ..database import get_db
 from ..models.rating import Rating
+from ..models.champion_card import ChampionCard
 from ..redis_client import cache
 from ..schemas import (
     BaseResponse,
@@ -13,7 +15,25 @@ from ..schemas import (
     RatingUpdate,
     RatingOut,
     RatingStats,
+    RatingDistributionItem,
+    RatingTrendPoint,
 )
+
+HIGH_RATED_THRESHOLD = 8.0
+
+
+async def _refresh_high_rated_for_event(db: AsyncSession, event_id: str) -> None:
+    """根据事件平均评分刷新所有相关卡牌的 is_high_rated 标志"""
+    avg_stmt = select(func.avg(Rating.score)).where(
+        and_(Rating.event_id == event_id, Rating.is_deleted == False)
+    )
+    avg = (await db.execute(avg_stmt)).scalar()
+    is_high = bool(avg and avg >= HIGH_RATED_THRESHOLD)
+    await db.execute(
+        ChampionCard.__table__.update()
+        .where(and_(ChampionCard.event_id == event_id, ChampionCard.is_deleted == False))
+        .values(is_high_rated=is_high)
+    )
 
 router = APIRouter(prefix="/api/rating", tags=["评分"])
 
@@ -49,6 +69,7 @@ async def create_rating(
     await db.refresh(new_rating)
 
     await cache.delete(f"rating:stats:{rating.event_id}")
+    await _refresh_high_rated_for_event(db, rating.event_id)
 
     return BaseResponse(
         message="评分创建成功",
@@ -77,6 +98,7 @@ async def update_rating(
     await db.refresh(rating)
 
     await cache.delete(f"rating:stats:{rating.event_id}")
+    await _refresh_high_rated_for_event(db, rating.event_id)
 
     return BaseResponse(
         message="评分更新成功",
@@ -185,3 +207,99 @@ async def delete_rating(
     await cache.delete(f"rating:stats:{rating.event_id}")
 
     return BaseResponse(message="评分已删除")
+
+
+# ==================== spec rating-system-enhancement: 分布 & 趋势 ====================
+
+def _is_sqlite() -> bool:
+    try:
+        from ..config import settings
+        return settings.DB_TYPE == "sqlite"
+    except Exception:
+        return False
+
+
+@router.get("/distribution", response_model=BaseResponse, summary="0-5 评分分布")
+async def get_rating_distribution(
+    event_id: str = Query(..., description="历史事件ID"),
+    db: AsyncSession = Depends(get_db),
+):
+    """按 event_id 返回 0-5 各星级的评分数量（score 1-10 折半为 0-5）"""
+    cached = await cache.get(f"rating:dist:{event_id}")
+    if cached:
+        return BaseResponse(data=cached)
+
+    stmt = select(Rating.score, func.count(Rating.id)).where(
+        and_(Rating.event_id == event_id, Rating.is_deleted == False)
+    ).group_by(Rating.score)
+    rows = (await db.execute(stmt)).all()
+
+    buckets = [0] * 6  # 0-5
+    for score, count in rows:
+        try:
+            s = float(score)
+        except Exception:
+            continue
+        idx = max(1, min(5, int(round(s / 2))))
+        buckets[idx] += int(count or 0)
+    buckets[0] = 0
+
+    items = [RatingDistributionItem(stars=i, count=buckets[i]).model_dump() for i in range(6)]
+    data = {"event_id": event_id, "items": items}
+    await cache.set(f"rating:dist:{event_id}", data, ttl=60)
+    return BaseResponse(data=data)
+
+
+@router.get("/trend", response_model=BaseResponse, summary="评分趋势（按日聚合平均分）")
+async def get_rating_trend(
+    event_id: str = Query(..., description="历史事件ID"),
+    days: int = Query(default=7, ge=1, le=90, description="统计窗口天数"),
+    db: AsyncSession = Depends(get_db),
+):
+    """返回近 N 天每天的平均分 (YYYY-MM-DD -> avg_score, count)"""
+    cache_key = f"rating:trend:{event_id}:{days}"
+    cached = await cache.get(cache_key)
+    if cached:
+        return BaseResponse(data=cached)
+
+    end_date = datetime.utcnow().date()
+    start_date = end_date - timedelta(days=days - 1)
+
+    date_col = func.date(Rating.created_at)
+
+    stmt = (
+        select(
+            date_col.label("d"),
+            func.avg(Rating.score).label("avg_score"),
+            func.count(Rating.id).label("cnt"),
+        )
+        .where(
+            and_(
+                Rating.event_id == event_id,
+                Rating.is_deleted == False,
+                Rating.created_at >= datetime.combine(start_date, datetime.min.time()),
+            )
+        )
+        .group_by("d")
+        .order_by("d")
+    )
+    rows = (await db.execute(stmt)).all()
+
+    by_date = {
+        (r.d.isoformat() if hasattr(r.d, "isoformat") else str(r.d)): r
+        for r in rows
+    }
+
+    points: list[dict] = []
+    for i in range(days):
+        d = (start_date + timedelta(days=i)).isoformat()
+        r = by_date.get(d)
+        points.append(RatingTrendPoint(
+            date=d,
+            avg_score=round(float(r.avg_score), 2) if r and r.avg_score is not None else 0.0,
+            count=int(r.cnt) if r else 0,
+        ).model_dump())
+
+    data = {"event_id": event_id, "days": days, "points": points}
+    await cache.set(cache_key, data, ttl=60)
+    return BaseResponse(data=data)

@@ -77,6 +77,29 @@
                   </div>
                 </div>
               </div>
+              <div class="card-actions" @click.stop>
+                <button
+                  class="card-action-btn card-action-btn--collect"
+                  :class="{ 'is-active': collectedIds.has(card.id) }"
+                  :disabled="collectingId === card.id || collectedIds.has(card.id)"
+                  @click="onCollect(card)"
+                >
+                  <span class="card-action-icon">{{ collectedIds.has(card.id) ? '★' : '☆' }}</span>
+                  <span class="card-action-label">
+                    {{ collectedIds.has(card.id) ? t('champions.collected') : t('champions.collect') }}
+                  </span>
+                </button>
+                <button
+                  class="card-action-btn card-action-btn--auction"
+                  :disabled="listingId === card.id"
+                  @click="onListForAuction(card)"
+                >
+                  <span class="card-action-icon">⚖</span>
+                  <span class="card-action-label">
+                    {{ listingId === card.id ? t('champions.listing') : t('champions.listForAuction') }}
+                  </span>
+                </button>
+              </div>
               <div class="card-footer">
                 <span class="footer-hint">{{ t('champions.cardDetail') }}</span>
               </div>
@@ -135,6 +158,9 @@
             <p class="lore-title">{{ t('champions.cardStory') }}</p>
             <p class="lore-text">{{ detailCard.lore }}</p>
           </div>
+          <div class="modal-rating">
+            <RatingPanel :event-id="detailCard.eventId" :card-id="detailCard.id" />
+          </div>
         </div>
       </div>
     </Transition>
@@ -148,6 +174,10 @@ import { ref, computed, onMounted } from 'vue'
 import { championApi } from '@/api/champion'
 import { getSessionId } from '@/utils/session'
 import { useI18n } from '@/composables/useI18n'
+import { useCollectionStore } from '@/stores/collection'
+import { useAuctionStore } from '@/stores/auction'
+import { useAppStore } from '@/stores/app'
+import RatingPanel from '@/components/RatingPanel.vue'
 import type { BackendChampionCard } from '@/types'
 
 type RarityKey = 'legendary' | 'epic' | 'rare' | 'common'
@@ -156,6 +186,7 @@ const { t } = useI18n()
 
 interface ChampionEntry {
   id: number
+  eventId: string
   title: string
   event: string
   owner: string
@@ -172,6 +203,13 @@ const detailCard = ref<ChampionEntry | null>(null)
 const cards = ref<ChampionEntry[]>([])
 const loading = ref(false)
 const loadError = ref<string | null>(null)
+
+const collectionStore = useCollectionStore()
+const auctionStore = useAuctionStore()
+const appStore = useAppStore()
+const collectingId = ref<number | null>(null)
+const listingId = ref<number | null>(null)
+const collectedIds = computed(() => new Set(collectionStore.items.map(i => i.card_id)))
 
 const LEVEL_TO_RARITY: Record<number, RarityKey> = {
   4: 'legendary',
@@ -231,6 +269,7 @@ function mapCard(card: BackendChampionCard): ChampionEntry {
   const rarity = LEVEL_TO_RARITY[card.card_level] || 'common'
   return {
     id: card.id,
+    eventId: card.event_id,
     title: card.nickname?.trim() || card.event_name,
     event: card.event_name,
     owner: card.nickname?.trim() || t('champions.anonymous'),
@@ -251,6 +290,8 @@ async function loadCards() {
     const res = await championApi.getChampionCards(1, 100)
     const items = (res.data?.items || []) as unknown as BackendChampionCard[]
     cards.value = items.map(mapCard)
+    // 顺手拉取当前会话的收藏, 用于标记"已收藏"状态
+    try { await collectionStore.load(sid, undefined, 1, 100) } catch (_) { /* ignore */ }
   } catch (e: unknown) {
     loadError.value = e instanceof Error ? e.message : t('leaderboard.networkError')
     cards.value = []
@@ -260,6 +301,38 @@ async function loadCards() {
 }
 
 onMounted(loadCards)
+
+async function onCollect(card: ChampionEntry) {
+  if (collectingId.value === card.id || collectedIds.value.has(card.id)) return
+  collectingId.value = card.id
+  try {
+    await collectionStore.add({ card_id: card.id, source: 'explore' })
+    appStore.showToast('success', t('champions.collectOk'))
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : t('champions.collectFail')
+    appStore.showToast('error', msg)
+  } finally {
+    collectingId.value = null
+  }
+}
+
+async function onListForAuction(card: ChampionEntry) {
+  if (listingId.value === card.id) return
+  listingId.value = card.id
+  try {
+    await auctionStore.create({
+      card_id: card.id,
+      start_price: 10,
+      duration_hours: 24
+    })
+    appStore.showToast('success', t('champions.listOk'))
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : t('champions.listFail')
+    appStore.showToast('error', msg)
+  } finally {
+    listingId.value = null
+  }
+}
 
 const hasAnyCard = computed(() => cards.value.length > 0)
 
@@ -703,8 +776,66 @@ function openDetail(card: ChampionEntry) {
   color: var(--text-muted);
 }
 
+.card-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 20px 12px;
+  position: relative;
+  z-index: 2;
+}
+
+.card-action-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.card-action-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-light);
+}
+
+.card-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.card-action-icon { font-size: 14px; line-height: 1; }
+
+.card-action-btn--collect:hover:not(:disabled) {
+  border-color: var(--border-cyan);
+  color: var(--cyan-core);
+  box-shadow: var(--glow-cyan);
+}
+
+.card-action-btn--collect.is-active {
+  border-color: var(--cyan-core);
+  background: rgba(49, 247, 255, 0.12);
+  color: var(--cyan-core);
+}
+
+.card-action-btn--auction:hover:not(:disabled) {
+  border-color: var(--accent-gold);
+  color: var(--accent-gold);
+  box-shadow: 0 0 14px rgba(212, 168, 75, 0.35);
+}
+
 .card-footer {
-  padding: 10px 20px 16px;
+  padding: 4px 20px 16px;
   text-align: center;
 }
 
@@ -753,9 +884,18 @@ function openDetail(card: ChampionEntry) {
 .modal-card {
   position: relative;
   width: min(480px, 90vw);
+  max-height: 90vh;
+  overflow-y: auto;
   border-radius: var(--radius-md);
   padding: 2px;
-  overflow: hidden;
+}
+
+.modal-rating {
+  position: relative;
+  z-index: 1;
+  background: var(--bg-card);
+  padding: 0 28px 28px;
+  margin-top: 4px;
 }
 
 .modal-card--legendary { background: linear-gradient(135deg, rgba(212, 168, 75, 0.8), rgba(212, 168, 75, 0.2), rgba(212, 168, 75, 0.8)); }

@@ -64,6 +64,22 @@ const routes: RouteRecordRaw[] = [
     path: '/landing',
     name: 'Landing',
     component: () => import('@/views/LandingView.vue')
+  },
+  {
+    path: '/collection',
+    name: 'Collection',
+    component: () => import('@/views/CollectionView.vue')
+  },
+  {
+    path: '/auction',
+    name: 'AuctionList',
+    component: () => import('@/views/AuctionListView.vue')
+  },
+  {
+    path: '/auction/:id',
+    name: 'AuctionDetail',
+    component: () => import('@/views/AuctionDetailView.vue'),
+    props: true
   }
 ]
 

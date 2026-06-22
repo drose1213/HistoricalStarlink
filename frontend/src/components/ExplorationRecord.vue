@@ -5,8 +5,11 @@
         <span class="header-icon">◈</span>
         {{ t('exploration.title') }}
       </h3>
-      <span class="cy-badge cy-badge--cyan" v-if="isActive">
+      <span class="cy-badge cy-badge--cyan" v-if="isActive && !isPaused">
         {{ t('exploration.active', { time: formatDuration(elapsedTime) }) }}
+      </span>
+      <span class="cy-badge cy-badge--amber" v-else-if="isPaused">
+        {{ t('exploration.paused', { time: formatDuration(elapsedTime) }) }}
       </span>
     </div>
 
@@ -26,7 +29,7 @@
         </div>
         <div class="info-row">
           <span class="info-label">{{ t('exploration.duration') }}</span>
-          <span class="info-value">{{ formatDuration(currentRecord.duration_seconds) }}</span>
+          <span class="info-value">{{ formatDuration(elapsedTime) }}</span>
         </div>
       </div>
 
@@ -46,13 +49,28 @@
       >
         {{ t('exploration.start') }}
       </button>
-      <button
-        v-else
-        class="cy-btn cy-btn--pink"
-        @click="handleEnd"
-      >
-        {{ t('exploration.end') }}
-      </button>
+      <template v-else>
+        <button
+          v-if="!isPaused"
+          class="cy-btn cy-btn--ghost"
+          @click="handlePause"
+        >
+          {{ t('exploration.pause') }}
+        </button>
+        <button
+          v-else
+          class="cy-btn"
+          @click="handleResume"
+        >
+          {{ t('exploration.resume') }}
+        </button>
+        <button
+          class="cy-btn cy-btn--pink"
+          @click="handleEnd"
+        >
+          {{ t('exploration.end') }}
+        </button>
+      </template>
     </div>
 
     <div class="history-section" v-if="exploreHistory.length > 0">
@@ -91,6 +109,7 @@ const appStore = useAppStore()
 const { t } = useI18n()
 
 const elapsedTime = ref(0)
+const isPaused = ref(false)
 let timer: ReturnType<typeof setInterval> | null = null
 
 const currentRecord = computed(() => explorationStore.currentRecord)
@@ -105,6 +124,7 @@ function formatDuration(seconds: number): string {
 
 function startTimer() {
   elapsedTime.value = 0
+  isPaused.value = false
   timer = setInterval(() => {
     elapsedTime.value++
   }, 1000)
@@ -115,6 +135,22 @@ function stopTimer() {
     clearInterval(timer)
     timer = null
   }
+}
+
+function handlePause() {
+  if (!isActive.value || isPaused.value) return
+  stopTimer()
+  isPaused.value = true
+  appStore.showToast('warning', t('toast.explorePaused'))
+}
+
+function handleResume() {
+  if (!isActive.value || !isPaused.value) return
+  isPaused.value = false
+  timer = setInterval(() => {
+    elapsedTime.value++
+  }, 1000)
+  appStore.showToast('success', t('toast.exploreResumed'))
 }
 
 async function handleStart() {
@@ -131,7 +167,9 @@ async function handleStart() {
 
 async function handleEnd() {
   if (!currentRecord.value) return
+  // 结束前若仍在暂停, 不需要重开定时器, 直接停掉以防泄漏
   stopTimer()
+  isPaused.value = false
   try {
     await explorationStore.endExploration(
       currentRecord.value.id,

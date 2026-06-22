@@ -4,7 +4,9 @@ import type {
   ApiResponse,
   RatingEntry,
   PaginatedResponse,
-  RatingCreateRequest
+  RatingCreateRequest,
+  RatingDistribution,
+  RatingTrend,
 } from '@/types'
 
 export const ratingApi = {
@@ -31,6 +33,16 @@ export const ratingApi = {
       const items = (res as any).data?.items || (res as any).data || []
       return { ...res, data: items.length > 0 ? items[0] : null } as any
     })
+  },
+
+  /** 0-5 评分分布（spec rating-system-enhancement） */
+  getDistribution(eventId: string): Promise<ApiResponse<RatingDistribution>> {
+    return get('/api/rating/distribution', { event_id: eventId })
+  },
+
+  /** 评分趋势（spec rating-system-enhancement） */
+  getTrend(eventId: string, days = 7): Promise<ApiResponse<RatingTrend>> {
+    return get('/api/rating/trend', { event_id: eventId, days })
   },
 
   deleteRating(ratingId: number): Promise<ApiResponse<null>> {

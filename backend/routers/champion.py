@@ -81,6 +81,7 @@ async def create_champion_card(
         explore_count=1,
         related_events=card.related_events,
         achievements=card.achievements,
+        owner_session_id=card.session_id,
     )
     db.add(new_card)
     await db.flush()
@@ -95,10 +96,13 @@ async def create_champion_card(
 @router.get("", response_model=PaginationResponse, summary="查询冠军卡片列表")
 async def list_champion_cards(
     session_id: Optional[str] = Query(default=None, description="会话ID"),
+    owner_session_id: Optional[str] = Query(default=None, description="当前持有人"),
     event_id: Optional[str] = Query(default=None, description="历史事件ID"),
     event_region: Optional[str] = Query(default=None, description="事件区域"),
     card_level: Optional[int] = Query(default=None, ge=1, le=4, description="卡片等级"),
     is_favorite: Optional[bool] = Query(default=None, description="是否收藏"),
+    is_high_rated: Optional[bool] = Query(default=None, description="是否高分卡牌"),
+    is_on_auction: Optional[bool] = Query(default=None, description="是否拍卖中"),
     page: int = Query(default=1, ge=1, description="页码"),
     page_size: int = Query(default=20, ge=1, le=100, description="每页条数"),
     db: AsyncSession = Depends(get_db),
@@ -106,6 +110,8 @@ async def list_champion_cards(
     conditions = [ChampionCard.is_deleted == False]
     if session_id:
         conditions.append(ChampionCard.session_id == session_id)
+    if owner_session_id:
+        conditions.append(ChampionCard.owner_session_id == owner_session_id)
     if event_id:
         conditions.append(ChampionCard.event_id == event_id)
     if event_region:
@@ -114,6 +120,10 @@ async def list_champion_cards(
         conditions.append(ChampionCard.card_level == card_level)
     if is_favorite is not None:
         conditions.append(ChampionCard.is_favorite == is_favorite)
+    if is_high_rated is not None:
+        conditions.append(ChampionCard.is_high_rated == is_high_rated)
+    if is_on_auction is not None:
+        conditions.append(ChampionCard.is_on_auction == is_on_auction)
 
     count_stmt = select(func.count()).select_from(ChampionCard).where(and_(*conditions))
     total_result = await db.execute(count_stmt)

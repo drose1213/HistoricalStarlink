@@ -57,6 +57,8 @@ export default {
     logout: '退出',
     admin: '管理员',
     events: '事件',
+    collection: '收藏',
+    auction: '拍卖',
     loginOrRegister: '登录 / 注册'
   },
 
@@ -100,6 +102,12 @@ export default {
     subtitle: '点亮群星,串联文明',
     collect: '收藏',
     collected: '已收藏',
+    collectOk: '已加入收藏',
+    collectFail: '收藏失败',
+    listForAuction: '上架拍卖',
+    listing: '上架中...',
+    listOk: '已上架拍卖',
+    listFail: '上架失败',
     rating: '评分',
     dialogues: '对话',
     explore: '探索',
@@ -252,6 +260,41 @@ export default {
       rare: '·时空印记',
       common: '·初次发现'
     }
+  },
+
+  // Rating panel (通用评分面板)
+  ratingPanel: {
+    voteTitle: '投票反馈',
+    agree: '赞同',
+    disagree: '反对',
+    favorite: '收藏',
+    ratingTitle: '综合评分',
+    submitScore: '给出 {n} 星',
+    ratingCount: '{n} 人评分',
+    distributionTitle: '星级分布',
+    trendTitle: '评分趋势',
+    trend7d: '近 7 日',
+    trend30d: '近 30 日',
+    reviewTitle: '撰写评价',
+    reviewPlaceholder: '请输入你的评价（最多 500 字）...',
+    submitting: '提交中...',
+    submitReview: '提交评价',
+    reviewListTitle: '全部评价',
+    loading: '加载中...',
+    emptyReviews: '还没有评价，快来抢沙发吧',
+    reply: '回复',
+    replyPlaceholder: '写下你的回复...',
+    sendReply: '发送回复',
+    filterAll: '全部',
+    filterStar5: '5★',
+    filterStar4: '4★',
+    filterStar3: '3★',
+    filterStarLow: '≤2★',
+    like: '点赞',
+    liked: '已点赞',
+    delete: '删除',
+    charCount: '{n} / 500',
+    scoreOutOfFive: '{n} / 5'
   },
 
   // 知识库 KnowledgeBase
@@ -581,6 +624,80 @@ export default {
     year: '{n}年'
   },
 
+  // 我的收藏 Collection
+  collection: {
+    title: '我的收藏',
+    subtitle: '把点亮过的群星纳入你的星河图谱',
+    filterAll: '全部',
+    filterHigh: '高分卡牌',
+    total: '共 {n} 张',
+    empty: '还没有收藏任何卡牌',
+    emptyHint: '前往卡牌页或事件详情,把喜欢的卡牌加入收藏吧',
+    goExplore: '去发现卡牌',
+    highRated: '高分',
+    eventId: '事件 {id}',
+    viewAuction: '查看拍卖',
+    source: {
+      explore: '探索获得',
+      auction: '拍下获得',
+      system: '系统赠送'
+    },
+    removed: '已从收藏中移除',
+    removeFail: '移除失败',
+    back: '返回首页'
+  },
+
+  // 卡牌拍卖 Auction
+  auction: {
+    title: '卡牌拍卖行',
+    subtitle: '与其它探索者交易高分卡牌',
+    total: '共 {n} 件拍品',
+    currentPrice: '当前价',
+    startPrice: '起拍价',
+    bidCount: '{n} 次出价',
+    endsAt: '距结束 {time}',
+    status: {
+      active: '拍卖中',
+      sold: '已成交',
+      expired: '已流拍',
+      cancelled: '已取消'
+    },
+    statusFilter: {
+      all: '全部',
+      active: '拍卖中',
+      sold: '已成交',
+      expired: '已流拍',
+      cancelled: '已取消'
+    },
+    bidHistory: '出价记录',
+    noBids: '暂无出价',
+    bidPlaceholder: '输入你的出价',
+    bidding: '出价中...',
+    placeBid: '立即出价',
+    minBid: '最低 {price}',
+    bidTooLow: '出价不能低于最低金额',
+    bidOk: '出价成功',
+    bidFail: '出价失败',
+    leaveReview: '评价这次交易',
+    reviewPlaceholder: '分享你的体验...',
+    submitReview: '提交评价',
+    reviewOk: '评价已提交',
+    reviewFail: '评价失败',
+    soldFor: '成交价 {price}',
+    fee: '平台费 {n}%',
+    reviews: '评价',
+    empty: '暂无拍品',
+    emptyHint: '调整筛选条件或稍后再来看看',
+    winning: '领先中',
+    back: '返回列表',
+    detailTitle: '拍卖详情',
+    seller: '卖家',
+    winner: '胜出者',
+    startPriceLabel: '起拍价',
+    currentBid: '当前出价',
+    ended: '已结束'
+  },
+
   // 探索 Explore
   explore: {
     title: '我的探索',
@@ -722,6 +839,8 @@ export default {
     sigTooLarge: '文件大小不能超过 5MB',
     exploreStart: '探索已开始',
     exploreStartFail: '开始探索失败',
+    explorePaused: '探索已暂停，时长不再计入',
+    exploreResumed: '探索已继续',
     exploreEnd: '探索结束,共用时 {duration}',
     exploreEndFail: '结束探索失败'
   },
@@ -752,6 +871,7 @@ export default {
   exploration: {
     title: '探索记录',
     active: '探索中 · {time}',
+    paused: '已暂停 · {time}',
     recordId: '记录ID',
     event: '事件',
     pathDepth: '路径深度',
@@ -760,6 +880,8 @@ export default {
     notStarted: '尚未开始探索',
     startHint: '点击事件节点开始探索旅程',
     start: '开始探索',
+    pause: '暂停',
+    resume: '继续',
     end: '结束探索',
     historyTitle: '探索历程'
   },

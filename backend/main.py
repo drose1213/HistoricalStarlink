@@ -8,7 +8,7 @@ import time
 from .config import settings
 from .database import init_db
 from .redis_client import redis_client
-from .routers import exploration, rating, vote, signature, champion, dialogue, auth, rag, events, config
+from .routers import exploration, rating, vote, signature, champion, dialogue, auth, rag, events, config, collection, auction, review
 from .routers.analytics import router as analytics_router
 from .routers.leaderboard import router as leaderboard_router
 
@@ -134,6 +134,9 @@ app.include_router(auth.router)
 app.include_router(rag.router)
 app.include_router(events.router)
 app.include_router(config.router)
+app.include_router(collection.router)
+app.include_router(auction.router)
+app.include_router(review.router)  # spec rating-system-enhancement
 app.include_router(leaderboard_router)
 app.include_router(analytics_router)
 
@@ -206,6 +209,15 @@ async def _seed_events():
             logger.info(f"Seeded {len(events_data)} historical events into database")
     except Exception as e:
         logger.error(f"Failed to seed events: {e}")
+
+
+async def _deferred_build_index():
+    """后台异步构建 RAG 索引，不阻塞服务启动"""
+    try:
+        from .rag_engine import build_index
+        await build_index()
+    except Exception as e:
+        logger.warning(f"Background RAG build_index failed (non-fatal): {e}")
 
 
 async def _seed_knowledge_base():
@@ -333,11 +345,8 @@ async def _seed_knowledge_base():
                 imported += 1
 
             await db.commit()
-            try:
-                from .rag_engine import build_index
-                await build_index()
-            except Exception:
-                pass
+            # 将 build_index 放入后台任务，不阻塞服务启动
+            asyncio.create_task(_deferred_build_index())
             logger.info(
                 f"Seeded knowledge base with {imported} entries, skipped {skipped}"
             )

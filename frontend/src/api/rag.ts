@@ -158,7 +158,8 @@ export const ragApi = {
   },
 
   async rebuild() {
-    const res = await post<{ mode: string; count: number }>('/api/rag/rebuild')
+    // rebuild_index 是长任务，覆盖 axios 默认 15s 超时
+    const res = await post<{ mode: string; count: number }>('/api/rag/rebuild', undefined, { timeout: 0 })
     return res
   },
 
@@ -276,10 +277,11 @@ export const ragApi = {
   },
 
   async triggerCrawl() {
+    // 爬取是长任务，可能耗时 1-5 分钟，覆盖 axios 默认 15s 超时
     const res = await post<{
       imported: number; updated: number; skipped_duplicates: number;
       sources_processed: number; sources_failed: number; total_entries?: number;
-    }>('/api/rag/crawl')
+    }>('/api/rag/crawl', undefined, { timeout: 0 })
     return res
   },
 }

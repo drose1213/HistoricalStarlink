@@ -18,8 +18,8 @@ describe('shareLink utilities', () => {
       const topic = '如果秦始皇没有焚书坑儒'
       const encoded = encodeTopic(topic)
       expect(encoded.length).toBeGreaterThan(0)
-      // 验证不含非法字符 (btoa 后只能是 ASCII)
-      expect(encoded).toMatch(/^[A-Za-z0-9+/=]+$/)
+      // base64url 字符集: A-Z / a-z / 0-9 / - / _, 不含 = 填充
+      expect(encoded).toMatch(/^[A-Za-z0-9_-]+$/)
       expect(decodeTopic(encoded)).toBe(topic)
     })
 

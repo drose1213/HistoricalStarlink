@@ -136,9 +136,17 @@ Write-Info "  Installing Python dependencies..." $Yellow
 pip install -r (Join-Path $ProjectRoot "backend\requirements.txt") --quiet 2>&1 | Out-Null
 
 Write-Info "  Starting uvicorn on port 8000..." $Yellow
-$backendProc = Start-Process -FilePath "python" `
-    -ArgumentList "-m","uvicorn","backend.main:app","--host","0.0.0.0","--port","8000","--reload" `
-    -WorkingDirectory $ProjectRoot -PassThru -WindowStyle Minimized
+$venvPython = Join-Path $venvDir "Scripts\python.exe"
+$backendLog = Join-Path $ProjectRoot "backend\uvicorn.log"
+$backendErrLog = Join-Path $ProjectRoot "backend\uvicorn_err.log"
+# 使用 venv python 直接启动, -u 禁用输出缓冲确保日志实时写入
+# 标准输出和错误输出分别重定向 (PowerShell 不允许指向同一文件)
+$backendProc = Start-Process -FilePath $venvPython `
+    -ArgumentList "-u", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--app-dir", $ProjectRoot `
+    -WorkingDirectory $ProjectRoot `
+    -RedirectStandardOutput $backendLog `
+    -RedirectStandardError $backendErrLog `
+    -PassThru -NoNewWindow
 $backendProc.Id | Out-File (Join-Path $ProjectRoot ".backend.pid") -Encoding ASCII
 Write-Info "  Backend PID: $($backendProc.Id)" $Green
 

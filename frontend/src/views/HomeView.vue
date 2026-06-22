@@ -12,6 +12,8 @@
       <nav class="page-nav" :aria-label="t('nav.home')">
         <router-link to="/" class="nav-link nav-link--active">{{ t('nav.home') }}</router-link>
         <router-link to="/champions" class="nav-link">{{ t('nav.champions') }}</router-link>
+        <router-link to="/collection" class="nav-link">{{ t('nav.collection') }}</router-link>
+        <router-link to="/auction" class="nav-link">{{ t('nav.auction') }}</router-link>
         <router-link to="/leaderboard" class="nav-link">{{ t('nav.leaderboard') }}</router-link>
         <router-link v-if="authStore.user?.is_admin" to="/knowledge-base" class="nav-link">{{ t('nav.knowledge') }}</router-link>
         <router-link v-if="authStore.isLoggedIn" to="/profile" class="nav-link">{{ t('nav.profile') }}</router-link>
