@@ -845,8 +845,15 @@ async def update_entry(entry_id: int, req: KnowledgeEntryUpdate, db: AsyncSessio
         entry.version_count = (entry.version_count or 1) + 1
         entry.last_indexed_at = datetime.utcnow()
 
+    # 显式字段赋值, 避免 setattr 绕过业务校验, 且禁止修改 is_locked/status/version 等敏感字段
+    _UPDATABLE_FIELDS = {
+        "title", "content", "event_name", "year", "year_end", "region",
+        "importance", "category", "tags", "figures", "keywords",
+        "language", "source_reliability", "source_url", "file_name", "file_type",
+        "chunk_index", "chunk_total", "parent_event_id",
+    }
     for key, value in update_data.items():
-        if hasattr(entry, key):
+        if key in _UPDATABLE_FIELDS and hasattr(entry, key):
             setattr(entry, key, value)
 
     entry.updated_at = datetime.utcnow()

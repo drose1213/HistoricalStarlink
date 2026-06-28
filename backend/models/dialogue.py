@@ -22,6 +22,7 @@ class DialogueSession(Base):
     is_completed = Column(Boolean, default=False, comment="")
     outcome_summary = Column(Text, nullable=True, comment="")
     is_dynamic = Column(Boolean, default=False, comment="True 表示由任意话题动态生成的对话")
+    topic = Column(String(256), nullable=True, comment="dynamic 对话的用户原始 topic (替代 event_name 字符串解析)")
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     is_deleted = Column(Boolean, default=False)
@@ -43,6 +44,7 @@ class DialogueSession(Base):
             "path_depth": self.path_depth or 0,
             "is_completed": bool(self.is_completed),
             "is_dynamic": bool(self.is_dynamic),
+            "topic": self.topic,
             "outcome_summary": self.outcome_summary,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,

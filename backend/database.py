@@ -182,6 +182,7 @@ _PENDING_MIGRATIONS = [
     ("users", "is_admin", "BOOLEAN NOT NULL DEFAULT 0"),
     # dialogue_sessions: 标记由任意话题动态生成的对话
     ("dialogue_sessions", "is_dynamic", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("dialogue_sessions", "topic", "VARCHAR(256) NULL"),
     # champion_cards: 卡牌拍卖与收藏扩展字段
     ("champion_cards", "owner_session_id", "VARCHAR(64) NULL"),
     ("champion_cards", "is_on_auction", "BOOLEAN NOT NULL DEFAULT 0"),

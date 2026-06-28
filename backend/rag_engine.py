@@ -5,6 +5,7 @@ RAG (检索增强生成) 引擎
 """
 import logging
 import os
+import asyncio
 from typing import Optional
 
 import httpx
@@ -25,6 +26,7 @@ _index_vectors: Optional[np.ndarray] = None
 _index_texts: list[str] = []
 _index_metadata: list[dict] = []
 _index_built = False
+_index_lock = asyncio.Lock()
 
 
 def _event_to_text(event: dict) -> str:
@@ -244,7 +246,8 @@ async def _get_existing_embedding_map() -> dict[int, tuple[str, str]]:
 
 
 async def build_index(region: Optional[str] = None, category: Optional[str] = None,
-                      year_min: Optional[int] = None, year_max: Optional[int] = None) -> dict:
+                      year_min: Optional[int] = None, year_max: Optional[int] = None,
+                      force: bool = False) -> dict:
     """构建/重建 RAG 索引. 优先使用 DB 持久化的向量, 缺失项再调 API 补全.
 
     流程:
@@ -254,6 +257,10 @@ async def build_index(region: Optional[str] = None, category: Optional[str] = No
     4. 再次从 DB 加载完成索引
     """
     global _index_vectors, _index_built, _index_texts, _index_metadata
+
+    # 并发保护: 仅当首次构建或显式 force 时才进入构建流程
+    if _index_built and not force:
+        return {"mode": "cached", "count": len(_index_texts)}
 
     texts = []
     metadata = []
@@ -452,8 +459,9 @@ async def search_similar(query: str, top_k: int = 5,
     if region or category or year_min is not None or year_max is not None:
         await build_index(region=region, category=category, year_min=year_min, year_max=year_max)
 
-    if not _index_built:
-        await build_index()
+    async with _index_lock:
+        if not _index_built:
+            await build_index()
 
     if _index_vectors is not None and len(_index_texts) > 0:
         return await _embedding_search(query, top_k)

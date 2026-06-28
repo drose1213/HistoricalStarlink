@@ -14,14 +14,16 @@ router = APIRouter(prefix="/api/vote", tags=["投票"])
 async def _current_vote_stats(db: AsyncSession, event_id: str, session_id: str) -> dict:
     """统计某事件当前会话的三态计数字段（spec rating-system-enhancement）"""
     cond = [Vote.event_id == event_id, Vote.is_deleted == False]
+    # 三态聚合: agree(1) / disagree(-1) / favorite(2)
     stmt = select(
         func.sum(case((Vote.vote_type == 1, 1), else_=0)).label("agree"),
         func.sum(case((Vote.vote_type == -1, 1), else_=0)).label("disagree"),
+        func.sum(case((Vote.vote_type == 2, 1), else_=0)).label("favorite"),
     ).where(and_(*cond))
     row = (await db.execute(stmt)).one()
     agree = int(row.agree or 0)
     disagree = int(row.disagree or 0)
-    # favorite 暂用赞成 + session 已投 1 标记映射，前端按 vote_type 渲染
+    favorite = int(row.favorite or 0)
     my_vote_stmt = select(Vote.vote_type).where(
         and_(Vote.event_id == event_id, Vote.session_id == session_id, Vote.is_deleted == False)
     )
@@ -29,7 +31,7 @@ async def _current_vote_stats(db: AsyncSession, event_id: str, session_id: str) 
     return {
         "agree_count": agree,
         "disagree_count": disagree,
-        "favorite_count": 0,
+        "favorite_count": favorite,
         "my_vote": int(my_vote),
     }
 

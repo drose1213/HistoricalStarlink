@@ -130,21 +130,41 @@ async def get_events(
 @router.get("/search", summary="搜索事件")
 async def search_events(
     q: str = Query(..., min_length=1, description="搜索关键词"),
+    limit: int = Query(default=50, ge=1, le=100, description="返回数量上限"),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(HistoryEvent))
-    events = result.scalars().all()
+    # SQL 侧 LIKE 过滤, 避免全表加载到 Python 内存
+    keyword = q.strip()
+    if not keyword:
+        return BaseResponse(data=[])
 
-    keyword = q.lower()
-    matched = [
-        e
-        for e in events
-        if keyword in e.name.lower()
-        or keyword in (e.description or "").lower()
-        or any(keyword in t.lower() for t in (e.tags or []))
-        or any(keyword in f.lower() for f in (e.figures or []))
-        or any(keyword in c.lower() for c in (e.related_concepts or []))
-    ]
+    pattern = f"%{keyword}%"
+    stmt = (
+        select(HistoryEvent)
+        .where(
+            (HistoryEvent.name.like(pattern))
+            | (HistoryEvent.description.like(pattern))
+            | (HistoryEvent.tags.like(pattern))
+            | (HistoryEvent.figures.like(pattern))
+            | (HistoryEvent.related_concepts.like(pattern))
+        )
+        .order_by(HistoryEvent.importance.desc(), HistoryEvent.id.asc())
+        .limit(limit)
+    )
+    events = (await db.execute(stmt)).scalars().all()
+
+    # 结果二次过滤: keyword 可能在 JSON 数组或 description 大小写不敏感
+    kw_lower = keyword.lower()
+    matched = []
+    for e in events:
+        if (
+            kw_lower in (e.name or "").lower()
+            or kw_lower in (e.description or "").lower()
+            or any(kw_lower in t.lower() for t in (e.tags or []))
+            or any(kw_lower in f.lower() for f in (e.figures or []))
+            or any(kw_lower in c.lower() for c in (e.related_concepts or []))
+        ):
+            matched.append(e)
 
     return BaseResponse(data=[_event_dict(e) for e in matched])
 

@@ -17,11 +17,14 @@ class TestRagEngine:
     def test_history_events_not_empty(self):
         assert len(HISTORY_EVENTS) > 0
 
-    def test_keyword_fallback_returns_relevant_results(self):
+    @pytest.mark.asyncio
+    async def test_keyword_fallback_returns_relevant_results(self):
+        # _keyword_search 依赖 build_index 已构建索引
+        await build_index(force=True)
         results = _keyword_search("商鞅", top_k=5)
         assert len(results) > 0
-        names = [r["event"]["name"] for r in results]
-        # 关键词匹配模式下：name 中含「商鞅」的事件应被返回
+        # 实际返回 {"name": ..., "score": ...} 格式
+        names = [r["name"] for r in results]
         assert any("商鞅" in n for n in names), f"未找到商鞅相关事件: {names}"
 
     def test_keyword_fallback_ranks_correctly(self):
@@ -43,7 +46,8 @@ class TestRagEngine:
         assert isinstance(results, list)
         assert len(results) > 0
         for r in results:
-            assert "event" in r
+            # 实际返回 {"name": ..., "score": ..., ...}
+            assert "name" in r
             assert "score" in r
 
     @pytest.mark.asyncio
@@ -84,6 +88,8 @@ class TestRagEngine:
         assert len(results) <= 3
 
     def test_keyword_scores_descending(self):
-        scores = _keyword_fallback_scores("变法", HISTORY_EVENTS)
+        # _keyword_fallback_scores 期望 items 为 [(text, meta), ...]
+        items = [(_event_to_text(ev), ev) for ev in HISTORY_EVENTS]
+        scores = _keyword_fallback_scores("变法", items)
         for i in range(len(scores) - 1):
             assert scores[i][1] >= scores[i+1][1], "分数必须降序"

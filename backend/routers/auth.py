@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import hmac
 import logging
+import os
 import random
 import secrets
 import smtplib
@@ -10,6 +11,8 @@ import time
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from typing import Optional
+
+logger = logging.getLogger("historical_starlink.auth")
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException
@@ -130,10 +133,17 @@ async def _send_email(to_email: str, code: str) -> None:
     msg["From"] = settings.SMTP_FROM or settings.SMTP_USER
     msg["To"] = to_email
 
-    import ssl
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
+    # 使用默认安全 SSL context; 如需跳过证书校验, 显式配置环境变量 EMAIL_SKIP_TLS_VERIFY=true
+    skip_verify = os.getenv("EMAIL_SKIP_TLS_VERIFY", "").lower() in ("1", "true", "yes")
+    if skip_verify:
+        logger.warning("SMTP TLS verification disabled via EMAIL_SKIP_TLS_VERIFY (NOT recommended in production)")
+        import ssl
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+    else:
+        import ssl
+        ssl_context = ssl.create_default_context()
 
     loop = asyncio.get_running_loop()
     if settings.SMTP_USE_SSL:

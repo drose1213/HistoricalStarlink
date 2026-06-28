@@ -11,6 +11,7 @@ from sqlalchemy import select, func, and_
 from ..database import get_db
 from ..models.dialogue import DialogueSession
 from ..models.exploration_profile import UserExplorationProfile
+from ..dialogue_engine import _DYNAMIC_CHOICES
 
 logger = logging.getLogger(__name__)
 
@@ -689,6 +690,7 @@ async def dynamic_start(
             session_id=session_id,
             event_id=opening["event_id"],
             event_name=f"自由探索: {req.topic[:80]}",
+            topic=req.topic[:256],
             npc_name=opening["npc_name"],
             dialogue_history=[{
                 "round": 1,
@@ -747,8 +749,10 @@ async def dynamic_choice(
     if dialogue.is_completed:
         raise HTTPException(status_code=410, detail="Dialogue already ended")
 
-    # 提取 topic (从 event_name "自由探索: <topic>")
-    topic = dialogue.event_name.replace("自由探索: ", "", 1) if dialogue.event_name else ""
+    # 提取 topic: 优先使用持久化字段, 兼容历史数据回退到 event_name 前缀剥离
+    topic = dialogue.topic
+    if not topic and dialogue.event_name:
+        topic = dialogue.event_name.replace("自由探索: ", "", 1)
     choices_made = dialogue.choices_made or []
     free_texts = [m.get("content") for m in (dialogue.dialogue_history or [])
                   if m.get("role") == "user" and m.get("content")]
@@ -765,13 +769,15 @@ async def dynamic_choice(
         raise HTTPException(status_code=500, detail="Failed to process choice")
 
     try:
+        # 复用 dialogue_engine._DYNAMIC_CHOICES 作为单一选项来源 (DRY)
+        choice_text = next(
+            (c["text"] for c in _DYNAMIC_CHOICES if c["choice_id"] == req.choice_id),
+            "",
+        )
         new_choices = choices_made + [{
             "round": result_dict["round"],
             "choice_id": req.choice_id,
-            "choice_text": next((c["text"] for c in [{"choice_id": "explore_origin", "text": "我想了解它的起源"},
-                                                       {"choice_id": "ask_impact", "text": "它对后世有什么影响？"},
-                                                       {"choice_id": "free", "text": "我想自己提问"}]
-                                      if c["choice_id"] == req.choice_id), ""),
+            "choice_text": choice_text,
             "mood": result_dict.get("mood", "default"),
         }]
         dialogue.choices_made = new_choices
@@ -829,7 +835,9 @@ async def dynamic_chat(
     if dialogue.is_completed:
         raise HTTPException(status_code=410, detail="Dialogue already ended")
 
-    topic = dialogue.event_name.replace("自由探索: ", "", 1) if dialogue.event_name else ""
+    topic = dialogue.topic
+    if not topic and dialogue.event_name:
+        topic = dialogue.event_name.replace("自由探索: ", "", 1)
     choices_made = dialogue.choices_made or []
     free_texts = [m.get("content") for m in (dialogue.dialogue_history or [])
                   if m.get("role") == "user" and m.get("content")]
@@ -889,7 +897,9 @@ async def dynamic_end(
     if dialogue.is_completed:
         return BaseResponse(data={"dialogue_id": str(dialogue.id), "already_completed": True})
 
-    topic = dialogue.event_name.replace("自由探索: ", "", 1) if dialogue.event_name else ""
+    topic = dialogue.topic
+    if not topic and dialogue.event_name:
+        topic = dialogue.event_name.replace("自由探索: ", "", 1)
     choices_made = dialogue.choices_made or []
     free_texts = [m.get("content") for m in (dialogue.dialogue_history or [])
                   if m.get("role") == "user" and m.get("content")]
