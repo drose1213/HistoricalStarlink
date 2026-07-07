@@ -30,9 +30,16 @@ export interface StarlinkGraph {
   edges: StarlinkGraphEdge[]
 }
 
+export interface StarlinkLabelVisibilityOptions {
+  mode: 'home' | 'detail'
+  node: StarlinkGraphNode
+  isHover: boolean
+}
+
 const CHINA_COLOR = '#86ffe8'
 const FOREIGN_COLOR = '#ff6db6'
 const CONCEPT_COLORS = ['#ffffff', '#f0c84b', '#79d8ff', '#8fffba', '#bfa8ff']
+const HOME_CONCEPT_EDGE_LIMIT = 36
 
 function eventColor(region: HistoryEvent['region']): { color: string; glowColor: string } {
   if (region === 'china') {
@@ -49,6 +56,16 @@ function addNode(nodes: Map<string, StarlinkGraphNode>, node: StarlinkGraphNode)
   if (!nodes.has(node.id)) {
     nodes.set(node.id, node)
   }
+}
+
+function appendRelatedEventNote(node: StarlinkGraphNode, eventName: string): void {
+  const prefix = '关联事件：'
+  const existingNames = node.description?.startsWith(prefix)
+    ? node.description.slice(prefix.length).split('、').filter(Boolean)
+    : []
+  const names = new Set(existingNames)
+  names.add(eventName)
+  node.description = `${prefix}${[...names].slice(0, 5).join('、')}`
 }
 
 function addEdge(
@@ -147,6 +164,10 @@ function addConcepts(
     if (!trimmed) return
     const concept = toConceptNode(trimmed, index)
     addNode(nodes, concept)
+    const conceptNode = nodes.get(concept.id)
+    if (conceptNode) {
+      appendRelatedEventNote(conceptNode, event.name)
+    }
     addEdge(edges, {
       source: event.id,
       target: concept.id,
@@ -154,6 +175,39 @@ function addConcepts(
       strength: 0.32,
     })
   })
+}
+
+function rankConceptEdge(edge: StarlinkGraphEdge, nodes: Map<string, StarlinkGraphNode>): number {
+  const source = nodes.get(edge.source)
+  const target = nodes.get(edge.target)
+  const sourceImportance = source?.importance ?? 0
+  const targetImportance = target?.importance ?? 0
+
+  return sourceImportance * 10 + targetImportance + edge.strength
+}
+
+function limitHomeEdges(
+  nodes: Map<string, StarlinkGraphNode>,
+  edges: StarlinkGraphEdge[],
+): StarlinkGraphEdge[] {
+  const structuralEdges = edges.filter(edge => edge.role !== 'concept')
+  const conceptEdges = edges
+    .filter(edge => edge.role === 'concept')
+    .sort((a, b) => {
+      const rankDelta = rankConceptEdge(b, nodes) - rankConceptEdge(a, nodes)
+      if (rankDelta !== 0) return rankDelta
+      const sourceDelta = a.source.localeCompare(b.source)
+      return sourceDelta !== 0 ? sourceDelta : a.target.localeCompare(b.target)
+    })
+    .slice(0, HOME_CONCEPT_EDGE_LIMIT)
+
+  return [...structuralEdges, ...conceptEdges]
+}
+
+export function shouldShowStarlinkLabel(options: StarlinkLabelVisibilityOptions): boolean {
+  if (options.isHover || options.mode === 'detail') return true
+  if (options.node.kind === 'concept') return false
+  return options.node.role === 'center' || options.node.importance >= 8
 }
 
 export function buildHomeStarlinkGraph(events: HistoryEvent[]): StarlinkGraph {
@@ -172,7 +226,7 @@ export function buildHomeStarlinkGraph(events: HistoryEvent[]): StarlinkGraph {
 
   return {
     nodes: [...nodes.values()],
-    edges: [...edges.values()],
+    edges: limitHomeEdges(nodes, [...edges.values()]),
   }
 }
 

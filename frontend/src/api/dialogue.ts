@@ -1,28 +1,67 @@
 import { get, post } from './request'
+import { normalizePaginatedResponse } from './pagination'
 import type {
   ApiResponse,
   PaginatedResponse,
   DialogueSession,
-  DialogueMessage
+  DialogueChoice
 } from '@/types'
+
+export interface DialogueChoiceSummary {
+  round: number
+  choice_id?: string
+  choice_text?: string
+  consequence?: string
+}
+
+export interface DialogueTurnResponse {
+  dialogue_id: string | number
+  session_id?: string
+  event_id?: string
+  topic?: string
+  npc_name?: string
+  npc_role?: string
+  npc_symbol?: string
+  context?: string
+  narrative: string
+  choices?: DialogueChoice[]
+  round: number
+  history?: Array<Record<string, unknown>>
+  timeline_change?: boolean
+  mood?: string
+  is_ending?: boolean
+  ending_type?: string
+  path_signature?: string
+  partial_match?: boolean
+  cumulative_impact?: Record<string, number>
+  predicted_endings?: Array<Record<string, unknown>>
+  choices_summary?: DialogueChoiceSummary[]
+  is_dynamic?: boolean
+  already_completed?: boolean
+}
 
 export interface StartDialogueResponse {
   dialogue_id: string
-  session: DialogueSession
-  opening_message: DialogueMessage
+  session_id?: string
+  event_id?: string
+  topic?: string
+  npc_name?: string
+  npc_role?: string
+  npc_symbol?: string
+  context?: string
+  narrative?: string
+  choices?: DialogueChoice[]
+  round?: number
+  history?: Array<Record<string, unknown>>
+  path_signature?: string
+  cumulative_impact?: Record<string, number>
+  predicted_endings?: Array<Record<string, unknown>>
+  is_dynamic?: boolean
 }
 
-export interface ChoiceResponse {
-  next_message: DialogueMessage
-  is_ended: boolean
-  outcome_type?: 'historical' | 'alternate'
-  outcome_summary?: string
-}
+export type ChoiceResponse = DialogueTurnResponse
 
-export interface ChatResponse {
-  next_message: DialogueMessage
-  is_ended: boolean
-}
+export type ChatResponse = DialogueTurnResponse
 
 export const dialogueApi = {
   startDialogue(sessionId: string, eventId: string): Promise<ApiResponse<StartDialogueResponse>> {
@@ -42,25 +81,26 @@ export const dialogueApi = {
   },
 
   getDialogues(page = 1, pageSize = 20): Promise<ApiResponse<PaginatedResponse<DialogueSession>>> {
-    return get('/api/dialogue/records', { page, page_size: pageSize })
+    return get<DialogueSession[]>('/api/dialogue/records', { page, page_size: pageSize })
+      .then(normalizePaginatedResponse)
   },
 
   // --- 任意话题 dynamic 模式 ---
-  startDynamic(sessionId: string, topic: string, heroId?: string): Promise<ApiResponse<any>> {
+  startDynamic(sessionId: string, topic: string, heroId?: string): Promise<ApiResponse<StartDialogueResponse>> {
     const payload: Record<string, unknown> = { session_id: sessionId, topic }
     if (heroId) payload.hero_id = heroId
     return post('/api/dialogue/dynamic/start', payload)
   },
 
-  sendDynamicChoice(dialogueId: string, choiceId: string): Promise<ApiResponse<any>> {
+  sendDynamicChoice(dialogueId: string, choiceId: string): Promise<ApiResponse<ChoiceResponse>> {
     return post('/api/dialogue/dynamic/choice', { dialogue_id: dialogueId, choice_id: choiceId })
   },
 
-  sendDynamicChat(dialogueId: string, message: string): Promise<ApiResponse<any>> {
+  sendDynamicChat(dialogueId: string, message: string): Promise<ApiResponse<ChatResponse>> {
     return post('/api/dialogue/dynamic/chat', { dialogue_id: dialogueId, message })
   },
 
-  endDynamic(dialogueId: string): Promise<ApiResponse<any>> {
+  endDynamic(dialogueId: string): Promise<ApiResponse<ChatResponse>> {
     return post('/api/dialogue/dynamic/end', { dialogue_id: dialogueId })
   }
 }

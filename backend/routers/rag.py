@@ -19,6 +19,7 @@ from ..rag_engine import search_similar, full_rag_query, build_index
 from ..database import get_db
 from ..models.knowledge_base import KnowledgeEntry, KnowledgeVersion, CrawlSource
 from ..utils import iso_utc
+from ..knowledge_versions import advance_entry_version
 
 logger = logging.getLogger("historical_starlink.rag")
 
@@ -235,10 +236,9 @@ async def _store_chunks(db: AsyncSession, title: str, content: str,
             if existing.is_locked:
                 skipped += 1
                 continue
+            await advance_entry_version(db, existing)
             existing.content = chunk
             existing.content_hash = content_hash
-            existing.version += 1
-            existing.version_count = (existing.version_count or 1) + 1
             existing.title = title if idx == 0 else f"{title} (part {idx + 1})"
             existing.updated_at = now
             existing.last_indexed_at = now
@@ -841,8 +841,6 @@ async def update_entry(entry_id: int, req: KnowledgeEntryUpdate, db: AsyncSessio
             content_changed = True
         entry.content = new_content
         entry.content_hash = KnowledgeEntry.compute_hash(new_content)
-        entry.version += 1
-        entry.version_count = (entry.version_count or 1) + 1
         entry.last_indexed_at = datetime.utcnow()
 
     # 显式字段赋值, 避免 setattr 绕过业务校验, 且禁止修改 is_locked/status/version 等敏感字段
@@ -859,6 +857,7 @@ async def update_entry(entry_id: int, req: KnowledgeEntryUpdate, db: AsyncSessio
     entry.updated_at = datetime.utcnow()
 
     if content_changed or update_data:
+        await advance_entry_version(db, entry)
         await _record_version(
             db, entry,
             change_summary=change_summary,

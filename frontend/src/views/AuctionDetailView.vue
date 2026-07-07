@@ -175,8 +175,9 @@ async function onBid() {
     await store.placeBid(detail.value.auction.id, bidAmount.value)
     app.showToast('success', t('auction.bidOk'))
     bidAmount.value = 0
-  } catch (e: any) {
-    app.showToast('error', e?.response?.data?.detail || t('auction.bidFail'))
+  } catch (e: unknown) {
+    const detail = (e as { response?: { data?: { detail?: string } } }).response?.data?.detail
+    app.showToast('error', detail || t('auction.bidFail'))
   } finally {
     bidding.value = false
   }
@@ -189,8 +190,9 @@ async function onReview() {
     app.showToast('success', t('auction.reviewOk'))
     reviewStars.value = 0
     reviewComment.value = ''
-  } catch (e: any) {
-    app.showToast('error', e?.response?.data?.detail || t('auction.reviewFail'))
+  } catch (e: unknown) {
+    const detail = (e as { response?: { data?: { detail?: string } } }).response?.data?.detail
+    app.showToast('error', detail || t('auction.reviewFail'))
   }
 }
 

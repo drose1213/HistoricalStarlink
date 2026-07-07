@@ -1,6 +1,7 @@
 import { get } from './request'
 import { getSessionId } from '@/utils/session'
-import type { ApiResponse } from '@/types'
+import { normalizePaginatedResponse } from './pagination'
+import type { ApiResponse, PaginatedResponse } from '@/types'
 
 export interface ExplorationStats {
   total_records: number
@@ -71,24 +72,22 @@ export const profileApi = {
     return res
   },
 
-  async getExplorationRecords(page = 1, pageSize = 50) {
+  async getExplorationRecords(page = 1, pageSize = 50): Promise<ApiResponse<PaginatedResponse<BackendExplorationRecord>>> {
     const sid = getSessionId()
-    const res = await get<BackendExplorationRecord[]>('/api/exploration/records', {
+    return get<BackendExplorationRecord[]>('/api/exploration/records', {
       session_id: sid,
       page,
       page_size: pageSize,
-    })
-    return res
+    }).then(normalizePaginatedResponse)
   },
 
-  async getChampionCards(page = 1, pageSize = 100) {
+  async getChampionCards(page = 1, pageSize = 100): Promise<ApiResponse<PaginatedResponse<BackendChampionCard>>> {
     const sid = getSessionId()
-    const res = await get<BackendChampionCard[]>('/api/champion', {
+    return get<BackendChampionCard[]>('/api/champion', {
       session_id: sid,
       page,
       page_size: pageSize,
-    })
-    return res
+    }).then(normalizePaginatedResponse)
   },
 
   async getChampionStats() {

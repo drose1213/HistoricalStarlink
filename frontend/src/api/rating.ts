@@ -1,5 +1,6 @@
 import { get, post, del } from './request'
 import { getSessionId } from '@/utils/session'
+import { normalizePaginatedResponse } from './pagination'
 import type {
   ApiResponse,
   RatingEntry,
@@ -21,17 +22,22 @@ export const ratingApi = {
   },
 
   getRatingsByEvent(eventId: string, page = 1, pageSize = 20): Promise<ApiResponse<PaginatedResponse<RatingEntry>>> {
-    return get('/api/rating', { event_id: eventId, page, page_size: pageSize })
+    return get<RatingEntry[]>('/api/rating', { event_id: eventId, page, page_size: pageSize })
+      .then(normalizePaginatedResponse)
   },
 
-  getAverageRating(eventId: string): Promise<ApiResponse<{ average: number; count: number }>> {
+  getAverageRating(eventId: string): Promise<ApiResponse<{ average?: number; avg_score?: number; count: number }>> {
     return get(`/api/rating/stats/${eventId}`)
   },
 
   getUserRating(eventId: string): Promise<ApiResponse<RatingEntry | null>> {
-    return get('/api/rating', { event_id: eventId }).then(res => {
-      const items = (res as any).data?.items || (res as any).data || []
-      return { ...res, data: items.length > 0 ? items[0] : null } as any
+    return get<RatingEntry[]>('/api/rating', { event_id: eventId }).then(res => {
+      const items = Array.isArray(res.data) ? res.data : []
+      return {
+        code: res.code,
+        message: res.message,
+        data: items.length > 0 ? items[0] : null,
+      }
     })
   },
 

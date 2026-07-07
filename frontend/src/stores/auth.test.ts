@@ -5,6 +5,8 @@ import { setActivePinia, createPinia } from 'pinia'
 vi.mock('@/api/auth', () => ({
   authApi: {
     sendCode: vi.fn(),
+    sendPasswordResetCode: vi.fn(),
+    resetPassword: vi.fn(),
     register: vi.fn(),
     login: vi.fn(),
     getMe: vi.fn(),
@@ -116,5 +118,37 @@ describe('useAuthStore', () => {
     await store.fetchUser()
     expect(store.user).toEqual(fakeUser)
     expect(store.token).toBe('good-token')
+  })
+
+  it('sendPasswordResetCode delegates to auth API', async () => {
+    mockedAuthApi.sendPasswordResetCode.mockResolvedValueOnce({
+      code: 200,
+      message: 'sent',
+      data: null,
+    })
+
+    const store = useAuthStore()
+    const res = await store.sendPasswordResetCode('alice@example.com')
+
+    expect(res.code).toBe(200)
+    expect(mockedAuthApi.sendPasswordResetCode).toHaveBeenCalledWith('alice@example.com')
+  })
+
+  it('resetPassword returns success when API accepts the email code', async () => {
+    mockedAuthApi.resetPassword.mockResolvedValueOnce({
+      code: 200,
+      message: 'reset',
+      data: null,
+    })
+
+    const store = useAuthStore()
+    const result = await store.resetPassword('alice@example.com', '123456', 'NewPass123')
+
+    expect(result).toEqual({ success: true, message: 'reset' })
+    expect(mockedAuthApi.resetPassword).toHaveBeenCalledWith({
+      email: 'alice@example.com',
+      email_code: '123456',
+      new_password: 'NewPass123',
+    })
   })
 })

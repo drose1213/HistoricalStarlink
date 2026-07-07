@@ -27,20 +27,19 @@ export const useRatingStore = defineStore('rating', () => {
   async function fetchRatingsByEvent(eventId: string, page = 1) {
     isLoading.value = true
     try {
-      const res: any = await ratingApi.getRatingsByEvent(eventId, page)
-      const d = res.data
-      ratings.value = Array.isArray(d) ? d : d?.items || []
-      return d
+      const res = await ratingApi.getRatingsByEvent(eventId, page)
+      ratings.value = res.data.items || []
+      return res.data
     } finally {
       isLoading.value = false
     }
   }
 
   async function fetchAverage(eventId: string) {
-    const res = await ratingApi.getAverageRating(eventId) as any
-    const d = res.data || res
+    const res = await ratingApi.getAverageRating(eventId)
+    const d = res.data
     averageData.value = {
-      average: d.avg_score || d.average || 0,
+      average: d.average ?? d.avg_score ?? 0,
       count: d.count || 0
     }
     return averageData.value
@@ -54,13 +53,13 @@ export const useRatingStore = defineStore('rating', () => {
 
   // spec rating-system-enhancement: 分布 + 趋势
   async function fetchDistribution(eventId: string) {
-    const res = (await ratingApi.getDistribution(eventId)) as any
+    const res = await ratingApi.getDistribution(eventId)
     distribution.value = res.data
     return res.data
   }
 
   async function fetchTrend(eventId: string, days = 7) {
-    const res = (await ratingApi.getTrend(eventId, days)) as any
+    const res = await ratingApi.getTrend(eventId, days)
     trend.value = res.data
     return res.data
   }

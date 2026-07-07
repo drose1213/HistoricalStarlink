@@ -883,7 +883,8 @@ export default {
     pause: '暂停',
     resume: '继续',
     end: '结束探索',
-    historyTitle: '探索历程'
+    historyTitle: '探索历程',
+    notes: '备注'
   },
 
   // ConstellationMap 提示

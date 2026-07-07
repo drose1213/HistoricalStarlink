@@ -1,4 +1,6 @@
 """用户认证 API 黑盒测试"""
+import smtplib
+
 import pytest
 
 
@@ -92,6 +94,121 @@ class TestAuthAPI:
             "password": "WrongPassword",
         })
         assert res.status_code == 401
+
+    async def test_send_password_reset_code_for_registered_email(self, client, test_db, auth_token, monkeypatch):
+        """申请重置密码验证码时，为已注册邮箱写入独立的 reset code"""
+        from backend.config import settings
+        from backend.redis_client import cache
+        from backend.routers import auth as auth_router
+
+        monkeypatch.setattr(settings, "SMTP_USER", "smtp@example.com")
+        monkeypatch.setattr(settings, "SMTP_PASSWORD", "smtp-secret")
+
+        async def fake_send_email(to_email: str, code: str) -> None:
+            assert to_email == "test@example.com"
+            assert code.isdigit()
+
+        monkeypatch.setattr(auth_router, "_send_email", fake_send_email)
+
+        res = await client.post("/api/auth/password-reset/send-code", json={
+            "email": "test@example.com",
+        })
+        assert res.status_code == 200
+
+        stored_code = await cache.get("password_reset_code:test@example.com")
+        assert isinstance(stored_code, str)
+        assert len(stored_code) == 6
+        assert stored_code.isdigit()
+
+    async def test_send_password_reset_code_reports_smtp_failure(self, client, test_db, auth_token, monkeypatch):
+        """SMTP failure should not return false success or cache a reset code."""
+        from backend.config import settings
+        from backend.redis_client import cache
+        from backend.routers import auth as auth_router
+
+        monkeypatch.setattr(settings, "SMTP_USER", "smtp@example.com")
+        monkeypatch.setattr(settings, "SMTP_PASSWORD", "smtp-secret")
+
+        async def fake_send_email(to_email: str, code: str) -> None:
+            raise smtplib.SMTPServerDisconnected("Connection unexpectedly closed")
+
+        monkeypatch.setattr(auth_router, "_send_email", fake_send_email)
+
+        res = await client.post("/api/auth/password-reset/send-code", json={
+            "email": "test@example.com",
+        })
+
+        assert res.status_code == 502
+        assert await cache.get("password_reset_code:test@example.com") is None
+        assert not await cache.exists("password_reset_code_cd:test@example.com")
+
+    async def test_send_password_reset_code_reports_smtp_auth_failure_detail(self, client, test_db, auth_token, monkeypatch):
+        """SMTP auth failures should expose an actionable but non-secret message."""
+        from backend.config import settings
+        from backend.routers import auth as auth_router
+
+        monkeypatch.setattr(settings, "SMTP_USER", "smtp@example.com")
+        monkeypatch.setattr(settings, "SMTP_PASSWORD", "smtp-secret")
+
+        async def fake_send_email(to_email: str, code: str) -> None:
+            raise smtplib.SMTPAuthenticationError(535, b"Login fail")
+
+        monkeypatch.setattr(auth_router, "_send_email", fake_send_email)
+
+        res = await client.post("/api/auth/password-reset/send-code", json={
+            "email": "test@example.com",
+        })
+
+        assert res.status_code == 502
+        assert "SMTP 登录失败" in res.json()["detail"]
+        assert "授权码" in res.json()["detail"]
+
+    async def test_reset_password_with_email_code(self, client, test_db, auth_token):
+        """邮箱验证码重置密码后旧密码失效，新密码可登录"""
+        from backend.redis_client import cache
+
+        await cache.set("password_reset_code:test@example.com", "778899", 300)
+
+        reset_res = await client.post("/api/auth/password-reset/confirm", json={
+            "email": "test@example.com",
+            "email_code": "778899",
+            "new_password": "NewTest123456",
+        })
+        assert reset_res.status_code == 200
+
+        old_login = await client.post("/api/auth/login", json={
+            "username": "testuser",
+            "password": "Test123456",
+        })
+        assert old_login.status_code == 401
+
+        new_login = await client.post("/api/auth/login", json={
+            "username": "test@example.com",
+            "password": "NewTest123456",
+        })
+        assert new_login.status_code == 200
+        assert "token" in new_login.json()["data"]
+
+        assert await cache.get("password_reset_code:test@example.com") is None
+
+    async def test_reset_password_rejects_invalid_code(self, client, test_db, auth_token):
+        """错误的邮箱验证码不能重置密码"""
+        from backend.redis_client import cache
+
+        await cache.set("password_reset_code:test@example.com", "111222", 300)
+
+        reset_res = await client.post("/api/auth/password-reset/confirm", json={
+            "email": "test@example.com",
+            "email_code": "000000",
+            "new_password": "NewTest123456",
+        })
+        assert reset_res.status_code == 400
+
+        login_res = await client.post("/api/auth/login", json={
+            "username": "testuser",
+            "password": "Test123456",
+        })
+        assert login_res.status_code == 200
 
     async def test_login_nonexistent_user(self, client, test_db):
         res = await client.post("/api/auth/login", json={

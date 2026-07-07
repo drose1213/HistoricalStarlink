@@ -13,7 +13,8 @@ vi.mock('@/api/exploration', () => ({
 
 import { explorationApi } from '@/api/exploration'
 import { useExplorationStore } from './exploration'
-import type { ExplorationRecord, PaginatedResponse } from '@/types'
+import type { ApiResponse, ExplorationRecord, PaginatedResponse } from '@/types'
+import { getExplorationCount } from '@/utils/exploration'
 
 const mockedApi = vi.mocked(explorationApi)
 
@@ -27,18 +28,21 @@ const makeRecord = (eventId: string, id: number): ExplorationRecord => ({
   notes: '',
 })
 
+const makeResponse = <T>(data: T): ApiResponse<T> => ({
+  code: 200,
+  message: 'ok',
+  data,
+})
+
 describe('useExplorationStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.clearAllMocks()
+    localStorage.clear()
+    vi.resetAllMocks()
   })
 
   it('addRecord (startExploration) first call: appends eventId to history and stores currentRecord', async () => {
-    mockedApi.startExploration.mockResolvedValueOnce({
-      code: 200,
-      message: 'ok',
-      data: makeRecord('evt-a', 100),
-    } as any)
+    mockedApi.startExploration.mockResolvedValueOnce(makeResponse(makeRecord('evt-a', 100)))
 
     const store = useExplorationStore()
     const result = await store.startExploration('evt-a', 'Event A')
@@ -50,28 +54,53 @@ describe('useExplorationStore', () => {
   })
 
   it('addRecord (startExploration) is idempotent on the same eventId: history does not duplicate', async () => {
-    mockedApi.startExploration.mockResolvedValueOnce({
-      code: 200,
-      message: 'ok',
-      data: makeRecord('evt-dup', 1),
-    } as any)
-    mockedApi.startExploration.mockResolvedValueOnce({
-      code: 200,
-      message: 'ok',
-      data: makeRecord('evt-dup', 2),
-    } as any)
+    mockedApi.startExploration.mockResolvedValueOnce(makeResponse(makeRecord('evt-dup', 1)))
+    mockedApi.startExploration.mockResolvedValueOnce(makeResponse(makeRecord('evt-dup', 2)))
 
     const store = useExplorationStore()
 
     await store.startExploration('evt-dup', 'Dup')
     expect(store.exploreHistory).toEqual(['evt-dup'])
 
-    // Second add for the same eventId: exploreHistory must not grow
+    // Second start for the same active event must reuse the current record.
     await store.startExploration('evt-dup', 'Dup')
     expect(store.exploreHistory).toEqual(['evt-dup'])
-    // The store does call the API for a fresh record, but the local "count" via exploreHistory
-    // is the idempotency surface — it must not duplicate.
-    expect(mockedApi.startExploration).toHaveBeenCalledTimes(2)
+    expect(mockedApi.startExploration).toHaveBeenCalledTimes(1)
+  })
+
+  it('startExploration reuses an active record for the same event', async () => {
+    const activeRecord = makeRecord('evt-active', 9)
+    mockedApi.startExploration.mockResolvedValueOnce({
+      code: 200,
+      message: 'ok',
+      data: activeRecord,
+    })
+
+    const store = useExplorationStore()
+
+    const first = await store.startExploration('evt-active', 'Active')
+    const second = await store.startExploration('evt-active', 'Active')
+
+    expect(first).toEqual(activeRecord)
+    expect(second).toEqual(activeRecord)
+    expect(store.currentRecord).toEqual(activeRecord)
+    expect(store.exploreHistory).toEqual(['evt-active'])
+    expect(mockedApi.startExploration).toHaveBeenCalledTimes(1)
+  })
+
+  it('startExploration records local exploration count only when a session starts', async () => {
+    mockedApi.startExploration.mockResolvedValueOnce({
+      code: 200,
+      message: 'ok',
+      data: makeRecord('evt-counted', 11),
+    })
+
+    const store = useExplorationStore()
+
+    expect(getExplorationCount('evt-counted')).toBe(0)
+    await store.startExploration('evt-counted', 'Counted')
+
+    expect(getExplorationCount('evt-counted')).toBe(1)
   })
 
   it('records ref is populated by fetchRecords and rendered as a list', async () => {
@@ -81,11 +110,7 @@ describe('useExplorationStore', () => {
       page: 1,
       page_size: 20,
     }
-    mockedApi.getExplorationRecords.mockResolvedValueOnce({
-      code: 200,
-      message: 'ok',
-      data: page,
-    } as any)
+    mockedApi.getExplorationRecords.mockResolvedValueOnce(makeResponse(page))
 
     const store = useExplorationStore()
     expect(store.records).toEqual([])
@@ -98,16 +123,8 @@ describe('useExplorationStore', () => {
   })
 
   it('endExploration: clears currentRecord after ending a session', async () => {
-    mockedApi.startExploration.mockResolvedValueOnce({
-      code: 200,
-      message: 'ok',
-      data: makeRecord('evt-e', 50),
-    } as any)
-    mockedApi.endExploration.mockResolvedValueOnce({
-      code: 200,
-      message: 'ok',
-      data: makeRecord('evt-e', 50),
-    } as any)
+    mockedApi.startExploration.mockResolvedValueOnce(makeResponse(makeRecord('evt-e', 50)))
+    mockedApi.endExploration.mockResolvedValueOnce(makeResponse(makeRecord('evt-e', 50)))
 
     const store = useExplorationStore()
     await store.startExploration('evt-e')

@@ -10,26 +10,50 @@ function Write-Info {
     Write-Host "$Color$Msg$NC"
 }
 
+$ProjectRoot = $PSScriptRoot
+
+function Read-Env {
+    param([string]$Key, [string]$Default)
+    $envFile = Join-Path $ProjectRoot ".env"
+    if (Test-Path $envFile) {
+        foreach ($line in Get-Content $envFile -Encoding UTF8) {
+            $line = $line.Trim()
+            if ($line -match "^$Key=(.*)$") {
+                return $Matches[1].Trim()
+            }
+        }
+    }
+    return $Default
+}
+
+$BackendPort = [int](Read-Env "SERVER_PORT" "8000")
+$FrontendPort = [int](Read-Env "FRONTEND_PORT" "3000")
+
 Write-Host ""
 Write-Host "==================================================="
 Write-Host "   Historical Starlink - Service Status"
 Write-Host "==================================================="
 Write-Host ""
 
-$backendOk = Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | Where-Object { $_.State -eq "Listen" }
+$backendOk = Get-NetTCPConnection -LocalPort $BackendPort -ErrorAction SilentlyContinue | Where-Object { $_.State -eq "Listen" }
 if ($backendOk) {
-    Write-Info "[OK] Backend  : http://localhost:8000" $Green
-    Write-Info "     API docs : http://localhost:8000/docs" $Green
-    Write-Info "     Health   : http://localhost:8000/health" $Green
+    Write-Info "[OK] Backend  : http://localhost:$BackendPort" $Green
+    Write-Info "     API docs : http://localhost:$BackendPort/docs" $Green
+    try {
+        $health = Invoke-RestMethod -Uri "http://127.0.0.1:$BackendPort/health" -TimeoutSec 5
+        Write-Info "     Health   : $($health.status)" $Green
+    } catch {
+        Write-Info "     Health   : port open, health check failed" $Yellow
+    }
 } else {
     Write-Info "[--] Backend is NOT running" $Red
 }
 
 Write-Host ""
 
-$frontendOk = Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | Where-Object { $_.State -eq "Listen" }
+$frontendOk = Get-NetTCPConnection -LocalPort $FrontendPort -ErrorAction SilentlyContinue | Where-Object { $_.State -eq "Listen" }
 if ($frontendOk) {
-    Write-Info "[OK] Frontend : http://localhost:3000" $Green
+    Write-Info "[OK] Frontend : http://localhost:$FrontendPort" $Green
 } else {
     Write-Info "[--] Frontend is NOT running" $Red
 }

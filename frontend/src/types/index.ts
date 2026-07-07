@@ -18,12 +18,18 @@ export interface HistoryEvent {
 
 export interface ExplorationRecord {
   id: number
-  user_id: number
+  user_id?: number
+  session_id?: string
   event_id: string
-  explored_at: string
-  duration_seconds: number
-  path_depth: number
-  notes: string
+  event_name?: string
+  explored_at?: string
+  created_at?: string | null
+  duration_seconds?: number
+  stay_duration?: number
+  path_depth?: number
+  depth?: number
+  notes?: string | null
+  explore_path?: Record<string, unknown> | null
 }
 
 export interface RatingEntry {
@@ -37,18 +43,29 @@ export interface RatingEntry {
 
 export interface VoteEntry {
   id: number
-  user_id: number
+  user_id?: number
   event_id: string
-  vote_type: 'up' | 'down' | 'star'
-  created_at: string
+  event_name?: string
+  session_id?: string
+  vote_type: 1 | -1 | 2 | 'up' | 'down' | 'star'
+  agree_count?: number
+  disagree_count?: number
+  favorite_count?: number
+  my_vote?: number
+  created_at?: string | null
 }
 
 export interface VoteStats {
   event_id: string
+  event_name?: string
   up_count: number
   down_count: number
+  favorite_count?: number
   star_count: number
-  user_vote: 'up' | 'down' | 'star' | null
+  my_vote?: number
+  total?: number
+  ratio?: number
+  user_vote?: 'up' | 'down' | 'star' | null
 }
 
 export interface SignatureRecord {
@@ -234,9 +251,9 @@ export interface DialogueSession {
   session_id: string
   event_id: string
   event_name: string
-  dialogue_history: any
-  choices_made: any[]
-  timeline_branches: any[]
+  dialogue_history: Array<Record<string, unknown>>
+  choices_made: Array<Record<string, unknown>>
+  timeline_branches: Array<Record<string, unknown>>
   path_depth: number
   is_completed: boolean
   outcome_summary?: string

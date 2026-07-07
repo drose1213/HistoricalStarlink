@@ -1,6 +1,7 @@
 import { reactive, ref } from 'vue'
 import type { HistoryEvent } from '@/types'
 import { eventsApi } from '@/api/events'
+import { fallbackEvents } from './fallbackEvents'
 
 const EVENT_RELATIONS: Record<string, { causes: { id: string; weight: number }[]; consequences: { id: string; weight: number }[] }> = {
   shangyang_reform: { causes: [], consequences: [{ id: 'qin_unification', weight: 9 }] },
@@ -62,30 +63,49 @@ export const loadError = ref<string>('')
 
 let _loaded = false
 
+interface RequestLikeError {
+  code?: string
+  message?: string
+}
+
+function isRequestLikeError(error: unknown): error is RequestLikeError {
+  return typeof error === 'object' && error !== null
+}
+
+function withKnownRelations(event: HistoryEvent): HistoryEvent {
+  const rel = EVENT_RELATIONS[event.id] || event.related || { causes: [], consequences: [] }
+  return {
+    ...event,
+    related: rel,
+  }
+}
+
+function replaceEvents(events: HistoryEvent[]): void {
+  allEvents.length = 0
+  for (const event of events) {
+    allEvents.push(withKnownRelations(event))
+  }
+}
+
 export async function loadEvents(): Promise<void> {
   if (_loaded) return
   try {
     const res = await eventsApi.getAll()
     const list = res.data?.list || []
-    allEvents.length = 0
-    for (const ev of list) {
-      const rel = EVENT_RELATIONS[ev.id] || { causes: [], consequences: [] }
-      allEvents.push({
-        ...ev,
-        related: rel,
-      })
-    }
+    replaceEvents(list.length > 0 ? list : fallbackEvents)
     backendAvailable.value = true
     loadError.value = ''
     _loaded = true
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const error = isRequestLikeError(e) ? e : {}
     backendAvailable.value = false
-    if (e?.code === 'ERR_NETWORK' || e?.message?.includes('Network Error')) {
+    replaceEvents(fallbackEvents)
+    if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
       loadError.value = '后端服务未启动（localhost:8000）'
-    } else if (e?.code === 'ECONNABORTED') {
+    } else if (error.code === 'ECONNABORTED') {
       loadError.value = '后端响应超时'
     } else {
-      loadError.value = e?.message || '加载历史事件失败'
+      loadError.value = error.message || '加载历史事件失败'
     }
     console.warn('[HistoricalStarlink] 后端事件加载失败：', loadError.value, '— 页面将以降级模式运行')
     _loaded = true

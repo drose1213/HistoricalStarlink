@@ -1,35 +1,54 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { voteApi } from '@/api/vote'
-import type { VoteStats } from '@/types'
+import type { VoteEntry, VoteStats } from '@/types'
+
+type VoteChoice = 'up' | 'down' | 'star'
 
 export const useVoteStore = defineStore('vote', () => {
   const voteStats = ref<VoteStats | null>(null)
   const topEvents = ref<{ event_id: string; total_votes: number }[]>([])
   const isLoading = ref(false)
 
-  // spec rating-system-enhancement: 三态计数 + 当前会话投票状态
   const agreeCount = ref(0)
   const disagreeCount = ref(0)
   const favoriteCount = ref(0)
-  const myVote = ref<number>(0)  // 1 / -1 / 0
+  const myVote = ref<number>(0)
 
-  async function submitVote(eventId: string, voteType: 'up' | 'down' | 'star', eventName?: string) {
+  function toNumericVote(vote: VoteEntry['vote_type'] | number | null | undefined): number {
+    if (vote === 'up' || vote === 1) return 1
+    if (vote === 'down' || vote === -1) return -1
+    if (vote === 'star' || vote === 2) return 2
+    return 0
+  }
+
+  function applyStats(data: VoteStats | null | undefined) {
+    voteStats.value = data ?? null
+    if (!data) return
+
+    agreeCount.value = data.up_count ?? agreeCount.value
+    disagreeCount.value = data.down_count ?? disagreeCount.value
+    favoriteCount.value = data.favorite_count ?? data.star_count ?? favoriteCount.value
+    myVote.value = typeof data.my_vote === 'number' ? data.my_vote : myVote.value
+  }
+
+  async function submitVote(eventId: string, voteType: VoteChoice, eventName?: string) {
     isLoading.value = true
     try {
-      const res = (await voteApi.createVote({
+      const res = await voteApi.createVote({
         event_id: eventId,
         vote_type: voteType,
         event_name: eventName || eventId,
-      })) as any
+      })
+
       const data = res.data
       if (data) {
-        if (typeof data.agree_count === 'number') agreeCount.value = data.agree_count
-        if (typeof data.disagree_count === 'number') disagreeCount.value = data.disagree_count
-        if (typeof data.favorite_count === 'number') favoriteCount.value = data.favorite_count
-        if (typeof data.my_vote === 'number') myVote.value = data.my_vote
+        agreeCount.value = data.agree_count ?? agreeCount.value
+        disagreeCount.value = data.disagree_count ?? disagreeCount.value
+        favoriteCount.value = data.favorite_count ?? favoriteCount.value
+        myVote.value = typeof data.my_vote === 'number' ? data.my_vote : toNumericVote(data.vote_type)
       }
-      // 同步拉一次 stats，确保 ui 数字与全局一致
+
       await fetchVoteStats(eventId)
     } finally {
       isLoading.value = false
@@ -38,41 +57,23 @@ export const useVoteStore = defineStore('vote', () => {
 
   async function fetchVoteStats(eventId: string) {
     const res = await voteApi.getVoteStats(eventId)
-    const data = (res as any).data
-    voteStats.value = data
-    // 把 up_count/down_count 同步到三态计数（无 favorite 后端时 fallback）
-    if (data) {
-      agreeCount.value = data.up_count ?? agreeCount.value
-      disagreeCount.value = data.down_count ?? disagreeCount.value
-    }
-    return data
+    applyStats(res.data)
+    return res.data
   }
 
   async function fetchMyVote(eventId: string) {
-    const res = (await voteApi.getUserVote(eventId)) as any
-    const data = res.data
-    if (data && Array.isArray(data) && data.length) {
-      myVote.value = (data[0].vote_type === 'up' || data[0].vote_type === 'star' || data[0].vote_type === 1) ? 1 : -1
-    } else if (data && !Array.isArray(data)) {
-      myVote.value = data.vote_type === 'up' || data.vote_type === 'star' ? 1 : (data.vote_type === 'down' ? -1 : 0)
-    } else {
-      myVote.value = 0
-    }
+    const res = await voteApi.getUserVote(eventId)
+    myVote.value = toNumericVote(res.data?.vote_type)
     return myVote.value
   }
 
-  async function fetchTopEvents(limit = 10) {
-    isLoading.value = true
-    try {
-      const res = await voteApi.getTopVotedEvents(limit)
-      topEvents.value = (res as any).data || []
-      return topEvents.value
-    } finally {
-      isLoading.value = false
-    }
+  async function fetchTopEvents() {
+    topEvents.value = []
+    return topEvents.value
   }
 
   function resetLocal() {
+    voteStats.value = null
     agreeCount.value = 0
     disagreeCount.value = 0
     favoriteCount.value = 0

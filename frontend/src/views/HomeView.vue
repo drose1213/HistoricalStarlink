@@ -664,11 +664,11 @@ async function onHeroSelect(hero: HeroPersona) {
   try {
     await dialogueStore.startDynamicFromTopic(currentExploreTopic.value, hero.hero_id)
     navigateToDialogue(currentExploreTopic.value)
-  } catch (err: any) {
+  } catch (err: unknown) {
     // 失败: 关闭英雄卡, 回到探索弹窗, 保留 topic 便于重试
     showHeroSelection.value = false
     showExploreModal.value = true
-    freeExploreError.value = err?.message || '开启时空对话失败, 请稍后重试'
+    freeExploreError.value = err instanceof Error ? err.message : '开启时空对话失败, 请稍后重试'
   } finally {
     freeExploreLoading.value = false
     selectedHeroName.value = ''
@@ -683,11 +683,11 @@ async function onHeroSkip() {
   try {
     await dialogueStore.startDynamicFromTopic(currentExploreTopic.value)
     navigateToDialogue(currentExploreTopic.value)
-  } catch (err: any) {
+  } catch (err: unknown) {
     // 失败: 关闭英雄卡, 回到探索弹窗, 保留 topic 便于重试
     showHeroSelection.value = false
     showExploreModal.value = true
-    freeExploreError.value = err?.message || '开启时空对话失败, 请稍后重试'
+    freeExploreError.value = err instanceof Error ? err.message : '开启时空对话失败, 请稍后重试'
   } finally {
     freeExploreLoading.value = false
     selectedHeroName.value = ''

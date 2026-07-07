@@ -116,13 +116,87 @@ def _email_code_key(email: str) -> str:
     return f"email_code:{email}"
 
 
+def _password_reset_code_key(email: str) -> str:
+    return f"password_reset_code:{email}"
+
+
 def _email_code_cooldown_key(email: str) -> str:
     return f"email_code_cd:{email}"
+
+
+def _password_reset_cooldown_key(email: str) -> str:
+    return f"password_reset_code_cd:{email}"
 
 
 def _email_code_rate_key(email: str) -> str:
     t = int(time.time()) // 3600
     return f"email_code_rate:{email}:{t}"
+
+
+def _password_reset_rate_key(email: str) -> str:
+    t = int(time.time()) // 3600
+    return f"password_reset_code_rate:{email}:{t}"
+
+
+async def _store_email_code(
+    code_key: str,
+    cooldown_key: str,
+    rate_key: str,
+    rate_value: object,
+    code: str,
+) -> None:
+    await cache.set(code_key, code, settings.EMAIL_CODE_EXPIRE_SECONDS)
+    await cache.set(cooldown_key, "1", settings.EMAIL_CODE_COOLDOWN_SECONDS)
+
+    if rate_value is None:
+        await cache.set(rate_key, "1", 3600)
+        return
+
+    try:
+        await cache.set(rate_key, str(int(rate_value) + 1), 3600)
+    except (ValueError, TypeError):
+        await cache.set(rate_key, "1", 3600)
+
+
+async def _deliver_email_code(to_email: str, code: str, purpose: str) -> None:
+    try:
+        await _send_email(to_email, code)
+        logger.info("Email code sent for %s to %s", purpose, to_email)
+    except smtplib.SMTPAuthenticationError as e:
+        logger.error(
+            "SMTP authentication failed for %s to %s: %s: %s",
+            purpose,
+            to_email,
+            e.smtp_code,
+            e.smtp_error,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="SMTP 登录失败：请确认邮箱已开启 SMTP/POP3 服务，并使用邮箱授权码而不是登录密码；也可能是账号异常或登录频率受限。",
+        ) from e
+    except (smtplib.SMTPException, OSError, TimeoutError, asyncio.TimeoutError) as e:
+        logger.error(
+            "Email code delivery failed for %s to %s: %s: %s",
+            purpose,
+            to_email,
+            type(e).__name__,
+            e,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="邮件发送失败，请稍后重试或联系管理员检查 SMTP 配置",
+        ) from e
+
+
+def _login_smtp(smtp) -> None:
+    auth_methods = smtp.esmtp_features.get("auth", "").upper().split()
+    if "LOGIN" in auth_methods:
+        smtp.user = settings.SMTP_USER
+        smtp.password = settings.SMTP_PASSWORD
+        smtp.auth("LOGIN", smtp.auth_login)
+        return
+
+    smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
 
 
 async def _send_email(to_email: str, code: str) -> None:
@@ -154,7 +228,8 @@ async def _send_email(to_email: str, code: str) -> None:
                 context=ssl_context,
                 timeout=10,
             ) as s:
-                s.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                s.ehlo()
+                _login_smtp(s)
                 s.sendmail(msg["From"], [to_email], msg.as_string())
         await asyncio.wait_for(
             loop.run_in_executor(None, _do_send), timeout=10
@@ -165,7 +240,7 @@ async def _send_email(to_email: str, code: str) -> None:
                 s.ehlo()
                 s.starttls(context=ssl_context)
                 s.ehlo()
-                s.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                _login_smtp(s)
                 s.sendmail(msg["From"], [to_email], msg.as_string())
         await asyncio.wait_for(
             loop.run_in_executor(None, _do_send), timeout=10
@@ -212,6 +287,32 @@ class LoginRequest(BaseModel):
     password: str = Field(..., description="密码")
 
 
+class PasswordResetRequest(BaseModel):
+    email: str = Field(..., max_length=100, description="邮箱")
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v):
+        email = v.strip().lower()
+        if "@" not in email or "." not in email.split("@")[-1]:
+            raise ValueError("邮箱格式不正确")
+        return email
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    email: str = Field(..., max_length=100, description="邮箱")
+    email_code: str = Field(..., min_length=6, max_length=6, description="邮箱验证码")
+    new_password: str = Field(..., min_length=6, max_length=128, description="新密码")
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v):
+        email = v.strip().lower()
+        if "@" not in email or "." not in email.split("@")[-1]:
+            raise ValueError("邮箱格式不正确")
+        return email
+
+
 class ProfileUpdateRequest(BaseModel):
     nickname: Optional[str] = Field(default=None, max_length=50, description="昵称")
     avatar_url: Optional[str] = Field(default=None, max_length=500, description="头像URL")
@@ -234,7 +335,10 @@ async def send_email_code(
 
     cd_key = _email_code_cooldown_key(req.email)
     if await cache.exists(cd_key):
-        raise HTTPException(status_code=429, detail="操作过于频繁，请60秒后重试")
+        raise HTTPException(
+            status_code=429,
+            detail=f"操作过于频繁，请{settings.EMAIL_CODE_COOLDOWN_SECONDS}秒后重试",
+        )
 
     rate_key = _email_code_rate_key(req.email)
     rate_val = await cache.get(rate_key)
@@ -242,26 +346,8 @@ async def send_email_code(
         raise HTTPException(status_code=429, detail="该邮箱验证码发送次数已达上限，请稍后再试")
 
     code = _generate_code()
-
-    await cache.set(_email_code_key(req.email), code, settings.EMAIL_CODE_EXPIRE_SECONDS)
-    await cache.set(cd_key, "1", settings.EMAIL_CODE_COOLDOWN_SECONDS)
-
-    if rate_val is None:
-        await cache.set(rate_key, "1", 3600)
-    else:
-        try:
-            await cache.set(rate_key, str(int(rate_val) + 1), 3600)
-        except (ValueError, TypeError):
-            await cache.set(rate_key, "1", 3600)
-
-    async def _send_in_background(email: str, code: str):
-        try:
-            await _send_email(email, code)
-            logger.info(f"验证码已发送到 {email}")
-        except Exception as e:
-            logger.error(f"发送验证码到 {email} 失败: {type(e).__name__}: {e}")
-
-    asyncio.create_task(_send_in_background(req.email, code))
+    await _deliver_email_code(req.email, code, "registration")
+    await _store_email_code(_email_code_key(req.email), cd_key, rate_key, rate_val, code)
 
     return BaseResponse(message="验证码已发送，请查收邮箱")
 
@@ -316,6 +402,72 @@ async def register(
         message="注册成功",
         data={"token": token, "user": _user_out(user)},
     )
+
+
+@router.post("/password-reset/send-code", response_model=BaseResponse, summary="发送重置密码邮箱验证码")
+async def send_password_reset_code(
+    req: PasswordResetRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        raise HTTPException(status_code=500, detail="邮件服务未配置，请联系管理员")
+
+    result = await db.execute(select(User).where(User.email == req.email))
+    user = result.scalar_one_or_none()
+
+    cd_key = _password_reset_cooldown_key(req.email)
+    if await cache.exists(cd_key):
+        raise HTTPException(
+            status_code=429,
+            detail=f"操作过于频繁，请{settings.EMAIL_CODE_COOLDOWN_SECONDS}秒后重试",
+        )
+
+    rate_key = _password_reset_rate_key(req.email)
+    rate_val = await cache.get(rate_key)
+    if rate_val is not None and int(rate_val) >= settings.EMAIL_CODE_MAX_PER_HOUR:
+        raise HTTPException(status_code=429, detail="该邮箱验证码发送次数已达上限，请稍后再试")
+
+    if user:
+        code = _generate_code()
+        await _deliver_email_code(req.email, code, "password reset")
+        await _store_email_code(_password_reset_code_key(req.email), cd_key, rate_key, rate_val, code)
+    else:
+        await cache.set(cd_key, "1", settings.EMAIL_CODE_COOLDOWN_SECONDS)
+        if rate_val is None:
+            await cache.set(rate_key, "1", 3600)
+        else:
+            try:
+                await cache.set(rate_key, str(int(rate_val) + 1), 3600)
+            except (ValueError, TypeError):
+                await cache.set(rate_key, "1", 3600)
+
+    return BaseResponse(message="如果该邮箱已注册，验证码将发送到对应邮箱")
+
+
+@router.post("/password-reset/confirm", response_model=BaseResponse, summary="通过邮箱验证码重置密码")
+async def confirm_password_reset(
+    req: PasswordResetConfirmRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.email == req.email))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+
+    code_key = _password_reset_code_key(req.email)
+    stored_code = await cache.get(code_key)
+    if stored_code is None:
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+    if not hmac.compare_digest(str(stored_code), req.email_code):
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+
+    user.hashed_password = _hash_password(req.new_password)
+    await cache.delete(code_key)
+    await cache.delete(_password_reset_cooldown_key(req.email))
+    await db.flush()
+    await db.refresh(user)
+
+    return BaseResponse(message="密码已重置，请使用新密码登录")
 
 
 @router.post("/login", response_model=BaseResponse, summary="用户登录")

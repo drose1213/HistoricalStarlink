@@ -1,4 +1,5 @@
 import { get, upload, del } from './request'
+import { normalizePaginatedResponse } from './pagination'
 import type {
   ApiResponse,
   SignatureRecord,
@@ -11,7 +12,8 @@ export const signatureApi = {
   },
 
   getSignatureRecords(page = 1, pageSize = 20): Promise<ApiResponse<PaginatedResponse<SignatureRecord>>> {
-    return get('/api/signature', { page, page_size: pageSize })
+    return get<SignatureRecord[]>('/api/signature', { page, page_size: pageSize })
+      .then(normalizePaginatedResponse)
   },
 
   getSignatureById(id: number): Promise<ApiResponse<SignatureRecord>> {
@@ -19,7 +21,11 @@ export const signatureApi = {
   },
 
   getUserSignatures(): Promise<ApiResponse<SignatureRecord[]>> {
-    return get('/api/signature') as any
+    return get<SignatureRecord[]>('/api/signature').then(res => ({
+      code: res.code,
+      message: res.message,
+      data: Array.isArray(res.data) ? res.data : [],
+    }))
   },
 
   deleteSignature(id: number): Promise<ApiResponse<null>> {

@@ -24,6 +24,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { StarlinkGraph, StarlinkGraphNode } from '@/utils/starlinkGraph'
+import { shouldShowStarlinkLabel } from '@/utils/starlinkGraph'
+import { mapYearToTimelineY, resolveStarfieldX, resolveTimelineLaneY } from '@/utils/timelineLayout'
 import { useI18n } from '@/composables/useI18n'
 
 const { t, tf, tc, locale } = useI18n()
@@ -84,6 +86,27 @@ let width = 0
 let height = 0
 let animationId: number | null = null
 let resizeObserver: ResizeObserver | null = null
+
+// 时间轴边界 (首页垂直时间轴布局使用, 由 rebuildGraph 从事件年份动态计算)
+let yearBounds = { min: -500, max: 2025 }
+let yearSpan = yearBounds.max - yearBounds.min
+
+// 首页时间轴布局共享常量 (节点定位 + 刻度绘制都用)
+const HOME_TOP_PAD = 112
+const HOME_BOTTOM_PAD = 92
+
+/** 年份 → Y 像素 — 对数感知映射 (新→旧)
+ *  让密集的近现代事件获得更多视觉空间, 远古 (低密度) 自然压缩到底部
+ *  age=0 (year=max, 最新) → ratio=0 (顶),  age=yearSpan (year=min, 最旧) → ratio=1 (底) */
+function yearToY(year: number | undefined, topPad = HOME_TOP_PAD, bottomPad = HOME_BOTTOM_PAD): number {
+  return mapYearToTimelineY(year, {
+    minYear: yearBounds.min,
+    maxYear: yearBounds.max,
+    height,
+    topPad,
+    bottomPad,
+  })
+}
 
 function hash(value: string): number {
   let h = 2166136261
@@ -157,9 +180,23 @@ function rebuildGraph(): void {
     adjacencyMap.get(edge.target)?.add(edge.source)
   }
 
+  // 收集事件年份用于垂直时间轴布局
+  const eventYears: number[] = []
+  for (const n of props.graph.nodes) {
+    if (n.kind === 'event' && typeof n.year === 'number') {
+      eventYears.push(n.year)
+    }
+  }
+  if (eventYears.length > 0) {
+    yearBounds = { min: Math.min(...eventYears), max: Math.max(...eventYears) }
+    yearSpan = Math.max(1, yearBounds.max - yearBounds.min)
+  }
+
   layoutNodes()
 
-  const particleCount = Math.min(90, Math.max(12, props.graph.edges.length * 2))
+  const particleCount = props.mode === 'home'
+    ? Math.min(36, Math.max(8, Math.ceil(props.graph.edges.length * 0.35)))
+    : Math.min(90, Math.max(12, props.graph.edges.length * 2))
   for (let i = 0; i < particleCount; i++) {
     particles.push({
       edgeIndex: props.graph.edges.length > 0 ? i % props.graph.edges.length : 0,
@@ -179,84 +216,128 @@ function layoutNodes(): void {
 }
 
 function layoutHomeNodes(): void {
-  const cy = height * 0.5
-  const chinaNodes = nodes
-    .filter(node => node.kind === 'event' && node.region === 'china')
-    .sort((a, b) => b.importance - a.importance)
-  const foreignNodes = nodes
-    .filter(node => node.kind === 'event' && node.region === 'foreign')
-    .sort((a, b) => b.importance - a.importance)
-  const conceptNodes = nodes
-    .filter(node => node.kind === 'concept')
-    .sort((a, b) => a.phase - b.phase)
+  // ── 年代星座布局 ──
+  //   Y 轴保持严格年代秩序: 新事件在上, 早期事件在下。
+  //   X 轴按确定性星场散布, 形成图二那种网络感, 不再固定左右两列。
+  const topPad = HOME_TOP_PAD
+  const bottomPad = HOME_BOTTOM_PAD
+  const railX = width / 2
 
-  const placeRegionCluster = (
-    regionNodes: PositionedNode[],
-    clusterCenterX: number,
-    sideBias: number,
-    angleOffset: number,
-  ): void => {
-    const radiusXMax = width * 0.23
-    const radiusYMax = height * 0.38
+  const eventNodes = nodes.filter(node => node.kind === 'event')
+  const conceptNodes = nodes.filter(node => node.kind === 'concept')
 
-    regionNodes.forEach((node, index) => {
-      const ratio = regionNodes.length <= 1 ? 0 : index / (regionNodes.length - 1)
-      const spiralAngle = index * 2.18 + node.phase * 0.42 + angleOffset
-      const spread = 0.2 + Math.pow(ratio, 0.9) * 0.84
-      const radiusX = radiusXMax * spread + node.radius * 0.8
-      const radiusY = radiusYMax * spread + node.radius * 0.6
-      const lobeDrift = sideBias * width * (0.048 + (1 - spread) * 0.08)
+  const ySlots = resolveTimelineLaneY(
+    eventNodes.map(node => ({
+      id: node.id,
+      targetY: yearToY(node.year, topPad, bottomPad),
+      radius: Math.min(node.radius, 5),
+    })),
+    {
+      minY: topPad,
+      maxY: height - bottomPad,
+      minGap: Math.max(14, Math.min(22, height * 0.024)),
+    },
+  )
+  const yById = new Map(ySlots.map(slot => [slot.id, slot.y]))
 
-      node.tx = clusterCenterX + Math.cos(spiralAngle) * radiusX + lobeDrift
-      node.ty = cy + Math.sin(spiralAngle) * radiusY * 0.96
+  eventNodes.forEach((node) => {
+    node.ty = yById.get(node.id) ?? yearToY(node.year, topPad, bottomPad)
+    node.tx = resolveStarfieldX({
+      id: node.id,
+      width,
+      railX,
+      region: node.region,
+      importance: node.importance,
     })
-  }
+  })
 
-  placeRegionCluster(chinaNodes, width * 0.34, -1, Math.PI * 0.72)
-  placeRegionCluster(foreignNodes, width * 0.66, 1, -Math.PI * 0.18)
-
-  conceptNodes.forEach((node, index) => {
-    const angle = -Math.PI / 2 + (index / Math.max(conceptNodes.length, 1)) * Math.PI * 2 + node.phase * 0.28
-    const ringX = width * (0.36 + ((hash(node.id) % 100) / 100) * 0.1)
-    const ringY = height * (0.34 + ((hash(`${node.id}_y`) % 100) / 100) * 0.08)
-    node.tx = width * 0.5 + Math.cos(angle) * ringX
-    node.ty = cy + Math.sin(angle) * ringY
+  // 概念节点靠近其关联事件的质心, 形成图二式“星座注脚”。
+  conceptNodes.forEach((node) => {
+    const relatedEvents = [...(adjacencyMap.get(node.id) || [])]
+      .map(id => nodeMap.get(id))
+      .filter((related): related is PositionedNode => related?.kind === 'event')
+    const angleSeed = (hash(node.id) % 360) / 360 * Math.PI * 2
+    const drift = Math.min(width, height) * (0.055 + (hash(`${node.id}_d`) % 90) / 1000)
+    if (relatedEvents.length > 0) {
+      const avgX = relatedEvents.reduce((sum, related) => sum + related.tx, 0) / relatedEvents.length
+      const avgY = relatedEvents.reduce((sum, related) => sum + related.ty, 0) / relatedEvents.length
+      node.tx = avgX + Math.cos(angleSeed) * drift
+      node.ty = avgY + Math.sin(angleSeed) * drift
+    } else {
+      node.tx = resolveStarfieldX({ id: node.id, width, railX, importance: node.importance })
+      node.ty = topPad + ((hash(`${node.id}_y`) % 1000) / 1000) * (height - topPad - bottomPad)
+    }
+    // 概念节点保持轻量但可识别, hover 时显示具体关联备注
+    node.radius = 3.8
   })
 
   clampTargets()
 }
 
 function layoutDetailNodes(): void {
-  const cx = width / 2
-  const cy = height / 2
-  const radius = Math.min(width, height) * 0.34
-  const causes = nodes.filter(node => node.role === 'cause')
-  const consequences = nodes.filter(node => node.role === 'consequence')
+  const cx = width * 0.52
+  const cy = height * 0.5
+  const topPad = Math.max(72, height * 0.14)
+  const bottomPad = Math.max(72, height * 0.14)
+  const railX = cx
+  const relatedEvents = nodes.filter(node => node.kind === 'event' && node.role !== 'center')
   const concepts = nodes.filter(node => node.kind === 'concept')
+  const center = nodes.find(node => node.role === 'center')
 
-  for (const node of nodes) {
-    if (node.role === 'center') {
-      node.tx = cx
-      node.ty = cy
-    }
+  if (center) {
+    center.tx = cx
+    center.ty = cy
   }
 
-  causes.forEach((node, index) => {
-    const angle = -Math.PI * 0.88 + (index / Math.max(causes.length - 1, 1)) * Math.PI * 0.76
-    node.tx = cx + Math.cos(angle) * radius
-    node.ty = cy + Math.sin(angle) * radius * 0.82
+  const ySlots = resolveTimelineLaneY(
+    relatedEvents.map(node => {
+      const timelineY = yearToY(node.year, topPad, bottomPad)
+      return {
+        id: node.id,
+        targetY: cy + (timelineY - cy) * 0.62,
+        radius: Math.min(node.radius, 8),
+      }
+    }),
+    {
+      minY: topPad,
+      maxY: height - bottomPad,
+      minGap: Math.max(34, Math.min(54, height * 0.07)),
+    },
+  )
+  const yById = new Map(ySlots.map(slot => [slot.id, slot.y]))
+
+  relatedEvents.forEach((node) => {
+    const sideBias = node.role === 'cause'
+      ? -width * 0.16
+      : node.role === 'consequence'
+        ? width * 0.16
+        : 0
+    const starfieldX = resolveStarfieldX({
+      id: node.id,
+      width,
+      railX,
+      region: node.region,
+      importance: node.importance,
+    })
+    node.tx = cx + sideBias + (starfieldX - railX) * 0.42
+    node.ty = yById.get(node.id) ?? cy + (yearToY(node.year, topPad, bottomPad) - cy) * 0.62
   })
 
-  consequences.forEach((node, index) => {
-    const angle = Math.PI * 0.12 + (index / Math.max(consequences.length - 1, 1)) * Math.PI * 0.76
-    node.tx = cx + Math.cos(angle) * radius
-    node.ty = cy + Math.sin(angle) * radius * 0.82
-  })
-
-  concepts.forEach((node, index) => {
-    const angle = -Math.PI / 2 + (index / Math.max(concepts.length, 1)) * Math.PI * 2
-    node.tx = cx + Math.cos(angle) * radius * 0.62
-    node.ty = cy + Math.sin(angle) * radius * 0.62
+  concepts.forEach((node) => {
+    const relatedNodes = [...(adjacencyMap.get(node.id) || [])]
+      .map(id => nodeMap.get(id))
+      .filter((related): related is PositionedNode => related !== undefined)
+    const angleSeed = (hash(node.id) % 360) / 360 * Math.PI * 2
+    const drift = Math.min(width, height) * (0.07 + (hash(`${node.id}_detail`) % 70) / 1000)
+    const baseX = relatedNodes.length > 0
+      ? relatedNodes.reduce((sum, related) => sum + related.tx, 0) / relatedNodes.length
+      : cx
+    const baseY = relatedNodes.length > 0
+      ? relatedNodes.reduce((sum, related) => sum + related.ty, 0) / relatedNodes.length
+      : cy
+    node.tx = baseX + Math.cos(angleSeed) * drift
+    node.ty = baseY + Math.sin(angleSeed) * drift
+    node.radius = 3.8
   })
 
   clampTargets()
@@ -267,7 +348,9 @@ function clampTargets(): void {
     const pad = props.mode === 'home'
       ? Math.max(26, node.radius * 3.1)
       : Math.max(42, node.radius * 4)
-    node.tx = Math.max(pad, Math.min(width - pad, node.tx))
+    let minX = pad
+    let maxX = width - pad
+    node.tx = Math.max(minX, Math.min(maxX, node.tx))
     node.ty = Math.max(pad, Math.min(height - pad, node.ty))
     if (node.x === width / 2 && node.y === height / 2) {
       node.x = node.tx
@@ -322,6 +405,12 @@ function drawBackground(time: number): void {
 
   // ── 暗角渐晕 ──
   drawVignette(ctx)
+
+  // ── 史河主轴 (仅首页) — 发光中线 + 时间粒子流, 画在背景层 ──
+  // ── 时间轴导轨 (仅首页) — 年份刻度 + 文字标签, 画在最上层保证可读 ──
+  if (props.mode === 'home') {
+    drawTimelineRail(ctx)
+  }
 }
 
 /** 六角网格 — 赛博朋克标志性背景元素 */
@@ -393,6 +482,69 @@ function drawVignette(ctx: CanvasRenderingContext2D): void {
   ctx.fillRect(0, 0, width, height)
 }
 
+/** Home timeline ticks and year labels without the previous central light pillar. */
+function drawTimelineRail(ctx: CanvasRenderingContext2D): void {
+  if (props.mode !== 'home') return
+  const railX = width / 2
+  const topPad = HOME_TOP_PAD
+  const bottomPad = HOME_BOTTOM_PAD
+
+  ctx.save()
+
+  // ── 顶部 / 底部方向标记 (NEWER / OLDER), 带轻微辉光 ──
+  ctx.font = '700 9px "JetBrains Mono", ui-monospace, monospace'
+  ctx.textBaseline = 'middle'
+  ctx.textAlign = 'left'
+  ctx.shadowColor = '#86ffe8'
+  ctx.shadowBlur = 6
+  ctx.fillStyle = 'rgba(200, 255, 245, 0.85)'
+  ctx.fillText('▼ NEWER', railX + 10, topPad - 16)
+  ctx.shadowColor = '#ff6db6'
+  ctx.fillStyle = 'rgba(255, 180, 210, 0.7)'
+  ctx.fillText('OLDER ▲', railX + 10, height - bottomPad + 16)
+  ctx.shadowBlur = 0
+
+  // ── 年份刻度 — 对数感知下的步长自适应 (250 / 500 / 1000) ──
+  const tickStep = yearSpan > 3000 ? 1000 : yearSpan > 1500 ? 500 : 250
+  const tickStart = Math.floor(yearBounds.min / tickStep) * tickStep
+  const tickEnd = Math.ceil(yearBounds.max / tickStep) * tickStep
+
+  ctx.font = '500 10px "JetBrains Mono", ui-monospace, monospace'
+
+  for (let year = tickStart; year <= tickEnd; year += tickStep) {
+    if (year < yearBounds.min - 50 || year > yearBounds.max + 50) continue
+    const y = yearToY(year, topPad, bottomPad)
+    if (y < topPad - 6 || y > height - bottomPad + 6) continue
+
+    // 刻度短线
+    ctx.strokeStyle = 'rgba(134, 255, 232, 0.36)'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(railX - 5, y)
+    ctx.lineTo(railX + 5, y)
+    ctx.stroke()
+
+    // 引导线到右侧标签区
+    ctx.strokeStyle = 'rgba(134, 255, 232, 0.10)'
+    ctx.beginPath()
+    ctx.moveTo(railX + 5, y)
+    ctx.lineTo(width - 76, y)
+    ctx.stroke()
+
+    // 年份标签 (BC 用品红, AD 用青色)
+    const isBC = year < 0
+    const absYear = Math.abs(year)
+    const label = isBC ? `公元前 ${absYear}` : `公元 ${absYear}`
+    ctx.textAlign = 'right'
+    ctx.fillStyle = isBC
+      ? 'rgba(255, 109, 182, 0.5)'
+      : 'rgba(134, 255, 232, 0.55)'
+    ctx.fillText(label, width - 14, y)
+  }
+
+  ctx.restore()
+}
+
 function drawGraph(time: number): void {
   const canvas = graphCanvasRef.value
   const ctx = canvas?.getContext('2d')
@@ -422,48 +574,30 @@ function drawEdges(
     const dimmedByFocus = focusIds ? !(focusIds.has(source.id) && focusIds.has(target.id)) : false
 
     // ── 赛博线路: 两段式折角路径 (L形拐角) ──
-    const midX = (source.x + target.x) / 2
-    const midY = source.y + (target.y - source.y) * 0.15 // 先走水平再走垂直
-    const useBend = Math.abs(target.x - source.x) > 40 && Math.abs(target.y - source.y) > 40
-
     ctx.beginPath()
-    if (useBend && props.mode === 'home') {
-      ctx.moveTo(source.x, source.y)
-      ctx.lineTo(midX, source.y)
-      ctx.lineTo(midX, target.y)
-      ctx.lineTo(target.x, target.y)
-    } else {
-      ctx.moveTo(source.x, source.y)
-      ctx.lineTo(target.x, target.y)
-    }
+    ctx.moveTo(source.x, source.y)
+    ctx.lineTo(target.x, target.y)
 
     const color = highlighted
-      ? 'rgba(255,255,255,0.78)'
+      ? 'rgba(255,255,255,0.85)'
       : dimmedByFocus
-        ? 'rgba(255,255,255,0.05)'
+        ? 'rgba(255,255,255,0.03)'
         : edgeColor(edge.role, edge.strength)
     ctx.strokeStyle = color
-    ctx.lineWidth = highlighted ? 1.6 : dimmedByFocus ? 0.3 : 0.5 + edge.strength * 0.9
+    ctx.lineWidth = highlighted ? 1.5 : dimmedByFocus ? 0.3 : 0.35 + edge.strength * 0.55
     ctx.stroke()
 
     // ── 边线发光层 (高亮或非淡化时) ──
-    if (!dimmedByFocus && (highlighted || edge.strength > 0.5)) {
+    if (!dimmedByFocus && (highlighted || edge.strength > 0.6)) {
       ctx.save()
-      ctx.globalAlpha = highlighted ? 0.35 : 0.12
+      ctx.globalAlpha = highlighted ? 0.38 : 0.08
       ctx.shadowColor = edge.role === 'cause' ? '#86ffe8' : edge.role === 'consequence' ? '#ff6db6' : '#f0c84b'
-      ctx.shadowBlur = highlighted ? 12 : 6
+      ctx.shadowBlur = highlighted ? 12 : 5
       ctx.beginPath()
-      if (useBend && props.mode === 'home') {
-        ctx.moveTo(source.x, source.y)
-        ctx.lineTo(midX, source.y)
-        ctx.lineTo(midX, target.y)
-        ctx.lineTo(target.x, target.y)
-      } else {
-        ctx.moveTo(source.x, source.y)
-        ctx.lineTo(target.x, target.y)
-      }
+      ctx.moveTo(source.x, source.y)
+      ctx.lineTo(target.x, target.y)
       ctx.strokeStyle = color
-      ctx.lineWidth = highlighted ? 2.5 : 1.2
+      ctx.lineWidth = highlighted ? 2.4 : 1.0
       ctx.stroke()
       ctx.restore()
     }
@@ -704,8 +838,7 @@ function drawLabel(
   isConnected: boolean,
 ): void {
   const isMajor = node.role === 'center' || node.importance >= 8 || isHover
-  const visible = props.mode === 'detail' || isMajor || node.kind === 'concept'
-  if (!visible) return
+  if (!shouldShowStarlinkLabel({ mode: props.mode, node, isHover })) return
 
   ctx.font = `${isMajor ? 700 : 600} ${isHover ? 13 : isMajor ? 11 : 9}px "Noto Serif SC", "KaiTi", serif`
   ctx.textAlign = 'center'
@@ -721,11 +854,12 @@ function drawLabel(
 }
 
 function edgeColor(role: string, strength: number): string {
-  const alpha = 0.1 + strength * 0.26
+  // 默认低透明度 — 让边线作为背景纹理存在, hover 时再凸显
+  const alpha = 0.06 + strength * 0.16
   if (role === 'cause') return `rgba(134,255,232,${alpha})`
   if (role === 'consequence') return `rgba(255,109,182,${alpha})`
-  if (role === 'concept') return `rgba(240,200,75,${alpha * 0.72})`
-  return `rgba(255,255,255,${alpha * 0.62})`
+  if (role === 'concept') return `rgba(240,200,75,${alpha * 0.7})`
+  return `rgba(255,255,255,${alpha * 0.55})`
 }
 
 function rgba(hex: string, alpha: number): string {

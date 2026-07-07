@@ -71,6 +71,9 @@ tmp/
 test_*.js
 test_results.txt
 backend/frontend/dist/
+*.log
+*.out
+*.err
 
 # 内层嵌套仓库与 workspace 顶层临时日志
 HistoricalStarlink/

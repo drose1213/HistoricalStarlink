@@ -24,20 +24,11 @@ export const useReviewStore = defineStore('review', () => {
       }
       if (minStars.value != null) params.min_stars = minStars.value
       if (maxStars.value != null) params.max_stars = maxStars.value
-      const res = (await reviewApi.listReviews(cardId, params)) as any
-      const data = res.data
-      if (data && Array.isArray(data.items)) {
-        reviews.value = data.items
-        total.value = data.total
-        page.value = data.page
-        pageSize.value = data.page_size
-      } else if (Array.isArray(data)) {
-        reviews.value = data
-        total.value = data.length
-      } else {
-        reviews.value = []
-        total.value = 0
-      }
+      const res = await reviewApi.listReviews(cardId, params)
+      reviews.value = res.data.items
+      total.value = res.data.total
+      page.value = res.data.page
+      pageSize.value = res.data.page_size
     } finally {
       isLoading.value = false
     }
@@ -72,7 +63,7 @@ export const useReviewStore = defineStore('review', () => {
     }
     try {
       const res = await reviewApi.likeReview(reviewId)
-      const data = (res as any).data
+      const data = res.data
       if (target && data) {
         target.liked_by_me = !!data.liked
         target.likes_count = data.likes_count ?? target.likes_count

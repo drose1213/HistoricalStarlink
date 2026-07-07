@@ -205,8 +205,8 @@ async function loadLeaderboard(period: Period) {
     const res = await leaderboardApi.get(period, 10)
     ranking.value = res.data?.ranking || []
     championEventsRaw.value = res.data?.championEvents || []
-  } catch (e: any) {
-    loadError.value = e?.message || t('leaderboard.networkError')
+  } catch (e: unknown) {
+    loadError.value = e instanceof Error ? e.message : t('leaderboard.networkError')
     ranking.value = []
     championEventsRaw.value = []
   } finally {

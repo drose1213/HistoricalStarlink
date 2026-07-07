@@ -6,7 +6,7 @@ from sqlalchemy import select, func, and_, case
 from ..database import get_db
 from ..models.vote import Vote
 from ..redis_client import cache
-from ..schemas import BaseResponse, VoteCreate, VoteOut, VoteStats
+from ..schemas import BaseResponse, VoteCreate, VoteOut
 
 router = APIRouter(prefix="/api/vote", tags=["投票"])
 
@@ -92,10 +92,12 @@ async def create_or_toggle_vote(
 @router.get("/stats/{event_id}", response_model=BaseResponse, summary="获取事件投票统计")
 async def get_vote_stats(
     event_id: str,
+    session_id: Optional[str] = Query(default=None, description="当前会话ID"),
     db: AsyncSession = Depends(get_db),
 ):
-    cached = await cache.get(f"vote:stats:{event_id}")
-    if cached:
+    cache_key = f"vote:stats:{event_id}"
+    cached = await cache.get(cache_key) if session_id is None else None
+    if cached is not None:
         return BaseResponse(data=cached)
 
     conditions = [Vote.event_id == event_id, Vote.is_deleted == False]
@@ -103,6 +105,7 @@ async def get_vote_stats(
     stmt = select(
         func.sum(case((Vote.vote_type == 1, 1), else_=0)).label("up_count"),
         func.sum(case((Vote.vote_type == -1, 1), else_=0)).label("down_count"),
+        func.sum(case((Vote.vote_type == 2, 1), else_=0)).label("favorite_count"),
         func.count(Vote.id).label("total"),
     ).where(and_(*conditions))
 
@@ -115,19 +118,34 @@ async def get_vote_stats(
 
     up_count = int(row.up_count or 0)
     down_count = int(row.down_count or 0)
+    favorite_count = int(row.favorite_count or 0)
     total = int(row.total or 0)
     ratio = round(up_count / total, 4) if total > 0 else 0.0
+    my_vote = 0
+    if session_id:
+        my_vote_stmt = select(Vote.vote_type).where(
+            and_(
+                Vote.event_id == event_id,
+                Vote.session_id == session_id,
+                Vote.is_deleted == False,
+            )
+        )
+        my_vote = int((await db.execute(my_vote_stmt)).scalar() or 0)
 
     stats = {
         "event_id": event_id,
         "event_name": event_name,
         "up_count": up_count,
         "down_count": down_count,
+        "favorite_count": favorite_count,
+        "star_count": favorite_count,
+        "my_vote": my_vote,
         "total": total,
         "ratio": ratio,
     }
 
-    await cache.set(f"vote:stats:{event_id}", stats)
+    if session_id is None:
+        await cache.set(cache_key, stats)
 
     return BaseResponse(data=stats)
 
@@ -169,6 +187,7 @@ async def batch_get_vote_stats(
             Vote.event_id,
             func.sum(case((Vote.vote_type == 1, 1), else_=0)).label("up_count"),
             func.sum(case((Vote.vote_type == -1, 1), else_=0)).label("down_count"),
+            func.sum(case((Vote.vote_type == 2, 1), else_=0)).label("favorite_count"),
             func.count(Vote.id).label("total"),
         )
         .where(and_(*conditions))
@@ -182,11 +201,15 @@ async def batch_get_vote_stats(
     for row in rows:
         up = int(row.up_count or 0)
         down = int(row.down_count or 0)
+        favorite = int(row.favorite_count or 0)
         total = int(row.total or 0)
         stats_map[row.event_id] = {
             "event_id": row.event_id,
             "up_count": up,
             "down_count": down,
+            "favorite_count": favorite,
+            "star_count": favorite,
+            "my_vote": 0,
             "total": total,
             "ratio": round(up / total, 4) if total > 0 else 0.0,
         }
@@ -197,6 +220,9 @@ async def batch_get_vote_stats(
                 "event_id": eid,
                 "up_count": 0,
                 "down_count": 0,
+                "favorite_count": 0,
+                "star_count": 0,
+                "my_vote": 0,
                 "total": 0,
                 "ratio": 0.0,
             }

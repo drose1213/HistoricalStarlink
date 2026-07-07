@@ -223,6 +223,38 @@ class TestDialogueAPI:
         # conservative 或 reform 至少一项 > 0 (选 agree 或 thoughtful)
         assert prof_body["aggregate"]["reform"] > 0 or prof_body["aggregate"]["conservative"] > 0
 
+    async def test_full_flow_writes_exploration_record_with_notes(self, client, test_db):
+        sid = self._sid("6")
+        start_res = await client.post("/api/dialogue/start", json={
+            "event_id": "qin_unification",
+            "session_id": sid,
+        })
+        assert start_res.status_code == 200, start_res.text
+        dialogue_id = start_res.json()["data"]["dialogue_id"]
+
+        ending_body = None
+        for _ in range(5):
+            choice_res = await client.post("/api/dialogue/choice", json={
+                "dialogue_id": str(dialogue_id),
+                "choice_id": "a",
+            })
+            assert choice_res.status_code == 200, choice_res.text
+            body = choice_res.json()["data"]
+            if body.get("is_ending"):
+                ending_body = body
+                break
+
+        assert ending_body is not None
+        records_res = await client.get(f"/api/exploration/records?session_id={sid}&event_id=qin_unification")
+        assert records_res.status_code == 200, records_res.text
+        records = records_res.json()["data"]
+        assert len(records) == 1
+        record = records[0]
+        assert record["notes"]
+        assert record["depth"] == len(record["explore_path"]["choices"])
+        assert record["explore_path"]["ending_type"] == ending_body["ending_type"]
+        assert record["explore_path"]["path_signature"] == ending_body["path_signature"]
+
     async def test_branches_with_session_shows_unlocked(self, client, test_db):
         """branches 接口带 session_id 时, unlocked_endings 应包含已解锁结局"""
         # 启动并完成对话

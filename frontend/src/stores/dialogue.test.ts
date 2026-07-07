@@ -17,11 +17,13 @@ vi.mock('@/api/dialogue', () => ({
 }))
 
 import { dialogueApi } from '@/api/dialogue'
+import type { ChoiceResponse, StartDialogueResponse } from '@/api/dialogue'
+import type { ApiResponse } from '@/types'
 import { useDialogueStore } from './dialogue'
 
 const mockedDialogueApi = vi.mocked(dialogueApi)
 
-const successData = {
+const successData: StartDialogueResponse = {
   dialogue_id: 'dlg-001',
   topic: '唐朝安史之乱',
   narrative: '欢迎来到唐朝的时空对话机',
@@ -35,11 +37,12 @@ describe('useDialogueStore.startDynamicFromTopic', () => {
   })
 
   it('success path: isLoading toggles, session data is written, errorMessage empty', async () => {
-    mockedDialogueApi.startDynamic.mockResolvedValueOnce({
+    const response: ApiResponse<StartDialogueResponse> = {
       code: 200,
       message: 'ok',
       data: successData,
-    } as any)
+    }
+    mockedDialogueApi.startDynamic.mockResolvedValueOnce(response)
 
     const store = useDialogueStore()
     expect(store.isLoading).toBe(false)
@@ -120,5 +123,56 @@ describe('useDialogueStore.startDynamicFromTopic', () => {
 
     expect(store.notFound).toBe(true)
     expect(store.errorMessage).toBe('该话题时空对话机暂时无法回应')
+  })
+})
+
+describe('useDialogueStore.sendChoice', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('uses choice consequences as the visible completion note', async () => {
+    const response: ApiResponse<ChoiceResponse> = {
+      code: 200,
+      message: 'ok',
+      data: {
+        dialogue_id: 'dlg-001',
+        narrative: 'Final historical note.',
+        choices: [],
+        round: 0,
+        timeline_change: false,
+        is_ending: true,
+        ending_type: 'A-T',
+        path_signature: 'A-T',
+        cumulative_impact: {},
+        choices_summary: [
+          {
+            round: 1,
+            choice_id: 'a',
+            choice_text: 'Centralize authority',
+            consequence: 'Local powers are folded into a stronger central state.',
+          },
+        ],
+      },
+    }
+    mockedDialogueApi.sendChoice.mockResolvedValueOnce(response)
+
+    const store = useDialogueStore()
+    store.dialogueId = 'dlg-001'
+    store.round = 1
+    store.choices = [{ choice_id: 'a', text: 'Centralize authority' }]
+
+    const promise = store.sendChoice('a')
+    await vi.runAllTimersAsync()
+    await promise
+
+    expect(store.isDialogueEnded).toBe(true)
+    expect(store.outcomeSummary).toBe('Local powers are folded into a stronger central state.')
   })
 })

@@ -177,6 +177,14 @@ import { useI18n } from '@/composables/useI18n'
 import { trackEvent } from '@/utils/analytics'
 import { generateShareLink } from '@/utils/shareLink'
 
+interface ToastBridge {
+  showToast(type: string, message: string): void
+}
+
+interface AppWindow extends Window {
+  __appStore?: ToastBridge
+}
+
 const props = defineProps<{
   eventId: string
   eventName: string
@@ -208,7 +216,7 @@ const NPC_AVATARS: Record<string, { avatar: string; key: string }> = {
 
 const npcInfo = computed(() => {
   // 1) 动态对话模式: 优先用 store 里的 npc 信息 (后端返回)
-  const session = dialogueStore.currentSession as any
+  const session = dialogueStore.currentSession
   if (dialogueStore.isDynamic && session?.npc_name) {
     return {
       avatar: session.npc_symbol || '✦',
@@ -265,7 +273,7 @@ watch(
       // 额外附加: 结局类型 & 是否 dynamic
       outcome_type: dialogueStore.outcomeType || 'historical',
       is_dynamic: dialogueStore.isDynamic,
-    } as any)
+    })
   }
 )
 
@@ -373,7 +381,7 @@ async function handleShare() {
   if (ok) {
     flashShareCopied()
     try {
-      const app = (window as any).__appStore
+      const app = (window as AppWindow).__appStore
       // 静默尝试触发现有 toast，若不可用则跳过
       if (app && typeof app.showToast === 'function') {
         app.showToast('success', shareCopiedLabel.value)

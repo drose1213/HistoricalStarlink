@@ -1,4 +1,5 @@
 import { get, post, del } from './request'
+import { normalizePaginatedResponse } from './pagination'
 import type {
   ApiResponse,
   PaginatedResponse,
@@ -7,7 +8,7 @@ import type {
 
 export const collectionApi = {
   list(params: { user_session_id?: string; is_high_rated?: boolean; page?: number; page_size?: number } = {}): Promise<ApiResponse<PaginatedResponse<UserCardCollection>>> {
-    return get('/api/collection', params) as any
+    return get<UserCardCollection[]>('/api/collection', params).then(normalizePaginatedResponse)
   },
 
   add(payload: { user_session_id: string; card_id: number; source?: 'explore' | 'auction' | 'system' }): Promise<ApiResponse<UserCardCollection>> {
