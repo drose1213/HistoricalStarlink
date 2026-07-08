@@ -5,8 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, case
 
 from ..database import get_db
+from ..deps import get_optional_user
 from ..models.card_review import CardReview
 from ..models.review_like import ReviewLike
+from ..models.user import User
 from ..redis_client import cache
 from ..schemas import (
     BaseResponse,
@@ -82,6 +84,23 @@ async def list_reviews(
         )
         liked_ids = set((await db.execute(like_stmt)).scalars().all())
 
+    # 批量取 reviewer 用户昵称 (登录用户的评价)
+    all_reviews = list(top_reviews) + [rp for rs in replies_map.values() for rp in rs]
+    user_ids = {r.user_id for r in all_reviews if r.user_id is not None}
+    user_map: dict[int, User] = {}
+    if user_ids:
+        user_stmt = select(User).where(User.id.in_(user_ids))
+        users = (await db.execute(user_stmt)).scalars().all()
+        user_map = {u.id: u for u in users}
+
+    def _display_name(uid: Optional[int]) -> Optional[str]:
+        if uid is None:
+            return None
+        u = user_map.get(uid)
+        if not u:
+            return None
+        return (u.nickname or u.username or "").strip() or None
+
     items: list[dict] = []
     for r in top_reviews:
         item = CardReviewListItem(
@@ -89,6 +108,8 @@ async def list_reviews(
             card_id=r.card_id,
             auction_id=r.auction_id,
             reviewer_session_id=_mask_session(r.reviewer_session_id),
+            reviewer_id=r.user_id,
+            reviewer_name=_display_name(r.user_id),
             stars=r.stars,
             comment=r.comment,
             parent_review_id=r.parent_review_id,
@@ -105,6 +126,8 @@ async def list_reviews(
                 card_id=rp.card_id,
                 auction_id=rp.auction_id,
                 reviewer_session_id=_mask_session(rp.reviewer_session_id),
+                reviewer_id=rp.user_id,
+                reviewer_name=_display_name(rp.user_id),
                 stars=rp.stars,
                 comment=rp.comment,
                 parent_review_id=rp.parent_review_id,
@@ -130,9 +153,13 @@ async def list_reviews(
 async def create_review(
     payload: CardReviewCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     if not payload.auction_id and not payload.card_id:
         raise HTTPException(status_code=400, detail="auction_id 和 card_id 至少需要一个")
+
+    # 登录态归集: 以后端 token 解析值为准, 不信任 payload.user_id
+    resolved_user_id: Optional[int] = current_user.id if current_user else None
 
     # 如果是回复，校验父评价存在
     if payload.parent_review_id is not None:
@@ -154,6 +181,9 @@ async def create_review(
         if existing:
             existing.stars = payload.stars
             existing.comment = payload.comment
+            # 登录态: 归集 user_id (若当前为匿名而历史有 user_id, 不覆盖)
+            if existing.user_id is None:
+                existing.user_id = resolved_user_id
             await db.flush()
             await db.refresh(existing)
             return BaseResponse(
@@ -165,6 +195,7 @@ async def create_review(
         card_id=payload.card_id,
         auction_id=payload.auction_id,
         reviewer_session_id=payload.reviewer_session_id,
+        user_id=resolved_user_id,
         stars=payload.stars,
         comment=payload.comment,
         parent_review_id=payload.parent_review_id,

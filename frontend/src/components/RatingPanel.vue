@@ -177,7 +177,7 @@
           class="rp-review-item"
         >
           <div class="rp-review-head">
-            <span class="rp-review-author">{{ r.reviewer_session_id }}</span>
+            <span class="rp-review-author">{{ r.reviewer_name || r.reviewer_session_id }}</span>
             <span class="rp-review-stars-display">
               <span v-for="i in 5" :key="i">{{ i <= r.stars ? '★' : '☆' }}</span>
             </span>
@@ -218,7 +218,7 @@
           <!-- 嵌入回复 -->
           <div v-if="r.replies && r.replies.length" class="rp-replies">
             <div v-for="rp in r.replies" :key="rp.id" class="rp-reply-item">
-              <span class="rp-review-author">{{ rp.reviewer_session_id }}：</span>
+              <span class="rp-review-author">{{ rp.reviewer_name || rp.reviewer_session_id }}：</span>
               <span class="rp-reply-stars">
                 <span v-for="i in 5" :key="i">{{ i <= rp.stars ? '★' : '☆' }}</span>
               </span>

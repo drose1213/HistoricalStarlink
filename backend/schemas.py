@@ -52,6 +52,7 @@ class ExplorationRecordOut(BaseModel):
     """探索记录输出"""
     id: int
     session_id: str
+    user_id: Optional[int] = None
     event_id: str
     event_name: str
     event_year: Optional[int] = None
@@ -186,6 +187,8 @@ class CardReviewListItem(BaseModel):
     card_id: Optional[int] = None
     auction_id: Optional[int] = None
     reviewer_session_id: str  # 原始 session_id（前端按需脱敏）
+    reviewer_id: Optional[int] = None  # 登录用户ID，未登录为 None
+    reviewer_name: Optional[str] = None  # 登录用户的昵称/username，未登录为 None
     stars: int
     comment: Optional[str] = None
     parent_review_id: Optional[int] = None
@@ -428,6 +431,7 @@ class CardReviewCreate(BaseModel):
     auction_id: Optional[int] = Field(default=None, description="拍卖ID（拍卖评价时使用）")
     card_id: Optional[int] = Field(default=None, description="卡牌ID（卡牌评价时使用）")
     reviewer_session_id: str = Field(..., max_length=64, description="评价者会话ID")
+    user_id: Optional[int] = Field(default=None, description="登录用户ID（后端会用 token 解析值覆盖，不信任前端）")
     stars: int = Field(..., ge=1, le=5, description="星级 1-5")
     comment: Optional[str] = Field(default=None, max_length=500, description="评价内容")
     parent_review_id: Optional[int] = Field(default=None, description="回复的父评价ID")
@@ -446,6 +450,7 @@ class CardReviewOut(BaseModel):
     auction_id: Optional[int] = None
     card_id: Optional[int] = None
     reviewer_session_id: str
+    user_id: Optional[int] = None
     stars: int
     comment: Optional[str] = None
     parent_review_id: Optional[int] = None

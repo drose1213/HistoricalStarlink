@@ -2,7 +2,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Query, Depends
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
@@ -53,19 +53,21 @@ async def get_home_feed(
     )
     recommended = (await db.execute(rec_stmt)).scalars().all()
 
-    # 2) 用户已探索
+    # 2) 用户已探索: 优先按 user_id 聚合, 匿名时回退 session_id
     explored: list[dict] = []
-    if session_id:
+    if user_id or session_id:
+        exp_conditions = [ExplorationRecord.is_deleted == False]  # noqa: E712
+        if user_id:
+            exp_conditions.append(ExplorationRecord.user_id == user_id)
+        elif session_id:
+            exp_conditions.append(ExplorationRecord.session_id == session_id)
         exp_stmt = (
             select(
                 ExplorationRecord.event_id.label("event_id"),
                 func.count().label("visit_count"),
                 func.max(ExplorationRecord.created_at).label("last_visit"),
             )
-            .where(
-                ExplorationRecord.session_id == session_id,
-                ExplorationRecord.is_deleted == False,  # noqa: E712
-            )
+            .where(and_(*exp_conditions))
             .group_by(ExplorationRecord.event_id)
             .order_by(func.count().desc(), func.max(ExplorationRecord.created_at).desc())
             .limit(explored_limit)

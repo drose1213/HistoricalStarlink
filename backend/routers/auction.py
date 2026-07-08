@@ -5,10 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, update
 
 from ..database import get_db
+from ..deps import get_optional_user
 from ..models.card_auction import CardAuction
 from ..models.card_bid import CardBid
 from ..models.card_review import CardReview
 from ..models.champion_card import ChampionCard
+from ..models.user import User
 from ..schemas import (
     BaseResponse,
     PaginationResponse,
@@ -208,10 +210,32 @@ async def get_auction(
     )
     reviews = (await db.execute(review_stmt)).scalars().all()
 
+    # 批量取 reviewer 用户昵称 (登录用户)
+    review_user_ids = {r.user_id for r in reviews if r.user_id is not None}
+    review_user_map: dict[int, User] = {}
+    if review_user_ids:
+        user_stmt = select(User).where(User.id.in_(review_user_ids))
+        users = (await db.execute(user_stmt)).scalars().all()
+        review_user_map = {u.id: u for u in users}
+
+    def _display_name(uid):
+        if uid is None:
+            return None
+        u = review_user_map.get(uid)
+        if not u:
+            return None
+        return (u.nickname or u.username or "").strip() or None
+
+    reviews_payload = []
+    for r in reviews:
+        item = CardReviewOut.model_validate(r).model_dump()
+        item["reviewer_name"] = _display_name(r.user_id)
+        reviews_payload.append(item)
+
     return BaseResponse(data={
         "auction": CardAuctionOut.model_validate(auction).model_dump(),
         "bids": [CardBidOut.model_validate(b).model_dump() for b in bids],
-        "reviews": [CardReviewOut.model_validate(r).model_dump() for r in reviews],
+        "reviews": reviews_payload,
     })
 
 
@@ -295,6 +319,7 @@ async def cancel_auction(
 async def create_review(
     payload: CardReviewCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
     auction_stmt = select(CardAuction).where(
         and_(CardAuction.id == payload.auction_id, CardAuction.is_deleted == False)
@@ -307,6 +332,9 @@ async def create_review(
     if auction.winner_session_id != payload.reviewer_session_id:
         raise HTTPException(status_code=403, detail="仅获胜买家可评价")
 
+    # 登录态归集: 以后端 token 解析值为准
+    resolved_user_id: Optional[int] = current_user.id if current_user else None
+
     dup_stmt = select(CardReview).where(
         and_(
             CardReview.auction_id == payload.auction_id,
@@ -317,6 +345,8 @@ async def create_review(
     if existing:
         existing.stars = payload.stars
         existing.comment = payload.comment
+        if existing.user_id is None:
+            existing.user_id = resolved_user_id
         await db.flush()
         await db.refresh(existing)
         return BaseResponse(
@@ -327,6 +357,7 @@ async def create_review(
     item = CardReview(
         auction_id=payload.auction_id,
         reviewer_session_id=payload.reviewer_session_id,
+        user_id=resolved_user_id,
         stars=payload.stars,
         comment=payload.comment,
     )

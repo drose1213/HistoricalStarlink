@@ -719,8 +719,14 @@ async function retryLoad() {
 
 async function loadHomeFeed() {
   try {
-    const sid = getSessionId()
-    const res = await eventsApi.getHomeFeed({ session_id: sid })
+    const uid = authStore.user?.id
+    const params: { user_id?: number; session_id?: string } = {}
+    if (uid) {
+      params.user_id = uid
+    } else {
+      params.session_id = getSessionId()
+    }
+    const res = await eventsApi.getHomeFeed(params)
     homeFeed.value = res.data || { recommended: [], explored: [], recommended_total: 0, explored_total: 0 }
   } catch (e) {
     console.warn('[HistoricalStarlink] Home feed load failed, fallback to local events', e)
