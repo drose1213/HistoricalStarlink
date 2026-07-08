@@ -21,11 +21,13 @@ sys.path.insert(0, str(BACKEND_ROOT))
 async def test_db():
     """使用 SQLite 内存数据库，函数级别隔离"""
     from backend.database import engine, AsyncSessionLocal, Base
+    from backend.redis_client import cache
 
     # 重建表
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+    await cache.flush_db()
 
     # 注入种子数据
     from backend.data.events_data import events_data
@@ -66,6 +68,7 @@ async def test_db():
     yield engine
 
     # 清理
+    await cache.flush_db()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
 

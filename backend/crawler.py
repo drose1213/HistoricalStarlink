@@ -11,12 +11,15 @@ Features:
 """
 import asyncio
 import hashlib
+import ipaddress
 import logging
 import re
+import socket
 import urllib.request
 from datetime import datetime, timedelta
 from typing import Optional
 from html.parser import HTMLParser
+from urllib.parse import urlparse
 
 import httpx
 
@@ -204,7 +207,48 @@ def chunk_text(text: str, max_chars: int = 2000, overlap: int = 200) -> list[str
     return [c for c in chunks if c]
 
 
+def _is_public_ip(address: str) -> bool:
+    try:
+        return ipaddress.ip_address(address).is_global
+    except ValueError:
+        return False
+
+
+def is_safe_crawl_url(url: str) -> bool:
+    """Allow only public HTTP(S) crawl targets to reduce SSRF exposure."""
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return False
+
+    hostname = parsed.hostname.rstrip(".").lower()
+    if hostname in {"localhost", "localhost.localdomain"}:
+        return False
+
+    try:
+        literal_ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        literal_ip = None
+
+    if literal_ip is not None:
+        return literal_ip.is_global
+
+    try:
+        resolved = socket.getaddrinfo(hostname, parsed.port or 443, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return False
+
+    return all(_is_public_ip(sockaddr[0]) for *_, sockaddr in resolved)
+
+
 async def crawl_page(url: str, timeout: float = 30.0) -> Optional[str]:
+    if not is_safe_crawl_url(url):
+        logger.warning("Skipped unsafe crawl URL: %s", url)
+        return None
+
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0 Safari/537.36",
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
@@ -232,6 +276,8 @@ def _should_fallback_to_urllib(exc: Exception) -> bool:
 
 async def _crawl_page_with_urllib(url: str, headers: dict[str, str], timeout: float) -> Optional[str]:
     def _fetch() -> Optional[str]:
+        if not is_safe_crawl_url(url):
+            return None
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             charset = resp.headers.get_content_charset() or "utf-8"
@@ -442,6 +488,7 @@ async def _mark_source_failed(db, crawl_source_model, source: dict, now: datetim
 
 
 async def _process_single_source(db, source: dict, today_events: set[str], stats: dict) -> None:
+    from .knowledge_versions import advance_entry_version
     from .models.knowledge_base import KnowledgeEntry, KnowledgeVersion, CrawlSource
     from sqlalchemy import select
 
@@ -507,10 +554,9 @@ async def _process_single_source(db, source: dict, today_events: set[str], stats
                 if found.content_hash == content_hash:
                     source_stats["skipped_duplicates"] += 1
                     continue
+                await advance_entry_version(db, found)
                 found.content = chunk
                 found.content_hash = content_hash
-                found.version += 1
-                found.version_count = (found.version_count or 1) + 1
                 found.updated_at = source_now
                 found.last_indexed_at = source_now
                 db.add(KnowledgeVersion(

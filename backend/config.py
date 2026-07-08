@@ -29,7 +29,7 @@ class Settings:
     def __init__(self):
         env_map = {
             "app.name": os.getenv("PROJECT_NAME", "历史星链探索"),
-            "app.host": os.getenv("SERVER_HOST", "111.231.50.67"),
+            "app.host": os.getenv("SERVER_HOST", "0.0.0.0"),
             "app.port": os.getenv("SERVER_PORT", "8000"),
             "app.debug": os.getenv("DEBUG", "true"),
             "mysql.host": os.getenv("MYSQL_HOST", "127.0.0.1"),
@@ -62,7 +62,7 @@ class Settings:
     PROJECT_VERSION: str = "1.0.0"
     DESCRIPTION: str = "赛博朋克风格的历史探索游戏后端 API"
 
-    SERVER_HOST: str = "111.231.50.67"
+    SERVER_HOST: str = "0.0.0.0"
     SERVER_PORT: int = 8000
     DEBUG: bool = True
 

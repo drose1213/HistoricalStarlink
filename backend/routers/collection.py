@@ -21,21 +21,20 @@ HIGH_RATED_THRESHOLD = 8.0  # 评分 1.0-10.0 体系下, >=8.0 视为高分
 
 
 async def _refresh_card_high_rated_flag(db: AsyncSession, card_id: int) -> None:
-    """根据该卡牌所属事件的所有评分刷新 is_high_rated 标志"""
-    card_stmt = select(ChampionCard).where(
-        and_(ChampionCard.id == card_id, ChampionCard.is_deleted == False)
-    )
-    card = (await db.execute(card_stmt)).scalar_one_or_none()
-    if not card:
-        return
-
+    """根据该卡牌所属事件的所有评分刷新 is_high_rated 标志 (单次 JOIN 查询)"""
     from ..models.rating import Rating
 
-    avg_stmt = select(func.avg(Rating.score)).where(
-        and_(Rating.event_id == card.event_id, Rating.is_deleted == False)
+    # 一次性 JOIN: 取出卡片及对应事件平均分, 避免 N+1
+    stmt = (
+        select(ChampionCard, func.coalesce(func.avg(Rating.score), 0).label("avg_score"))
+        .outerjoin(Rating, and_(Rating.event_id == ChampionCard.event_id, Rating.is_deleted == False))
+        .where(and_(ChampionCard.id == card_id, ChampionCard.is_deleted == False))
+        .group_by(ChampionCard.id)
     )
-    result = await db.execute(avg_stmt)
-    avg_score = result.scalar()
+    row = (await db.execute(stmt)).first()
+    if not row:
+        return
+    card, avg_score = row[0], row[1]
     card.is_high_rated = bool(avg_score and avg_score >= HIGH_RATED_THRESHOLD)
 
 

@@ -661,7 +661,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ragApi, type KnowledgeEntry, type KnowledgeStats, type KnowledgeVersion, type CrawlSource } from '@/api/rag'
+import { ragApi, type ConditionalSearchResult, type CrawlSource, type KnowledgeEntry, type KnowledgeStats, type KnowledgeVersion } from '@/api/rag'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from '@/composables/useI18n'
@@ -706,7 +706,7 @@ const sourceLabels = computed<Record<string, string>>(() => ({
 const availableCategories = computed(() => {
   const cats = new Set<string>()
   entries.value.forEach(e => { if (e.category) cats.add(e.category) })
-  conditionalResult.value?.items?.forEach((e: any) => { if (e.category) cats.add(e.category) })
+  conditionalResult.value?.items.forEach((entry) => { if (entry.category) cats.add(entry.category) })
   return Array.from(cats).sort()
 })
 
@@ -742,7 +742,7 @@ const condFilters = reactive({
   order_by: 'relevance' as 'relevance' | 'importance' | 'year' | 'updated_at',
   page_size: 20,
 })
-const conditionalResult = ref<any>(null)
+const conditionalResult = ref<ConditionalSearchResult | null>(null)
 
 const entryVersions = ref<KnowledgeVersion[]>([])
 const versionsLoading = ref(false)
@@ -1009,7 +1009,14 @@ async function doImport() {
   importing.value = true
   importResult.value = null
   try {
-    const meta: any = {}
+    const meta: {
+      event_name?: string
+      year?: number
+      region?: string
+      category?: string
+      tags?: string
+      importance?: number
+    } = {}
     if (importMeta.event_name) meta.event_name = importMeta.event_name
     if (importMeta.year) meta.year = importMeta.year
     if (importMeta.region) meta.region = importMeta.region

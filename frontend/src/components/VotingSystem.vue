@@ -10,7 +10,7 @@
     <div class="voting-buttons">
       <button
         class="vote-btn vote-btn--up"
-        :class="{ 'vote-btn--active': userVote === 'up' }"
+        :class="{ 'vote-btn--active': userVote === 1 }"
         @click="handleVote('up')"
         :disabled="isLoading"
       >
@@ -21,7 +21,7 @@
 
       <button
         class="vote-btn vote-btn--down"
-        :class="{ 'vote-btn--active': userVote === 'down' }"
+        :class="{ 'vote-btn--active': userVote === -1 }"
         @click="handleVote('down')"
         :disabled="isLoading"
       >
@@ -32,13 +32,13 @@
 
       <button
         class="vote-btn vote-btn--star"
-        :class="{ 'vote-btn--active': userVote === 'star' }"
+        :class="{ 'vote-btn--active': userVote === 2 }"
         @click="handleVote('star')"
         :disabled="isLoading"
       >
         <span class="vote-icon">★</span>
         <span class="vote-label">{{ t('rating.voteStar') }}</span>
-        <span class="vote-count">{{ voteStats?.star_count || 0 }}</span>
+        <span class="vote-count">{{ starCount }}</span>
       </button>
     </div>
 
@@ -106,11 +106,12 @@ const { t } = useI18n()
 
 const voteStats = computed(() => voteStore.voteStats)
 const isLoading = computed(() => voteStore.isLoading)
-const userVote = computed(() => voteStats.value?.user_vote || null)
+const userVote = computed(() => voteStore.myVote)
+const starCount = computed(() => voteStats.value?.favorite_count ?? voteStats.value?.star_count ?? 0)
 
 const totalVotes = computed(() => {
   if (!voteStats.value) return 0
-  return voteStats.value.up_count + voteStats.value.down_count + voteStats.value.star_count
+  return voteStats.value.up_count + voteStats.value.down_count + starCount.value
 })
 
 const upPercent = computed(() => {
@@ -125,7 +126,7 @@ const downPercent = computed(() => {
 
 const starPercent = computed(() => {
   if (totalVotes.value === 0) return 0
-  return Math.round(((voteStats.value?.star_count || 0) / totalVotes.value) * 100)
+  return Math.round((starCount.value / totalVotes.value) * 100)
 })
 
 async function handleVote(type: 'up' | 'down' | 'star') {

@@ -17,9 +17,8 @@ export const useAuctionStore = defineStore('auction', () => {
     isLoading.value = true
     try {
       const res = await auctionApi.list(params)
-      const data = res.data as unknown as { items: CardAuction[]; total: number }
-      auctions.value = data.items || []
-      total.value = data.total || 0
+      auctions.value = res.data.items || []
+      total.value = res.data.total || 0
       return auctions.value
     } finally {
       isLoading.value = false
@@ -77,7 +76,7 @@ export const useAuctionStore = defineStore('auction', () => {
     if (currentDetail.value && currentDetail.value.auction.id === auctionId) {
       const existing = currentDetail.value.reviews.find(r => r.reviewer_session_id === sid)
       if (existing) Object.assign(existing, res.data)
-      else currentDetail.value.reviews.unshift(res.data as any)
+      else currentDetail.value.reviews.unshift(res.data)
     }
     return res.data
   }

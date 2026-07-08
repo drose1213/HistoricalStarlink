@@ -1,22 +1,22 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { dialogueApi } from '@/api/dialogue'
-import type { HeroPersona } from '@/api/dialogue'
-import type { DialogueMessage, DialogueSession } from '@/types'
+import type { ChoiceResponse, HeroPersona, StartDialogueResponse } from '@/api/dialogue'
+import type { DialogueChoice, DialogueMessage } from '@/types'
 
 function generateSessionId(): string {
   return `session_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
 }
 
 export const useDialogueStore = defineStore('dialogue', () => {
-  const currentSession = ref<DialogueSession | null>(null)
+  const currentSession = ref<StartDialogueResponse | null>(null)
   const dialogueId = ref<string>('')
   const messages = ref<DialogueMessage[]>([])
   const isTyping = ref(false)
   const choices = ref<{ choice_id: string; text: string; consequence?: string }[]>([])
   const isLoading = ref(false)
   const isDialogueEnded = ref(false)
-  const outcomeType = ref<'historical' | 'alternate' | null>(null)
+  const outcomeType = ref<string | null>(null)
   const outcomeSummary = ref('')
   const round = ref(0)
   const sessionId = ref(generateSessionId())
@@ -29,6 +29,39 @@ export const useDialogueStore = defineStore('dialogue', () => {
   const pendingHeroId = ref<string>('')  // 暂存的 hero_id, startDialogue 时透传给后端
 
   const isTimelineAnimating = ref(false)
+
+  function getErrorStatus(err: unknown): number | undefined {
+    return typeof err === 'object' && err !== null && 'response' in err
+      ? (err.response as { status?: number }).status
+      : undefined
+  }
+
+  function getErrorMessage(err: unknown, fallback: string): string {
+    if (typeof err === 'object' && err !== null && 'response' in err) {
+      const response = err.response as { data?: { detail?: string } }
+      if (response.data?.detail) return response.data.detail
+    }
+    return err instanceof Error ? err.message : fallback
+  }
+
+  function buildOutcomeSummary(data: ChoiceResponse): string {
+    const consequences = data.choices_summary
+      ?.map(summary => summary.consequence)
+      .filter((value): value is string => Boolean(value))
+    if (consequences?.length) {
+      return consequences.join(' → ')
+    }
+    return data.narrative || ''
+  }
+
+  function isDialogueChoiceList(value: unknown): value is DialogueChoice[] {
+    return Array.isArray(value) && value.every(choice => (
+      typeof choice === 'object' &&
+      choice !== null &&
+      typeof (choice as { choice_id?: unknown }).choice_id === 'string' &&
+      typeof (choice as { text?: unknown }).text === 'string'
+    ))
+  }
 
   const lastNpcMessage = computed(() => {
     for (let i = messages.value.length - 1; i >= 0; i--) {
@@ -49,8 +82,8 @@ export const useDialogueStore = defineStore('dialogue', () => {
     }
     try {
       const res = isDynamic.value
-        ? await dialogueApi.startDynamic(sessionId.value, currentTopic.value || eventId, pendingHeroId.value || undefined) as any
-        : await dialogueApi.startDialogue(sessionId.value, eventId) as any
+        ? await dialogueApi.startDynamic(sessionId.value, currentTopic.value || eventId, pendingHeroId.value || undefined)
+        : await dialogueApi.startDialogue(sessionId.value, eventId)
       // 启动后清掉 pendingHeroId, 避免污染后续对话
       if (isDynamic.value) {
         pendingHeroId.value = ''
@@ -70,15 +103,16 @@ export const useDialogueStore = defineStore('dialogue', () => {
       if (data.history && Array.isArray(data.history)) {
         for (const h of data.history) {
           if (h.role === 'narrative') {
+            const historyChoices = isDialogueChoiceList(h.choices) ? h.choices : undefined
             appendMessage({
               id: `npc_${Date.now()}`,
               role: 'narrative',
-              content: h.content,
-              choices: h.choices,
+              content: typeof h.content === 'string' ? h.content : '',
+              choices: historyChoices,
               timestamp: Date.now()
             })
-            if (h.choices) {
-              choices.value = h.choices
+            if (historyChoices) {
+              choices.value = historyChoices
             }
           }
         }
@@ -96,15 +130,15 @@ export const useDialogueStore = defineStore('dialogue', () => {
       }
 
       return data
-    } catch (err: any) {
-      const status = err?.response?.status
+    } catch (err: unknown) {
+      const status = getErrorStatus(err)
       if (status === 404) {
         notFound.value = true
         errorMessage.value = isDynamic.value
           ? '该话题时空对话机暂时无法回应'
           : '该历史事件暂未配置时空对话剧本'
       } else {
-        errorMessage.value = err?.response?.data?.detail || err?.message || '对话启动失败'
+        errorMessage.value = getErrorMessage(err, '对话启动失败')
       }
       throw err
     } finally {
@@ -150,8 +184,8 @@ export const useDialogueStore = defineStore('dialogue', () => {
 
     try {
       const res = isDynamic.value
-        ? await dialogueApi.sendDynamicChoice(dialogueId.value, choiceId) as any
-        : await dialogueApi.sendChoice(dialogueId.value, choiceId, round.value) as any
+        ? await dialogueApi.sendDynamicChoice(dialogueId.value, choiceId)
+        : await dialogueApi.sendChoice(dialogueId.value, choiceId, round.value)
       const data = res.data
 
       if (data.timeline_change) {
@@ -170,9 +204,7 @@ export const useDialogueStore = defineStore('dialogue', () => {
       if (data.is_ending) {
         isDialogueEnded.value = true
         outcomeType.value = data.ending_type || 'historical'
-        outcomeSummary.value = data.choices_summary
-          ? data.choices_summary.map((s: any) => s.consequence).filter(Boolean).join(' → ')
-          : content
+        outcomeSummary.value = buildOutcomeSummary(data)
         round.value = 0
       } else if (finalMsg.choices && finalMsg.choices.length > 0) {
         choices.value = finalMsg.choices
@@ -196,8 +228,8 @@ export const useDialogueStore = defineStore('dialogue', () => {
 
     try {
       const res = isDynamic.value
-        ? await dialogueApi.sendDynamicChat(dialogueId.value, message) as any
-        : await dialogueApi.sendFreeText(dialogueId.value, message) as any
+        ? await dialogueApi.sendDynamicChat(dialogueId.value, message)
+        : await dialogueApi.sendFreeText(dialogueId.value, message)
       const data = res.data
 
       const content = data.narrative || ''

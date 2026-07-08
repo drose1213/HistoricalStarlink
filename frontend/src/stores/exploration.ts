@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { explorationApi } from '@/api/exploration'
+import { recordExploration } from '@/utils/exploration'
 import type { ExplorationRecord } from '@/types'
 
 export const useExplorationStore = defineStore('exploration', () => {
@@ -11,6 +12,13 @@ export const useExplorationStore = defineStore('exploration', () => {
   const isLoading = ref(false)
 
   async function startExploration(eventId: string, eventName?: string) {
+    if (!eventId.trim()) {
+      throw new Error('eventId is required')
+    }
+    if (currentRecord.value?.event_id === eventId) {
+      return currentRecord.value
+    }
+
     isLoading.value = true
     try {
       const res = await explorationApi.startExploration({ event_id: eventId, event_name: eventName || eventId })
@@ -18,6 +26,7 @@ export const useExplorationStore = defineStore('exploration', () => {
       if (!exploreHistory.value.includes(eventId)) {
         exploreHistory.value.push(eventId)
       }
+      recordExploration(eventId)
       return res.data
     } finally {
       isLoading.value = false

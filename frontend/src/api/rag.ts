@@ -73,6 +73,10 @@ export interface KnowledgeListResult {
   page_size: number
 }
 
+export interface ConditionalSearchResult extends KnowledgeListResult {
+  filters_applied?: Record<string, unknown>
+}
+
 export interface KnowledgeVersion {
   id: number
   version: number
@@ -81,7 +85,7 @@ export interface KnowledgeVersion {
   change_summary?: string
   change_source?: string
   operator?: string
-  snapshot_meta?: Record<string, any>
+  snapshot_meta?: Record<string, unknown>
   created_at?: string
 }
 
@@ -150,7 +154,7 @@ export const ragApi = {
   },
 
   async conditionalSearch(params: ConditionalSearchParams) {
-    const res = await post<KnowledgeListResult & { filters_applied: any }>(
+    const res = await post<ConditionalSearchResult>(
       '/api/rag/conditional-search',
       params,
     )

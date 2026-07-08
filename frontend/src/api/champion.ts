@@ -1,4 +1,5 @@
 import { get, post, del } from './request'
+import { normalizePaginatedResponse } from './pagination'
 import type {
   ApiResponse,
   ChampionCard,
@@ -7,13 +8,18 @@ import type {
 
 export const championApi = {
   getChampionCards(page = 1, pageSize = 20): Promise<ApiResponse<PaginatedResponse<ChampionCard>>> {
-    return get('/api/champion', { page, page_size: pageSize })
+    return get<ChampionCard[]>('/api/champion', { page, page_size: pageSize })
+      .then(normalizePaginatedResponse)
   },
 
   getChampionByEvent(eventId: string): Promise<ApiResponse<ChampionCard | null>> {
-    return get('/api/champion', { event_id: eventId }).then(res => {
-      const items = (res as any).data?.items || (res as any).data || []
-      return { ...res, data: items.length > 0 ? items[0] : null } as any
+    return get<ChampionCard[]>('/api/champion', { event_id: eventId }).then(res => {
+      const items = Array.isArray(res.data) ? res.data : []
+      return {
+        code: res.code,
+        message: res.message,
+        data: items.length > 0 ? items[0] : null,
+      }
     })
   },
 
@@ -22,7 +28,11 @@ export const championApi = {
   },
 
   getUserChampions(): Promise<ApiResponse<ChampionCard[]>> {
-    return get('/api/champion') as any
+    return get<ChampionCard[]>('/api/champion').then(res => ({
+      code: res.code,
+      message: res.message,
+      data: Array.isArray(res.data) ? res.data : [],
+    }))
   },
 
   getChampionById(id: number): Promise<ApiResponse<ChampionCard>> {
@@ -30,6 +40,10 @@ export const championApi = {
   },
 
   getChampionsByRarity(rarity: string): Promise<ApiResponse<ChampionCard[]>> {
-    return get('/api/champion', { rarity }) as any
+    return get<ChampionCard[]>('/api/champion', { rarity }).then(res => ({
+      code: res.code,
+      message: res.message,
+      data: Array.isArray(res.data) ? res.data : [],
+    }))
   }
 }

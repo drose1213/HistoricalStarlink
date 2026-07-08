@@ -29,7 +29,7 @@
         </button>
         <button
           class="rp-vote-btn rp-vote-btn--favorite"
-          :class="{ 'rp-vote-btn--active': voteStore.myVote === 1 && favoriteToggled }"
+          :class="{ 'rp-vote-btn--active': voteStore.myVote === 2 }"
           :disabled="voteStore.isLoading"
           @click="onVote('star')"
         >
@@ -234,7 +234,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useI18n } from '@/composables/useI18n'
 import { useRatingStore } from '@/stores/rating'
 import { useVoteStore } from '@/stores/vote'
 import { useReviewStore } from '@/stores/review'
@@ -256,7 +256,6 @@ const newComment = ref('')
 const replyTargetId = ref<number | null>(null)
 const replyText = ref('')
 const trendDays = ref(7)
-const favoriteToggled = ref(false)
 
 const canSubmit = computed(() => newStars.value > 0 && newComment.value.trim().length > 0)
 
@@ -304,8 +303,7 @@ function formatTime(t: string | null | undefined): string {
 }
 
 async function onVote(type: 'up' | 'down' | 'star') {
-  await voteStore.submitVote(props.eventId, type as any, props.eventId)
-  if (type === 'star') favoriteToggled.value = !favoriteToggled.value
+  await voteStore.submitVote(props.eventId, type, props.eventId)
 }
 
 async function submitScore(score: number) {
@@ -364,6 +362,7 @@ onMounted(async () => {
 watch(() => props.eventId, async (newId) => {
   if (newId) {
     await voteStore.fetchVoteStats(newId)
+    await voteStore.fetchMyVote(newId)
     await ratingStore.fetchAverage(newId)
   }
 })

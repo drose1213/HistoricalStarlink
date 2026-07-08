@@ -7,6 +7,19 @@ import httpx
 from backend import crawler
 
 
+@pytest.mark.unit
+def test_is_safe_crawl_url_blocks_private_and_non_http_targets(monkeypatch):
+    monkeypatch.setattr(crawler.socket, "getaddrinfo", lambda *args, **kwargs: [
+        (None, None, None, None, ("93.184.216.34", 443)),
+    ])
+
+    assert crawler.is_safe_crawl_url("https://example.com/history") is True
+    assert crawler.is_safe_crawl_url("ftp://example.com/file") is False
+    assert crawler.is_safe_crawl_url("http://127.0.0.1/admin") is False
+    assert crawler.is_safe_crawl_url("http://localhost/admin") is False
+    assert crawler.is_safe_crawl_url("http://169.254.169.254/latest/meta-data") is False
+
+
 class _DummyResponse:
     status_code = 403
     request = httpx.Request("GET", "https://example.com")

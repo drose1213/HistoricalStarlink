@@ -94,3 +94,25 @@ class TestExplorationAPI:
         body = res.json()
         # 软删除的应该被排除
         assert len(body["data"]) == 2
+@pytest.mark.e2e
+class TestExplorationNotesAPI:
+    async def test_end_exploration_persists_notes(self, client, test_db):
+        start_res = await client.post("/api/exploration/start", json={
+            "event_id": "qin_unification",
+            "event_name": "Qin unification",
+            "session_id": "session_test_notes",
+        })
+        assert start_res.status_code == 200, start_res.text
+        record_id = start_res.json()["data"]["id"]
+
+        end_res = await client.post("/api/exploration/end", json={
+            "record_id": record_id,
+            "duration_seconds": 45,
+            "path_depth": 2,
+            "notes": "Chose centralization and completed the dialogue.",
+        })
+
+        assert end_res.status_code == 200, end_res.text
+        body = end_res.json()["data"]
+        assert body["notes"] == "Chose centralization and completed the dialogue."
+        assert body["explore_path"]["notes"] == "Chose centralization and completed the dialogue."

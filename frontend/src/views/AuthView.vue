@@ -27,10 +27,19 @@
           >
             {{ t('auth.tabRegister') }}
           </button>
-          <div class="tab-indicator" :class="{ right: mode === 'register' }"></div>
+          <div v-if="mode !== 'reset'" class="tab-indicator" :class="{ right: mode === 'register' }"></div>
         </div>
 
         <form class="auth-form" @submit.prevent="handleSubmit">
+          <Transition name="field-fade" mode="out-in">
+            <div v-if="mode === 'reset'" key="reset-title" class="reset-title">
+              <strong>{{ tf('auth.resetPasswordTitle', '重置密码') }}</strong>
+              <button type="button" class="reset-back-btn" @click="switchMode('login')">
+                {{ tf('auth.backLogin', '返回登录') }}
+              </button>
+            </div>
+          </Transition>
+
           <Transition name="field-fade" mode="out-in">
             <div v-if="mode === 'register'" key="reg-user" class="field-group">
               <label class="field-label">{{ t('auth.fieldUsernameReg') }}</label>
@@ -56,7 +65,7 @@
           </Transition>
 
           <Transition name="field-fade" mode="out-in">
-            <div v-if="mode === 'register'" key="reg-email" class="field-group">
+            <div v-if="mode === 'register' || mode === 'reset'" key="email-code-send" class="field-group">
               <label class="field-label">{{ t('auth.fieldEmail') }}</label>
               <div class="code-row">
                 <input
@@ -80,7 +89,7 @@
           </Transition>
 
           <Transition name="field-fade" mode="out-in">
-            <div v-if="mode === 'register'" key="reg-code" class="field-group">
+            <div v-if="mode === 'register' || mode === 'reset'" key="email-code" class="field-group">
               <label class="field-label">{{ t('auth.fieldEmailCode') }}</label>
               <input
                 v-model="form.emailCode"
@@ -93,19 +102,32 @@
           </Transition>
 
           <div class="field-group">
-            <label class="field-label">{{ t('auth.fieldPassword') }}</label>
+            <label class="field-label">{{ mode === 'reset' ? tf('auth.fieldNewPassword', '新密码') : t('auth.fieldPassword') }}</label>
             <input
               v-model="form.password"
               type="password"
               class="cy-input auth-input"
-              :placeholder="t('auth.fieldPasswordPh')"
-              autocomplete="current-password"
+              :placeholder="mode === 'reset' ? tf('auth.fieldNewPasswordPh', '输入新密码') : t('auth.fieldPasswordPh')"
+              :autocomplete="mode === 'reset' ? 'new-password' : 'current-password'"
             />
           </div>
 
           <Transition name="field-fade" mode="out-in">
+            <div v-if="mode === 'reset'" key="reset-confirm" class="field-group">
+              <label class="field-label">{{ tf('auth.fieldConfirmPassword', '确认新密码') }}</label>
+              <input
+                v-model="form.passwordConfirm"
+                type="password"
+                class="cy-input auth-input"
+                :placeholder="tf('auth.fieldConfirmPasswordPh', '再次输入新密码')"
+                autocomplete="new-password"
+              />
+            </div>
+          </Transition>
+
+          <Transition name="field-fade" mode="out-in">
             <div v-if="mode === 'register'" key="reg-nick" class="field-group">
-              <label class="field-label" v-html="t('auth.fieldNickname')"></label>
+              <label class="field-label">{{ t('auth.fieldNickname') }}</label>
               <input
                 v-model="form.nickname"
                 class="cy-input auth-input"
@@ -133,11 +155,12 @@
             :disabled="submitting"
           >
             <span v-if="submitting" class="btn-loading"></span>
-            <span v-else>{{ mode === 'login' ? t('auth.enterStarlink') : t('auth.startJourney') }}</span>
+            <span v-else>{{ submitText }}</span>
           </button>
         </form>
 
         <div class="auth-footer">
+          <button v-if="mode === 'login'" class="skip-btn" @click="switchMode('reset')">{{ t('auth.forgotPassword') }}</button>
           <button class="skip-btn" @click="goHome">{{ t('auth.skipBrowse') }}</button>
         </div>
       </div>
@@ -154,7 +177,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onUnmounted } from 'vue'
+import { computed, ref, reactive, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
@@ -163,9 +186,11 @@ import { useI18n } from '@/composables/useI18n'
 const router = useRouter()
 const authStore = useAuthStore()
 const appStore = useAppStore()
-const { t } = useI18n()
+const { t, tf } = useI18n()
 
-const mode = ref<'login' | 'register'>('login')
+type AuthMode = 'login' | 'register' | 'reset'
+
+const mode = ref<AuthMode>('login')
 const submitting = ref(false)
 const error = ref('')
 const errorHint = ref(false)
@@ -178,10 +203,17 @@ const form = reactive({
   email: '',
   emailCode: '',
   password: '',
+  passwordConfirm: '',
   nickname: ''
 })
 
-function switchMode(target: 'login' | 'register') {
+const submitText = computed(() => {
+  if (mode.value === 'login') return t('auth.enterStarlink')
+  if (mode.value === 'register') return t('auth.startJourney')
+  return tf('auth.resetPasswordSubmit', '重置密码')
+})
+
+function switchMode(target: AuthMode) {
   mode.value = target
   error.value = ''
   errorHint.value = false
@@ -203,7 +235,10 @@ async function handleSendCode() {
 
   codeSending.value = true
   try {
-    const res = await authStore.sendCode(form.email.trim().toLowerCase())
+    const email = form.email.trim().toLowerCase()
+    const res = mode.value === 'reset'
+      ? await authStore.sendPasswordResetCode(email)
+      : await authStore.sendCode(email)
     if (res.code === 200) {
       appStore.showToast('success', t('auth.errCodeSent'))
       codeCooldown.value = 60
@@ -217,8 +252,8 @@ async function handleSendCode() {
     } else {
       error.value = res.message || t('auth.errCodeSend')
     }
-  } catch (e: any) {
-    error.value = e?.response?.data?.detail || t('auth.errCodeSendRetry')
+  } catch (e: unknown) {
+    error.value = getErrorDetail(e, t('auth.errCodeSendRetry'))
   } finally {
     codeSending.value = false
   }
@@ -228,7 +263,7 @@ async function handleSubmit() {
   error.value = ''
   errorHint.value = false
 
-  if (!form.username.trim()) {
+  if (mode.value !== 'reset' && !form.username.trim()) {
     error.value = mode.value === 'login' ? t('auth.errUsernameEmptyLogin') : t('auth.errUsernameEmptyReg')
     return
   }
@@ -243,23 +278,27 @@ async function handleSubmit() {
       return
     }
   }
-  if (mode.value === 'register' && !form.email.trim()) {
+  if ((mode.value === 'register' || mode.value === 'reset') && !form.email.trim()) {
     error.value = t('auth.errEmailEmpty2')
     return
   }
-  if (mode.value === 'register') {
+  if (mode.value === 'register' || mode.value === 'reset') {
     const em = form.email.trim()
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
       error.value = t('auth.errEmailFormat2')
       return
     }
   }
-  if (mode.value === 'register' && !form.emailCode.trim()) {
+  if ((mode.value === 'register' || mode.value === 'reset') && !form.emailCode.trim()) {
     error.value = t('auth.errEmailCodeEmpty')
     return
   }
   if (!form.password || form.password.length < 6) {
     error.value = t('auth.errPasswordShort')
+    return
+  }
+  if (mode.value === 'reset' && form.password !== form.passwordConfirm) {
+    error.value = tf('auth.errPasswordMismatch', '两次输入的密码不一致')
     return
   }
 
@@ -268,6 +307,12 @@ async function handleSubmit() {
     let result
     if (mode.value === 'login') {
       result = await authStore.login(form.username, form.password)
+    } else if (mode.value === 'reset') {
+      result = await authStore.resetPassword(
+        form.email.trim().toLowerCase(),
+        form.emailCode.trim(),
+        form.password
+      )
     } else {
       result = await authStore.register(
         form.username,
@@ -278,16 +323,25 @@ async function handleSubmit() {
       )
     }
     if (result.success) {
-      appStore.showToast('success', t('auth.welcomeHome'))
-      router.push({ name: 'Home' })
+      if (mode.value === 'reset') {
+        appStore.showToast('success', tf('auth.resetPasswordSuccess', '密码已重置，请使用新密码登录'))
+        switchMode('login')
+        form.password = ''
+        form.passwordConfirm = ''
+        form.emailCode = ''
+      } else {
+        appStore.showToast('success', t('auth.welcomeHome'))
+        router.push({ name: 'Home' })
+      }
     } else {
-      error.value = result.message
-      if (mode.value === 'login' && /未注册/.test(result.message)) {
+      const message = result.message || t('auth.errOpFail')
+      error.value = message
+      if (mode.value === 'login' && /未注册/.test(message)) {
         errorHint.value = true
       }
     }
-  } catch (e: any) {
-    const detail = e?.response?.data?.detail || t('auth.errOpFail')
+  } catch (e: unknown) {
+    const detail = getErrorDetail(e, mode.value === 'reset' ? tf('auth.errResetFail', '密码重置失败，请稍后重试') : t('auth.errOpFail'))
     error.value = detail
     if (mode.value === 'login' && /未注册/.test(detail)) {
       errorHint.value = true
@@ -299,6 +353,16 @@ async function handleSubmit() {
 
 function goHome() {
   router.push({ name: 'Home' })
+}
+
+function getErrorDetail(error: unknown, fallback: string): string {
+  if (typeof error === 'object' && error !== null && 'response' in error) {
+    const response = (error as { response?: { data?: { detail?: unknown } } }).response
+    if (typeof response?.data?.detail === 'string') {
+      return response.data.detail
+    }
+  }
+  return fallback
 }
 
 onUnmounted(() => {
@@ -450,6 +514,30 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.reset-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #ffffff;
+  font-family: var(--font-serif);
+  font-size: 15px;
+}
+
+.reset-back-btn {
+  padding: 4px 8px;
+  color: var(--cyan-core);
+  background: transparent;
+  border: 1px solid rgba(49, 247, 255, 0.28);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  transition: all var(--transition-fast);
+}
+
+.reset-back-btn:hover {
+  background: rgba(49, 247, 255, 0.12);
 }
 
 .field-group {

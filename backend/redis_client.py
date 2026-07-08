@@ -38,20 +38,31 @@ def _mem_cleanup():
         del _mem_store[k]
 
 
+def _mem_get(key: str) -> Optional[Any]:
+    _mem_cleanup()
+    entry = _mem_store.get(key)
+    if entry is None:
+        return None
+
+    value, exp = entry
+    if exp > time.time():
+        return value
+
+    del _mem_store[key]
+    return None
+
+
+def _mem_set(key: str, value: Any, expire: int) -> None:
+    _mem_store[key] = (value, time.time() + expire)
+
+
 class RedisCache:
     def __init__(self, default_expire: int = settings.REDIS_EXPIRE_SECONDS):
         self.default_expire = default_expire
 
     async def get(self, key: str) -> Optional[Any]:
         if not _REDIS_AVAILABLE:
-            _mem_cleanup()
-            entry = _mem_store.get(key)
-            if entry is not None:
-                value, exp = entry
-                if exp > time.time():
-                    return value
-                del _mem_store[key]
-            return None
+            return _mem_get(key)
         try:
             value = await redis_client.get(key)
             if value is not None:
@@ -60,21 +71,20 @@ class RedisCache:
                 except (json.JSONDecodeError, TypeError):
                     return value
         except Exception:
-            pass
+            return _mem_get(key)
         return None
 
     async def set(self, key: str, value: Any, expire: Optional[int] = None) -> None:
+        expire = expire or self.default_expire
         if not _REDIS_AVAILABLE:
-            exp = time.time() + (expire or self.default_expire)
-            _mem_store[key] = (value, exp)
+            _mem_set(key, value, expire)
             return
         try:
             if isinstance(value, (dict, list)):
                 value = json.dumps(value, ensure_ascii=False)
-            expire = expire or self.default_expire
             await redis_client.set(key, value, ex=expire)
         except Exception:
-            pass
+            _mem_set(key, value, expire)
 
     async def delete(self, key: str) -> None:
         if not _REDIS_AVAILABLE:
@@ -83,22 +93,15 @@ class RedisCache:
         try:
             await redis_client.delete(key)
         except Exception:
-            pass
+            _mem_store.pop(key, None)
 
     async def exists(self, key: str) -> bool:
         if not _REDIS_AVAILABLE:
-            _mem_cleanup()
-            entry = _mem_store.get(key)
-            if entry is not None:
-                _, exp = entry
-                if exp > time.time():
-                    return True
-                del _mem_store[key]
-            return False
+            return _mem_get(key) is not None
         try:
             return bool(await redis_client.exists(key))
         except Exception:
-            return False
+            return _mem_get(key) is not None
 
     async def incr(self, key: str, amount: int = 1) -> int:
         if not _REDIS_AVAILABLE:
@@ -179,8 +182,9 @@ class RedisCache:
             return
         try:
             await redis_client.flushdb()
+            _mem_store.clear()
         except Exception:
-            pass
+            _mem_store.clear()
 
 
 cache = RedisCache()

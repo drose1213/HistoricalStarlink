@@ -191,10 +191,9 @@ import ExplorationRecord from '@/components/ExplorationRecord.vue'
 import VotingSystem from '@/components/VotingSystem.vue'
 import RatingSystem from '@/components/RatingSystem.vue'
 import { useI18n } from '@/composables/useI18n'
-import { allEvents, getEventById, getRelatedEvents, loadEvents } from '@/data/events'
+import { allEvents, getEventById, getRelatedEvents } from '@/data/events'
 import { buildDetailStarlinkGraph } from '@/utils/starlinkGraph'
 import { requireAuth } from '@/utils/auth'
-import { recordExploration } from '@/utils/exploration'
 import { useDialogueStore } from '@/stores/dialogue'
 
 const route = useRoute()
@@ -239,10 +238,6 @@ const localizedConsequences = computed(() => {
   if (!currentEvent.value) return []
   return eventDetailData(currentEvent.value.id)?.consequences || currentEvent.value.consequences
 })
-
-watch(eventId, (id) => {
-  recordExploration(id)
-}, { immediate: true })
 
 function toggleCause(idx: number) {
   const s = new Set(expandedCauses.value)
@@ -296,7 +291,7 @@ function startDynamicDialogue() {
   dialogueStore.startDynamicFromTopic(topic).then(() => {
     const slug = topic.replace(/[^\w一-龥]+/g, '_').slice(0, 32) || 'unknown'
     router.push({ name: 'Dialogue', params: { eventId: `dynamic_${slug}` } })
-  }).catch((err: any) => {
+  }).catch((err: unknown) => {
     console.warn('startDynamicDialogue failed:', err)
   })
 }

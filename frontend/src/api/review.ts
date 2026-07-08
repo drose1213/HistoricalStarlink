@@ -1,5 +1,6 @@
 import { get, post, del } from './request'
 import { getSessionId } from '@/utils/session'
+import { normalizePaginatedResponse } from './pagination'
 import type { ApiResponse, PaginatedResponse, ReviewItem } from '@/types'
 
 export const reviewApi = {
@@ -8,11 +9,11 @@ export const reviewApi = {
     cardId: number,
     params: { min_stars?: number; max_stars?: number; page?: number; page_size?: number } = {}
   ): Promise<ApiResponse<PaginatedResponse<ReviewItem>>> {
-    return get('/api/review/list', {
+    return get<ReviewItem[]>('/api/review/list', {
       card_id: cardId,
       session_id: getSessionId(),
       ...params,
-    }) as any
+    }).then(normalizePaginatedResponse)
   },
 
   /** 创建卡牌评价（stars + comment，可选 parent_review_id） */

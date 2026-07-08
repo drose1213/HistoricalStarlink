@@ -8,7 +8,21 @@ import time
 from .config import settings
 from .database import init_db
 from .redis_client import redis_client
-from .routers import exploration, rating, vote, signature, champion, dialogue, auth, rag, events, config, collection, auction, review
+from .routers import (
+    exploration as exploration_router,
+    rating as rating_router,
+    vote as vote_router,
+    signature as signature_router,
+    champion as champion_router,
+    dialogue as dialogue_router,
+    auth as auth_router,
+    rag as rag_router,
+    events as events_router,
+    config as config_router,
+    collection as collection_router,
+    auction as auction_router,
+    review as review_router,
+)
 from .routers.analytics import router as analytics_router
 from .routers.leaderboard import router as leaderboard_router
 
@@ -124,19 +138,19 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-app.include_router(exploration.router)
-app.include_router(rating.router)
-app.include_router(vote.router)
-app.include_router(signature.router)
-app.include_router(champion.router)
-app.include_router(dialogue.router)
-app.include_router(auth.router)
-app.include_router(rag.router)
-app.include_router(events.router)
-app.include_router(config.router)
-app.include_router(collection.router)
-app.include_router(auction.router)
-app.include_router(review.router)  # spec rating-system-enhancement
+app.include_router(exploration_router.router)
+app.include_router(rating_router.router)
+app.include_router(vote_router.router)
+app.include_router(signature_router.router)
+app.include_router(champion_router.router)
+app.include_router(dialogue_router.router)
+app.include_router(auth_router.router)
+app.include_router(rag_router.router)
+app.include_router(events_router.router)
+app.include_router(config_router.router)
+app.include_router(collection_router.router)
+app.include_router(auction_router.router)
+app.include_router(review_router.router)  # spec rating-system-enhancement
 app.include_router(leaderboard_router)
 app.include_router(analytics_router)
 

@@ -1,4 +1,5 @@
 import { get, post } from './request'
+import { normalizePaginatedResponse } from './pagination'
 import { getSessionId } from '@/utils/session'
 import type {
   ApiResponse,
@@ -22,7 +23,8 @@ export const explorationApi = {
   },
 
   getExplorationRecords(page = 1, pageSize = 20): Promise<ApiResponse<PaginatedResponse<ExplorationRecord>>> {
-    return get('/api/exploration/records', { page, page_size: pageSize })
+    return get<ExplorationRecord[]>('/api/exploration/records', { page, page_size: pageSize })
+      .then(normalizePaginatedResponse)
   },
 
   getExplorationByEvent(eventId: string): Promise<ApiResponse<ExplorationRecord[]>> {

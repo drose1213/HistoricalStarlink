@@ -35,6 +35,7 @@ class ExplorationRecordCreate(BaseModel):
     depth: int = Field(default=0, ge=0, description="探索深度")
     explore_path: Optional[dict] = Field(default=None, description="完整探索路径")
     stay_duration: float = Field(default=0.0, ge=0, description="停留时长（秒）")
+    notes: Optional[str] = Field(default=None, max_length=1000, description="探索备注")
     from_direction: Optional[str] = Field(default=None, max_length=16, description="来源方向")
 
 
@@ -59,6 +60,7 @@ class ExplorationRecordOut(BaseModel):
     depth: int
     explore_path: Optional[dict] = None
     stay_duration: float
+    notes: Optional[str] = None
     from_direction: Optional[str] = None
     created_at: Optional[datetime] = None
 
@@ -135,13 +137,13 @@ class VoteCreate(BaseModel):
     event_id: str = Field(..., max_length=128, description="历史事件ID")
     event_name: str = Field(..., max_length=256, description="历史事件名称")
     session_id: str = Field(..., max_length=64, description="会话ID")
-    vote_type: int = Field(..., description="投票类型: 1=点赞, -1=踩")
+    vote_type: int = Field(..., description="Vote type: 1=up, -1=down, 2=favorite")
 
     @field_validator("vote_type")
     @classmethod
     def validate_vote_type(cls, v):
-        if v not in (1, -1):
-            raise ValueError("投票类型只能是 1（赞）或 -1（踩）")
+        if v not in (1, -1, 2):
+            raise ValueError("vote_type must be one of 1, -1, or 2")
         return v
 
 
@@ -151,6 +153,9 @@ class VoteStats(BaseModel):
     event_name: str
     up_count: int = 0
     down_count: int = 0
+    favorite_count: int = 0
+    star_count: int = 0
+    my_vote: int = 0
     total: int = 0
     ratio: float = 0.0
 
@@ -167,7 +172,7 @@ class VoteOut(BaseModel):
     agree_count: int = 0
     disagree_count: int = 0
     favorite_count: int = 0
-    my_vote: int = 0  # 当前会话的有效投票 (1 / -1 / 0)
+    my_vote: int = 0  # current session vote: 1 / -1 / 2 / 0
 
     class Config:
         from_attributes = True

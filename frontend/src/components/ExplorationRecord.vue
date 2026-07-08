@@ -21,15 +21,19 @@
         </div>
         <div class="info-row">
           <span class="info-label">{{ t('exploration.event') }}</span>
-          <span class="info-value">{{ eventId }}</span>
+          <span class="info-value">{{ getExplorationTitle(currentRecord) || eventId }}</span>
         </div>
         <div class="info-row">
           <span class="info-label">{{ t('exploration.pathDepth') }}</span>
-          <span class="info-value">{{ t('exploration.pathDepthValue', { n: currentRecord.path_depth }) }}</span>
+          <span class="info-value">{{ t('exploration.pathDepthValue', { n: getExplorationDepth(currentRecord) }) }}</span>
         </div>
         <div class="info-row">
           <span class="info-label">{{ t('exploration.duration') }}</span>
           <span class="info-value">{{ formatDuration(elapsedTime) }}</span>
+        </div>
+        <div class="info-row info-row--notes" v-if="getExplorationNotes(currentRecord)">
+          <span class="info-label">{{ t('exploration.notes') }}</span>
+          <span class="info-value info-value--notes">{{ getExplorationNotes(currentRecord) }}</span>
         </div>
       </div>
 
@@ -97,6 +101,7 @@ import { useExplorationStore } from '@/stores/exploration'
 import { useAppStore } from '@/stores/app'
 import { requireAuth } from '@/utils/auth'
 import { useI18n } from '@/composables/useI18n'
+import { getExplorationDepth, getExplorationNotes, getExplorationTitle } from '@/utils/explorationRecord'
 
 const props = defineProps<{
   eventId?: string
@@ -171,11 +176,11 @@ async function handleEnd() {
   stopTimer()
   isPaused.value = false
   try {
-    await explorationStore.endExploration(
-      currentRecord.value.id,
-      elapsedTime.value,
-      currentRecord.value.path_depth
-    )
+      await explorationStore.endExploration(
+        currentRecord.value.id,
+        elapsedTime.value,
+        getExplorationDepth(currentRecord.value)
+      )
     appStore.showToast('success', t('toast.exploreEnd', { duration: formatDuration(elapsedTime.value) }))
   } catch {
     appStore.showToast('error', t('toast.exploreEndFail'))
@@ -231,6 +236,11 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 
+.info-row--notes {
+  align-items: flex-start;
+  gap: 12px;
+}
+
 .info-label {
   font-size: 12px;
   color: var(--text-muted);
@@ -242,6 +252,14 @@ onBeforeUnmount(() => {
   font-size: 13px;
   color: var(--cyan-core);
   text-shadow: 0 0 6px rgba(49, 247, 255, 0.4);
+}
+
+.info-value--notes {
+  max-width: 64%;
+  white-space: normal;
+  text-align: right;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .record-empty {

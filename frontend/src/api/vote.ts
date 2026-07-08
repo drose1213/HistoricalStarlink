@@ -7,7 +7,11 @@ import type {
   VoteCreateRequest
 } from '@/types'
 
-const VOTE_TYPE_MAP: Record<string, number> = { up: 1, down: -1, star: 1 }
+const VOTE_TYPE_MAP: Record<VoteCreateRequest['vote_type'], 1 | -1 | 2> = {
+  up: 1,
+  down: -1,
+  star: 2,
+}
 
 export const voteApi = {
   createVote(data: VoteCreateRequest): Promise<ApiResponse<VoteEntry>> {
@@ -20,18 +24,29 @@ export const voteApi = {
   },
 
   getVoteStats(eventId: string): Promise<ApiResponse<VoteStats>> {
-    return get(`/api/vote/stats/${eventId}`)
+    return get(`/api/vote/stats/${eventId}`, { session_id: getSessionId() })
   },
 
-  getUserVote(eventId: string): Promise<ApiResponse<VoteEntry | null>> {
-    return get('/api/vote/my') as any
+  async getUserVote(eventId: string): Promise<ApiResponse<VoteEntry | null>> {
+    const res = await get<VoteEntry[]>('/api/vote/my', {
+      session_id: getSessionId(),
+      event_id: eventId,
+    })
+
+    return {
+      ...res,
+      data: res.data[0] ?? null,
+    }
   },
 
   deleteVote(voteId: number): Promise<ApiResponse<null>> {
     return del(`/api/vote/${voteId}`)
   },
 
-  getTopVotedEvents(limit = 10): Promise<ApiResponse<{ event_id: string; total_votes: number }[]>> {
-    return get('/api/vote/batch-stats', { limit })
+  async getBatchVoteStats(eventIds: string[]): Promise<ApiResponse<Record<string, VoteStats>>> {
+    if (eventIds.length === 0) {
+      return { code: 200, message: 'success', data: {} }
+    }
+    return get('/api/vote/batch-stats', { event_ids: eventIds.join(',') })
   }
 }

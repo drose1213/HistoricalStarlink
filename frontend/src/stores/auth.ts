@@ -53,6 +53,22 @@ export const useAuthStore = defineStore('auth', () => {
     return await authApi.sendCode(email)
   }
 
+  async function sendPasswordResetCode(email: string) {
+    return await authApi.sendPasswordResetCode(email)
+  }
+
+  async function resetPassword(email: string, emailCode: string, newPassword: string) {
+    const res = await authApi.resetPassword({
+      email,
+      email_code: emailCode,
+      new_password: newPassword,
+    })
+    if (res.code === 200) {
+      return { success: true, message: res.message || '密码已重置' }
+    }
+    return { success: false, message: res.message || '密码重置失败' }
+  }
+
   async function register(username: string, email: string, email_code: string, password: string, nickname?: string) {
     const res = await authApi.register({ username, email, email_code, password, nickname })
     if (res.code === 200 && res.data?.token) {
@@ -82,6 +98,8 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     register,
     sendCode,
+    sendPasswordResetCode,
+    resetPassword,
     logout,
     fetchUser,
     init,

@@ -401,12 +401,10 @@ async function loadAll() {
       explorationStats.value = statsRes.data
     }
     if (recordsRes.code === 200 && recordsRes.data) {
-      const data = recordsRes.data as any
-      records.value = Array.isArray(data) ? data : (data.items || data.data || [])
+      records.value = recordsRes.data.items
     }
     if (cardsRes.code === 200 && cardsRes.data) {
-      const data = cardsRes.data as any
-      cards.value = Array.isArray(data) ? data : (data.items || data.data || [])
+      cards.value = cardsRes.data.items
     }
   } catch (e) {
     console.warn('[ProfileView] 数据加载失败', e)

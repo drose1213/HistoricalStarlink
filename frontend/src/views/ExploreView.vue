@@ -14,7 +14,7 @@
     <main class="explore-main">
       <div class="explore-stats" v-if="stats">
         <div class="stat-card cy-card">
-          <span class="stat-value">{{ stats.total_explorations || 0 }}</span>
+          <span class="stat-value">{{ stats.total_records || 0 }}</span>
           <span class="stat-label">{{ t('explore.statTotalExplorations') }}</span>
         </div>
         <div class="stat-card cy-card">
@@ -22,7 +22,7 @@
           <span class="stat-label">{{ t('explore.statUniqueEvents') }}</span>
         </div>
         <div class="stat-card cy-card">
-          <span class="stat-value">{{ formatDuration(Number(stats.total_duration) || 0) }}</span>
+          <span class="stat-value">{{ formatDuration(Number(stats.total_stay_duration) || 0) }}</span>
           <span class="stat-label">{{ t('explore.statTotalDuration') }}</span>
         </div>
       </div>
@@ -32,13 +32,16 @@
         <div class="records-list" v-if="records.length > 0">
           <div v-for="record in records" :key="record.id" class="record-item cy-card">
             <div class="record-main">
-              <div class="record-event">{{ record.event_id }}</div>
+              <div class="record-event">{{ getExplorationTitle(record) }}</div>
+              <div v-if="getExplorationNotes(record)" class="record-notes">
+                {{ getExplorationNotes(record) }}
+              </div>
               <div class="record-meta">
-                <span class="record-duration">{{ formatDuration(record.duration_seconds) }}</span>
-                <span class="record-depth">{{ t('explore.depth', { n: record.path_depth }) }}</span>
+                <span class="record-duration">{{ formatDuration(getExplorationDuration(record)) }}</span>
+                <span class="record-depth">{{ t('explore.depth', { n: getExplorationDepth(record) }) }}</span>
               </div>
             </div>
-            <div class="record-time">{{ formatTime(record.explored_at) }}</div>
+            <div class="record-time">{{ formatTime(getExplorationTimestamp(record)) }}</div>
           </div>
         </div>
         <div class="records-empty" v-else>
@@ -62,6 +65,13 @@ import { ref, onMounted } from 'vue'
 import { useExplorationStore } from '@/stores/exploration'
 import { useI18n } from '@/composables/useI18n'
 import SignatureUpload from '@/components/SignatureUpload.vue'
+import {
+  getExplorationDepth,
+  getExplorationDuration,
+  getExplorationNotes,
+  getExplorationTimestamp,
+  getExplorationTitle,
+} from '@/utils/explorationRecord'
 import type { ExplorationRecord } from '@/types'
 
 const { t } = useI18n()
@@ -223,6 +233,18 @@ onMounted(async () => {
   color: var(--text-light);
   font-weight: 600;
   margin-bottom: 4px;
+}
+
+.record-notes {
+  max-width: 520px;
+  margin-bottom: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .record-meta {

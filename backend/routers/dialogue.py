@@ -10,7 +10,9 @@ from sqlalchemy import select, func, and_
 
 from ..database import get_db
 from ..models.dialogue import DialogueSession
+from ..models.exploration_record import ExplorationRecord
 from ..models.exploration_profile import UserExplorationProfile
+from ..dialogue_engine import _DYNAMIC_CHOICES
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +58,35 @@ from ..schemas import BaseResponse, PaginationResponse
 router = APIRouter(prefix="/api/dialogue", tags=["对话探索"])
 
 
+def _build_completion_notes(ending_type: str, choices_made: list, free_texts: Optional[list] = None) -> str:
+    """Build a concise note users can read in exploration history."""
+    consequences = [
+        str(choice.get("consequence") or choice.get("choice_text") or choice.get("choice_id"))
+        for choice in (choices_made or [])
+        if choice.get("consequence") or choice.get("choice_text") or choice.get("choice_id")
+    ]
+    if consequences:
+        return " -> ".join(consequences)[:1000]
+    if free_texts:
+        return f"Free exploration: {str(free_texts[-1])[:900]}"
+    return f"Completed dialogue with ending: {ending_type or 'historical'}"
+
+
+def _build_explore_path(ending_type: str, choices_made: list, free_texts: Optional[list] = None) -> dict:
+    path_signature = (
+        ending_type
+        if ending_type and ending_type not in ("historical", "altered", "rag_fallback", "rag_dynamic")
+        else compute_path_signature(choices_made or [])
+    )
+    return {
+        "mode": "dialogue",
+        "ending_type": ending_type or "historical",
+        "path_signature": path_signature,
+        "choices": choices_made or [],
+        "free_texts": free_texts or [],
+    }
+
+
 async def _persist_exploration_profile(
     db: AsyncSession,
     dialogue: DialogueSession,
@@ -66,7 +97,9 @@ async def _persist_exploration_profile(
     """对话结束时写一条 UserExplorationProfile 记录 (一次对话最多 1 条)."""
     try:
         scores = compute_dimension_scores(choices_made or [], free_texts or [])
-        path_sig = ending_type if ending_type and ending_type not in ("historical", "altered", "rag_fallback") else compute_path_signature(choices_made or [])
+        explore_path = _build_explore_path(ending_type, choices_made, free_texts)
+        path_sig = explore_path["path_signature"]
+        notes = _build_completion_notes(ending_type, choices_made, free_texts)
         profile = UserExplorationProfile(
             session_id=dialogue.session_id,
             event_id=dialogue.event_id,
@@ -79,6 +112,16 @@ async def _persist_exploration_profile(
             choices_made=choices_made or [],
         )
         db.add(profile)
+        db.add(ExplorationRecord(
+            session_id=dialogue.session_id,
+            event_id=dialogue.event_id,
+            event_name=dialogue.event_name or dialogue.event_id,
+            depth=len(choices_made or []),
+            explore_path=explore_path,
+            stay_duration=0.0,
+            notes=notes,
+            from_direction="dialogue",
+        ))
         await db.flush()
         logger.info(
             "Exploration profile persisted: session=%s event=%s ending=%s reform=%s",
@@ -301,6 +344,11 @@ async def send_choice(
             dialogue.is_completed = True
             dialogue.outcome_summary = response.get("ending_type", "historical")
             dialogue.timeline_branches = calculate_timeline_branches(new_choices_made)
+            await _persist_exploration_profile(
+                db, dialogue,
+                ending_type=response.get("ending_type", "historical"),
+                choices_made=new_choices_made,
+            )
 
         await db.commit()
     except HTTPException:
@@ -310,14 +358,6 @@ async def send_choice(
         await db.rollback()
         logger.exception("send_choice failed: %s", e)
         raise HTTPException(status_code=500, detail="Failed to process choice")
-
-    # 写画像 (is_completed 时) - 不阻塞主流程
-    if response.get("is_ending"):
-        await _persist_exploration_profile(
-            db, dialogue,
-            ending_type=response.get("ending_type", "historical"),
-            choices_made=new_choices_made,
-        )
 
     return BaseResponse(
         data={
@@ -689,6 +729,7 @@ async def dynamic_start(
             session_id=session_id,
             event_id=opening["event_id"],
             event_name=f"自由探索: {req.topic[:80]}",
+            topic=req.topic[:256],
             npc_name=opening["npc_name"],
             dialogue_history=[{
                 "round": 1,
@@ -747,8 +788,10 @@ async def dynamic_choice(
     if dialogue.is_completed:
         raise HTTPException(status_code=410, detail="Dialogue already ended")
 
-    # 提取 topic (从 event_name "自由探索: <topic>")
-    topic = dialogue.event_name.replace("自由探索: ", "", 1) if dialogue.event_name else ""
+    # 提取 topic: 优先使用持久化字段, 兼容历史数据回退到 event_name 前缀剥离
+    topic = dialogue.topic
+    if not topic and dialogue.event_name:
+        topic = dialogue.event_name.replace("自由探索: ", "", 1)
     choices_made = dialogue.choices_made or []
     free_texts = [m.get("content") for m in (dialogue.dialogue_history or [])
                   if m.get("role") == "user" and m.get("content")]
@@ -765,13 +808,15 @@ async def dynamic_choice(
         raise HTTPException(status_code=500, detail="Failed to process choice")
 
     try:
+        # 复用 dialogue_engine._DYNAMIC_CHOICES 作为单一选项来源 (DRY)
+        choice_text = next(
+            (c["text"] for c in _DYNAMIC_CHOICES if c["choice_id"] == req.choice_id),
+            "",
+        )
         new_choices = choices_made + [{
             "round": result_dict["round"],
             "choice_id": req.choice_id,
-            "choice_text": next((c["text"] for c in [{"choice_id": "explore_origin", "text": "我想了解它的起源"},
-                                                       {"choice_id": "ask_impact", "text": "它对后世有什么影响？"},
-                                                       {"choice_id": "free", "text": "我想自己提问"}]
-                                      if c["choice_id"] == req.choice_id), ""),
+            "choice_text": choice_text,
             "mood": result_dict.get("mood", "default"),
         }]
         dialogue.choices_made = new_choices
@@ -829,7 +874,9 @@ async def dynamic_chat(
     if dialogue.is_completed:
         raise HTTPException(status_code=410, detail="Dialogue already ended")
 
-    topic = dialogue.event_name.replace("自由探索: ", "", 1) if dialogue.event_name else ""
+    topic = dialogue.topic
+    if not topic and dialogue.event_name:
+        topic = dialogue.event_name.replace("自由探索: ", "", 1)
     choices_made = dialogue.choices_made or []
     free_texts = [m.get("content") for m in (dialogue.dialogue_history or [])
                   if m.get("role") == "user" and m.get("content")]
@@ -889,7 +936,9 @@ async def dynamic_end(
     if dialogue.is_completed:
         return BaseResponse(data={"dialogue_id": str(dialogue.id), "already_completed": True})
 
-    topic = dialogue.event_name.replace("自由探索: ", "", 1) if dialogue.event_name else ""
+    topic = dialogue.topic
+    if not topic and dialogue.event_name:
+        topic = dialogue.event_name.replace("自由探索: ", "", 1)
     choices_made = dialogue.choices_made or []
     free_texts = [m.get("content") for m in (dialogue.dialogue_history or [])
                   if m.get("role") == "user" and m.get("content")]

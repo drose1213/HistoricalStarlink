@@ -21,9 +21,8 @@ export const useCollectionStore = defineStore('collection', () => {
         page,
         page_size: pageSize
       })
-      const data = res.data as unknown as { items: UserCardCollection[]; total: number }
-      items.value = data.items || []
-      total.value = data.total || 0
+      items.value = res.data.items || []
+      total.value = res.data.total || 0
       return items.value
     } finally {
       isLoading.value = false
