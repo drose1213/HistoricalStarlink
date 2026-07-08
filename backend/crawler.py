@@ -22,6 +22,8 @@ import httpx
 
 logger = logging.getLogger("historical_starlink.crawler")
 _crawl_execution_lock = asyncio.Lock()
+_crawl_concurrency_limit = 4
+_crawl_semaphore = asyncio.Semaphore(_crawl_concurrency_limit)
 
 RECOMMENDED_SOURCES = [
     {
@@ -612,11 +614,45 @@ async def _process_single_source(db, source: dict, today_events: set[str], stats
         await _mark_source_failed(db, CrawlSource, source, source_now)
 
 
+async def _run_source_in_session(db, source: dict, today_events: set[str]) -> dict:
+    """在 semaphore 限流下抓取单个源, 复用外层 session, 返回 per-source stats.
+
+    由调用方负责 session 的生命周期 (创建/提交/回滚). 复用而非新建 session 的
+    原因: 与 _crawl_and_store_unlocked 顶部的 session 共用, 避免并发 ctx 重入
+    导致测试 stub 与 SQLAlchemy 行为不一致. per-source stats 由各 task 独立
+    维护, 主协程在 gather 之后聚合.
+    """
+    local_stats: dict = {
+        "imported": 0,
+        "updated": 0,
+        "skipped_duplicates": 0,
+        "skipped_short": 0,
+        "failed": 0,
+        "sources_processed": 0,
+        "sources_failed": 0,
+        "filtered_empty_event_name": 0,
+        "skipped_daily_duplicate": 0,
+    }
+    async with _crawl_semaphore:
+        try:
+            await _process_single_source(db, source, today_events, local_stats)
+        except Exception as exc:
+            logger.error(f"Crawl source {source['name']} raised: {exc}")
+            local_stats["failed"] += 1
+            local_stats["sources_failed"] += 1
+        local_stats["sources_processed"] = 1
+    return local_stats
+
+
 async def _crawl_and_store_unlocked() -> dict:
-    """Crawl all active sources, dedup by event_name+source_url, write new entries to DB."""
+    """Crawl all active sources concurrently (4-way), dedup by event_name+source_url, write new entries to DB."""
     logger.info("Starting knowledge base crawl job...")
     stats = _build_crawl_stats()
 
+    sources: list[dict] = []
+    today_events: set[str] = set()
+    # 整轮抓取共用一个 session: 外层 (seed + 列表) 和内层 gather 共用, 避免每源重新建连.
+    # _process_single_source 在内部按 source 自行 commit/rollback, 互不污染.
     async with _get_session_factory()() as db:
         try:
             await _ensure_default_sources(db)
@@ -626,8 +662,9 @@ async def _crawl_and_store_unlocked() -> dict:
         await _commit_session(db, context="default crawl source seed")
 
         sources = await _gather_active_sources(db)
-        logger.info(f"Crawl job: {len(sources)} active sources")
+        logger.info(f"Crawl job: {len(sources)} active sources (concurrency={_crawl_concurrency_limit})")
 
+        # today_events 在主协程单 session 拉取, 避免每源重复查询
         try:
             today_events = await _get_todays_event_names(db, datetime.utcnow())
             stats["todays_unique_count"] = len(today_events)
@@ -636,9 +673,16 @@ async def _crawl_and_store_unlocked() -> dict:
             logger.warning(f"Failed to load today's event names, dedup disabled: {e}")
             today_events = set()
 
-        for source in sources:
-            stats["sources_processed"] += 1
-            await _process_single_source(db, source, today_events, stats)
+        # gather 阶段: 共用 db session + semaphore 限流. db 仍在 with 块内, 由
+        # _process_single_source 自行 commit/rollback, 主协程不参与事务边界.
+        if sources:
+            results = await asyncio.gather(
+                *[_run_source_in_session(db, src, today_events) for src in sources],
+                return_exceptions=False,
+            )
+            for local in results:
+                for key, value in local.items():
+                    stats[key] += value
 
     logger.info(
         f"Crawl job finished. imported={stats['imported']}, updated={stats['updated']}, "
@@ -663,15 +707,56 @@ _crawl_task: Optional[asyncio.Task] = None
 _crawl_interval_seconds = 86400  # 1 day
 
 
+async def _run_initial_crawl_with_retry() -> dict:
+    """首次抓取: 全失败时指数退避重试, 部分成功也认作成功.
+
+    backoff 序列 = [30, 300] 表示: 第一次失败后等 30s 重试, 再失败后等 5min 重试.
+    返回最后一次的 stats dict (即便全部失败也返回空 dict, 便于主协程不抛异常).
+    """
+    backoff_schedule = [30, 300]
+    last_exc: Optional[Exception] = None
+
+    for attempt, delay in enumerate([0, *backoff_schedule], start=1):
+        if delay:
+            logger.info(f"Initial crawl retry #{attempt} after {delay}s backoff")
+            await asyncio.sleep(delay)
+        try:
+            result = await crawl_and_store()
+            failed = result.get("sources_failed", 0)
+            processed = result.get("sources_processed", 0)
+            if processed == 0:
+                logger.warning(f"Initial crawl #{attempt}: 0 sources processed, retrying")
+                continue
+            if failed >= processed:
+                logger.warning(
+                    f"Initial crawl #{attempt}: all {processed} sources failed, "
+                    f"imported={result.get('imported', 0)}"
+                )
+                continue
+            return result
+        except Exception as e:
+            last_exc = e
+            logger.error(f"Initial crawl #{attempt} raised: {e}")
+
+    if last_exc is not None:
+        raise last_exc
+    return {}
+
+
 async def start_crawl_scheduler():
-    """Start the periodic crawl scheduler. Runs an initial crawl then loops every 24h."""
+    """Start the periodic crawl scheduler. Runs an initial crawl with retry, then loops every 24h.
+
+    失败容错: 周期任务单次失败后等待 1h 而非 24h 再试, 加快自动恢复.
+    """
     global _crawl_task
 
     try:
-        result = await crawl_and_store()
-        logger.info(f"Initial crawl result: {result}")
+        result = await _run_initial_crawl_with_retry()
+        logger.info(f"Initial crawl finished: imported={result.get('imported', 0)}, "
+                    f"sources={result.get('sources_processed', 0)}, "
+                    f"failed={result.get('sources_failed', 0)}")
     except Exception as e:
-        logger.error(f"Initial crawl failed: {e}")
+        logger.critical(f"Initial crawl exhausted retries: {e}")
 
     async def _periodic_crawl():
         while True:
@@ -682,10 +767,15 @@ async def start_crawl_scheduler():
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Periodic crawl failed: {e}")
+                logger.error(f"Periodic crawl error (will retry in 1h): {e}")
+                # 单次失败不静默 24h, 而是用 1h 短退避拉起下一轮
+                try:
+                    await asyncio.sleep(3600)
+                except asyncio.CancelledError:
+                    break
 
     _crawl_task = asyncio.create_task(_periodic_crawl())
-    logger.info("Crawl scheduler started (interval: 24h)")
+    logger.info("Crawl scheduler started (interval: 24h, error fallback: 1h)")
 
 
 def stop_crawl_scheduler():
