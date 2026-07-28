@@ -95,13 +95,9 @@ router.beforeEach((to, _from, next) => {
       return next({ name: 'Login' })
     }
     if (!auth.user?.is_admin) {
-      try {
-        const app = useAppStore()
-        const messages = app.locale === 'en' ? en : zh
-        app.showToast('warning', messages.auth.adminOnly)
-      } catch (_) {
-        // app store 不可用时静默
-      }
+      const app = useAppStore()
+      const messages = app.locale === 'en' ? en : zh
+      app.showToast('warning', messages.auth.adminOnly)
       return next({ name: 'Home' })
     }
   }

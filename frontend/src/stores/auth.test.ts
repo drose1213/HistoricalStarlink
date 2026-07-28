@@ -52,7 +52,7 @@ describe('useAuthStore', () => {
     expect(store.isLoggedIn).toBe(true)
   })
 
-  it('login failure: token remains unchanged; failure flag returned', async () => {
+  it('login failure: throws with backend message; token remains unchanged', async () => {
     mockedAuthApi.login.mockResolvedValueOnce({
       code: 401,
       message: 'invalid credentials',
@@ -61,9 +61,8 @@ describe('useAuthStore', () => {
 
     const store = useAuthStore()
     const before = store.token
-    const result = await store.login('alice', 'wrong')
 
-    expect(result.success).toBe(false)
+    await expect(store.login('alice', 'wrong')).rejects.toThrow('invalid credentials')
     expect(store.token).toBe(before)
     expect(store.user).toBeNull()
   })

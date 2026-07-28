@@ -2,6 +2,7 @@ import { createApp, nextTick } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
+import { setupAuthRedirect } from './api/request'
 import { useAppStore } from './stores/app'
 import { loadEvents } from './data/events'
 import { trackEventIfEnabled } from './utils/analytics'
@@ -15,6 +16,13 @@ async function bootstrap() {
 
   app.use(pinia)
   app.use(router)
+
+  // 注册 401 跳转处理器: 使用 vue-router 携带 redirect 查询参数跳到登录页
+  setupAuthRedirect((currentPath) => {
+    if (!router.currentRoute.value.path.startsWith('/login')) {
+      router.replace({ name: 'Login', query: { redirect: currentPath } })
+    }
+  })
 
   // 同步初始化 store 中的 locale 状态,确保 <html lang> 与 data-locale 属性正确
   const appStore = useAppStore()

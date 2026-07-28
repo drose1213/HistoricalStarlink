@@ -38,6 +38,27 @@ function interpolate(template: string, params?: Record<string, string | number>)
 }
 
 const warnedKeys = new Set<string>()
+const warnedKeyPrefix = '__historical_starlink_i18n_warned__'
+
+function warnMissingKey(key: string) {
+  // 在所有环境下都警告: 缺失翻译属于 bug, 沉默返回 key 会让用户直接看到 key 字面量.
+  // 使用 Set + sessionStorage 二次去重, 避免重复刷新刷屏.
+  if (warnedKeys.has(key)) return
+  warnedKeys.add(key)
+  if (typeof sessionStorage !== 'undefined') {
+    const flag = sessionStorage.getItem(warnedKeyPrefix)
+    const cache: Record<string, true> = flag ? JSON.parse(flag) : {}
+    if (cache[key]) return
+    cache[key] = true
+    try {
+      sessionStorage.setItem(warnedKeyPrefix, JSON.stringify(cache))
+    } catch {
+      // sessionStorage 不可用时静默
+    }
+  }
+  // eslint-disable-next-line no-console
+  console.warn(`[i18n] missing key: ${key}`)
+}
 
 export function useI18n() {
   const appStore = useAppStore()
@@ -48,11 +69,7 @@ export function useI18n() {
     const dict = messages[locale.value] ?? messages.zh
     const text = resolvePath(dict, key)
     if (text == null) {
-      if (import.meta.env.DEV && !warnedKeys.has(key)) {
-        warnedKeys.add(key)
-        // eslint-disable-next-line no-console
-        console.warn(`[i18n] missing key: ${key}`)
-      }
+      warnMissingKey(key)
       return key
     }
     return interpolate(text, params)
@@ -68,11 +85,7 @@ export function useI18n() {
     const dict = messages[locale.value] ?? messages.zh
     const text = resolvePath(dict, key)
     if (text == null) {
-      if (import.meta.env.DEV && !warnedKeys.has(key)) {
-        warnedKeys.add(key)
-        // eslint-disable-next-line no-console
-        console.warn(`[i18n] missing key: ${key}`)
-      }
+      warnMissingKey(key)
       return interpolate(fallback, params)
     }
     return interpolate(text, params)

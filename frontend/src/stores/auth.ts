@@ -44,9 +44,11 @@ export const useAuthStore = defineStore('auth', () => {
     if (res.code === 200 && res.data?.token) {
       setToken(res.data.token)
       user.value = res.data.user
-      return { success: true }
+      return { success: true as const }
     }
-    return { success: false, message: res.message || '登录失败' }
+    // 失败时统一抛出错误对象, 由调用方 (AuthView) 决定如何提示用户
+    const message = res.message || '登录失败'
+    throw new Error(message)
   }
 
   async function sendCode(email: string) {
@@ -64,9 +66,9 @@ export const useAuthStore = defineStore('auth', () => {
       new_password: newPassword,
     })
     if (res.code === 200) {
-      return { success: true, message: res.message || '密码已重置' }
+      return { success: true as const, message: res.message || '密码已重置' }
     }
-    return { success: false, message: res.message || '密码重置失败' }
+    throw new Error(res.message || '密码重置失败')
   }
 
   async function register(username: string, email: string, email_code: string, password: string, nickname?: string) {
@@ -74,9 +76,9 @@ export const useAuthStore = defineStore('auth', () => {
     if (res.code === 200 && res.data?.token) {
       setToken(res.data.token)
       user.value = res.data.user
-      return { success: true }
+      return { success: true as const }
     }
-    return { success: false, message: res.message || '注册失败' }
+    throw new Error(res.message || '注册失败')
   }
 
   function logout() {

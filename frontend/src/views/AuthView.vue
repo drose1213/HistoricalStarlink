@@ -304,41 +304,31 @@ async function handleSubmit() {
 
   submitting.value = true
   try {
-    let result
     if (mode.value === 'login') {
-      result = await authStore.login(form.username, form.password)
+      await authStore.login(form.username, form.password)
+      appStore.showToast('success', t('auth.welcomeHome'))
+      router.push({ name: 'Home' })
     } else if (mode.value === 'reset') {
-      result = await authStore.resetPassword(
+      await authStore.resetPassword(
         form.email.trim().toLowerCase(),
         form.emailCode.trim(),
         form.password
       )
+      appStore.showToast('success', tf('auth.resetPasswordSuccess', '密码已重置，请使用新密码登录'))
+      switchMode('login')
+      form.password = ''
+      form.passwordConfirm = ''
+      form.emailCode = ''
     } else {
-      result = await authStore.register(
+      await authStore.register(
         form.username,
         form.email.trim().toLowerCase(),
         form.emailCode.trim(),
         form.password,
         form.nickname || undefined
       )
-    }
-    if (result.success) {
-      if (mode.value === 'reset') {
-        appStore.showToast('success', tf('auth.resetPasswordSuccess', '密码已重置，请使用新密码登录'))
-        switchMode('login')
-        form.password = ''
-        form.passwordConfirm = ''
-        form.emailCode = ''
-      } else {
-        appStore.showToast('success', t('auth.welcomeHome'))
-        router.push({ name: 'Home' })
-      }
-    } else {
-      const message = result.message || t('auth.errOpFail')
-      error.value = message
-      if (mode.value === 'login' && /未注册/.test(message)) {
-        errorHint.value = true
-      }
+      appStore.showToast('success', t('auth.welcomeHome'))
+      router.push({ name: 'Home' })
     }
   } catch (e: unknown) {
     const detail = getErrorDetail(e, mode.value === 'reset' ? tf('auth.errResetFail', '密码重置失败，请稍后重试') : t('auth.errOpFail'))

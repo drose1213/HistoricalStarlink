@@ -29,6 +29,15 @@ export const useDialogueStore = defineStore('dialogue', () => {
   const pendingHeroId = ref<string>('')  // 暂存的 hero_id, startDialogue 时透传给后端
 
   const isTimelineAnimating = ref(false)
+  // 打字机动画的 interval id, 用于在 resetDialogue / 组件卸载时主动清理, 避免 setState-on-unmounted
+  let typeIntervalId: ReturnType<typeof setInterval> | null = null
+
+  function clearTypeInterval() {
+    if (typeIntervalId !== null) {
+      clearInterval(typeIntervalId)
+      typeIntervalId = null
+    }
+  }
 
   function getErrorStatus(err: unknown): number | undefined {
     return typeof err === 'object' && err !== null && 'response' in err
@@ -209,6 +218,10 @@ export const useDialogueStore = defineStore('dialogue', () => {
       } else if (finalMsg.choices && finalMsg.choices.length > 0) {
         choices.value = finalMsg.choices
       }
+    } catch (err: unknown) {
+      // 网络或后端异常时, 把错误写入 errorMessage 供 UI 展示, 避免 isLoading 永远卡在 true
+      errorMessage.value = getErrorMessage(err, '对话选项发送失败, 请稍后再试')
+      throw err
     } finally {
       isLoading.value = false
       isTyping.value = false
@@ -247,6 +260,10 @@ export const useDialogueStore = defineStore('dialogue', () => {
       } else if (finalMsg.choices && finalMsg.choices.length > 0) {
         choices.value = finalMsg.choices
       }
+    } catch (err: unknown) {
+      // 同 sendChoice: 网络失败需要暴露错误并解除 loading
+      errorMessage.value = getErrorMessage(err, '对话消息发送失败, 请稍后再试')
+      throw err
     } finally {
       isLoading.value = false
       isTyping.value = false
@@ -259,17 +276,19 @@ export const useDialogueStore = defineStore('dialogue', () => {
 
   function typeMessage(msg: DialogueMessage): Promise<DialogueMessage> {
     return new Promise(resolve => {
+      // 先清理可能遗留的 interval (例如上一次 typing 中断)
+      clearTypeInterval()
       const chars = msg.content.split('')
       const typedMsg = { ...msg, content: '' }
       appendMessage(typedMsg)
       let i = 0
-      const interval = setInterval(() => {
+      typeIntervalId = setInterval(() => {
         if (i < chars.length) {
           const last = messages.value[messages.value.length - 1]
           last.content += chars[i]
           i++
         } else {
-          clearInterval(interval)
+          clearTypeInterval()
           resolve(msg)
         }
       }, 30)
@@ -284,6 +303,8 @@ export const useDialogueStore = defineStore('dialogue', () => {
   }
 
   function resetDialogue() {
+    // 先停止打字动画, 防止 reset 之后仍在写入已清空的 messages
+    clearTypeInterval()
     currentSession.value = null
     dialogueId.value = ''
     messages.value = []
