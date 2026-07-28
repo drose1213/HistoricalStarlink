@@ -18,6 +18,7 @@ class CardReview(Base):
     auction_id = Column(Integer, nullable=True, index=True, comment="关联的拍卖ID（拍卖评价时使用）")
     card_id = Column(Integer, nullable=True, index=True, comment="关联的卡牌ID（卡牌评价时使用）")
     reviewer_session_id = Column(String(64), nullable=False, index=True, comment="评价者会话ID")
+    user_id = Column(Integer, nullable=True, index=True, comment="登录用户ID(登录态下记录归集到账号)")
 
     stars = Column(Integer, nullable=False, comment="星级 1-5")
     comment = Column(String(500), nullable=True, comment="评价内容")

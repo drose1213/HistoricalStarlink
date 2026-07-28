@@ -109,7 +109,7 @@
             <div class="review-stars">
               <span v-for="n in 5" :key="n" :class="{ on: n <= r.stars }">★</span>
             </div>
-            <span class="bid-user">{{ shortSid(r.reviewer_session_id) }}</span>
+            <span class="bid-user">{{ r.reviewer_name || shortSid(r.reviewer_session_id) }}</span>
             <span class="review-comment" v-if="r.comment">{{ r.comment }}</span>
           </li>
         </ul>

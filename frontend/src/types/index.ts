@@ -184,6 +184,8 @@ export interface CardReview {
   id: number
   auction_id: number
   reviewer_session_id: string
+  user_id: number | null
+  reviewer_name?: string | null
   stars: number
   comment: string | null
   created_at: string | null
@@ -267,6 +269,8 @@ export interface ReviewItem {
   card_id: number | null
   auction_id: number | null
   reviewer_session_id: string  // 已被后端脱敏
+  reviewer_id?: number | null  // 登录用户ID，未登录为 null
+  reviewer_name?: string | null  // 登录用户昵称/username，未登录为 null
   stars: number
   comment: string | null
   parent_review_id: number | null
